@@ -1,0 +1,23 @@
+# ===== Secrets / local config（含真实服务器 IP、SSH key 路径、API Key，禁止入库）=====
+config.json
+
+# ===== Build artifacts =====
+dist/
+dist_new/
+*.exe
+
+# ===== Node =====
+node_modules/
+
+# ===== Python =====
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# ===== Sync output（运行时生成）=====
+backend/data/
+
+# ===== OS =====
+.DS_Store
+Thumbs.db

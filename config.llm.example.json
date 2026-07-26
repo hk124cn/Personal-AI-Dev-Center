@@ -1,0 +1,9 @@
+{
+  "llm": {
+    "enabled": false,
+    "provider": "商汤科技",
+    "api_key": "YOUR_SENSENOVA_API_KEY",
+    "model": "sensenova-6.7-flash-lite",
+    "base_url": "https://token.sensenova.cn/v1"
+  }
+}
