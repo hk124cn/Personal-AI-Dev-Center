@@ -1,0 +1,51 @@
+{
+  "name": "personal-ai-dev-center",
+  "version": "1.4.11",
+  "description": "Personal AI Dev Center - 多服务器管理与项目开发面板",
+  "main": "electron/main.js",
+  "scripts": {
+    "start": "electron .",
+    "build": "electron-builder --win portable",
+    "build:setup": "electron-builder --win nsis"
+  },
+  "build": {
+    "appId": "com.personal.ai-dev-center",
+    "productName": "Personal AI Dev Center",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "electron/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "backend",
+        "to": "backend",
+        "filter": ["**/*", "!__pycache__/**", "!data/**"]
+      },
+      {
+        "from": "index.html",
+        "to": "index.html"
+      },
+      {
+        "from": "config.example.json",
+        "to": "config.example.json"
+      }
+    ],
+    "win": {
+      "target": "portable",
+      "icon": null
+    },
+    "portable": {
+      "artifactName": "Personal-AI-Dev-Center.exe"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    }
+  },
+  "devDependencies": {
+    "electron": "^33.0.0",
+    "electron-builder": "^25.0.0"
+  }
+}

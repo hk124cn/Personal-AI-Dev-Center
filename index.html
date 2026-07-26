@@ -1,0 +1,2954 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Personal AI Dev Center</title>
+<script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+<style>
+*,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
+:root{
+  --bg-deep:rgb(14,14,20);--bg-base:rgb(18,18,26);--bg-elevated:rgb(26,26,38);--bg-card:rgb(34,34,48);
+  --bg-card-hover:rgb(42,42,58);--bg-input:rgb(18,18,26);
+  --border:rgb(50,50,66);--border-hover:rgb(72,72,90);--border-active:rgb(90,90,110);
+  --text:rgb(245,245,250);--text-secondary:rgb(150,150,175);--text-tertiary:rgb(90,90,115);--text-quaternary:rgb(58,58,78);
+  --accent:#8b5cf6;--accent-hover:#7c3aed;--accent-rgb:139,92,246;
+  --accent-muted:rgba(139,92,246,.1);--accent-border:rgba(139,92,246,.22);
+  --overlay:rgba(255,255,255,.03);--overlay-hover:rgba(255,255,255,.06);--overlay-border:rgba(255,255,255,.08);
+  --shadow-color:rgba(0,0,0,.3);--shadow-color-lg:rgba(0,0,0,.45);
+  --green:#22c55e;--green-muted:rgba(34,197,94,.1);--green-border:rgba(34,197,94,.22);
+  --amber:#eab308;--amber-muted:rgba(234,179,8,.1);--amber-border:rgba(234,179,8,.22);
+  --red:#ef4444;--red-muted:rgba(239,68,68,.1);--red-border:rgba(239,68,68,.22);
+  --blue:#3b82f6;--blue-muted:rgba(59,130,246,.1);--blue-border:rgba(59,130,246,.22);
+  --radius:12px;--radius-sm:8px;--radius-xs:6px;
+  --shadow:0 1px 3px var(--shadow-color),0 8px 24px var(--shadow-color);
+  --shadow-lg:0 4px 12px var(--shadow-color-lg),0 16px 40px var(--shadow-color-lg);
+  --ease:cubic-bezier(.4,0,.2,1);--dur:.2s;
+  --font:-apple-system,BlinkMacSystemFont,"SF Pro Display","SF Pro Text","Helvetica Neue","PingFang SC","Microsoft YaHei",sans-serif;
+  --mono:"SF Mono","Fira Code","Cascadia Code","JetBrains Mono",monospace;
+}
+body{font-family:var(--font);background:var(--bg-deep);color:var(--text);height:100vh;overflow:hidden;font-size:14px;line-height:1.5;-webkit-font-smoothing:antialiased}
+::-webkit-scrollbar{width:4px}::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--border);border-radius:4px}
+.app{display:flex;height:100vh}
+
+/* ===== SIDEBAR ===== */
+.sidebar{width:232px;background:var(--bg-base);border-right:1px solid var(--border);display:flex;flex-direction:column;flex-shrink:0;user-select:none}
+.sidebar-header{padding:20px 18px;border-bottom:1px solid var(--border)}
+.logo{display:flex;align-items:center;gap:10px}
+.logo-mark{width:32px;height:32px;border-radius:8px;background:linear-gradient(135deg,var(--accent),rgba(var(--accent-rgb),.5));display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.logo-mark svg{width:18px;height:18px;color:#fff;stroke-width:2}
+.logo-text{font-size:15px;font-weight:700;letter-spacing:-.3px}
+.logo-sub{font-size:10px;color:var(--text-tertiary);letter-spacing:1px;text-transform:uppercase;margin-top:1px}
+.sidebar-nav{flex:1;padding:12px 10px;display:flex;flex-direction:column;gap:1px}
+.nav-item{display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:var(--radius-sm);cursor:pointer;transition:all var(--dur) var(--ease);color:var(--text-secondary);font-size:13px;font-weight:500}
+.nav-item:hover{background:var(--overlay);color:var(--text)}
+.nav-item.active{background:var(--accent-muted);color:var(--accent)}
+.nav-item svg{width:17px;height:17px;stroke-width:1.8;flex-shrink:0}
+.nav-item .badge{margin-left:auto;background:var(--red);color:#fff;font-size:10px;padding:1px 6px;border-radius:10px;font-weight:600}
+.sidebar-footer{padding:14px;border-top:1px solid var(--border)}
+.user-row{display:flex;align-items:center;gap:10px;padding:6px}
+.avatar{width:30px;height:30px;border-radius:50%;background:linear-gradient(135deg,var(--accent),rgba(var(--accent-rgb),.4));display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;color:#fff;flex-shrink:0}
+.user-name{font-size:12px;font-weight:600}.user-role{font-size:11px;color:var(--text-tertiary)}
+
+/* ===== MAIN ===== */
+.main{flex:1;display:flex;flex-direction:column;overflow:hidden}
+.topbar{display:flex;align-items:center;justify-content:space-between;padding:14px 28px;border-bottom:1px solid var(--border);background:var(--bg-base);flex-shrink:0}
+.topbar-left{display:flex;align-items:baseline;gap:10px}
+.topbar-title{font-size:18px;font-weight:700;letter-spacing:-.3px}
+.topbar-sub{font-size:12px;color:var(--text-tertiary)}
+.topbar-right{display:flex;align-items:center;gap:12px}
+.conn-badge{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:500;padding:3px 10px;border-radius:20px;white-space:nowrap}
+.conn-ok{background:var(--green-muted);color:var(--green);border:1px solid var(--green-border)}
+.conn-demo{background:var(--amber-muted);color:var(--amber);border:1px solid var(--amber-border)}
+.theme-dots{display:flex;gap:6px;align-items:center}
+.theme-dot{width:18px;height:18px;border-radius:50%;cursor:pointer;border:2px solid transparent;transition:all var(--dur) var(--ease);opacity:.6;position:relative}
+.theme-dot:hover{opacity:1;transform:scale(1.15)}
+.theme-dot.active{opacity:1;border-color:var(--overlay-border);box-shadow:0 0 0 2px var(--bg-base)}
+.theme-label{font-size:11px;color:var(--text-tertiary);margin-right:2px}
+.content{flex:1;overflow-y:auto;padding:24px 28px}
+
+/* ===== BUTTONS ===== */
+.btn{display:inline-flex;align-items:center;gap:6px;padding:7px 14px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--bg-elevated);color:var(--text);font-size:12px;font-weight:500;cursor:pointer;transition:all var(--dur) var(--ease);font-family:var(--font)}
+.btn:hover{border-color:var(--border-hover);background:var(--bg-card-hover)}
+.btn svg{width:14px;height:14px;stroke-width:1.8}
+.btn-primary{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn-primary:hover{background:var(--accent-hover);border-color:var(--accent-hover)}
+.btn-sm{padding:5px 10px;font-size:11px}.btn-sm svg{width:13px;height:13px}
+.btn-ghost{border:none;background:transparent;color:var(--text-secondary)}
+.btn-ghost:hover{color:var(--text);background:var(--overlay)}
+.btn-icon{padding:6px;border:1px solid var(--border);background:var(--bg-elevated);border-radius:var(--radius-xs);cursor:pointer;color:var(--text-secondary);transition:all var(--dur) var(--ease);display:flex;align-items:center;justify-content:center}
+.btn-icon:hover{border-color:var(--border-hover);color:var(--text)}
+.btn-icon svg{width:14px;height:14px;stroke-width:1.8}
+.view-toggle{display:flex;border:1px solid var(--border);border-radius:var(--radius-sm);overflow:hidden}
+.view-toggle .btn-icon{border:none;border-radius:0;border-right:1px solid var(--border)}
+.view-toggle .btn-icon:last-child{border-right:none}
+.view-toggle .btn-icon.active{background:var(--accent-muted);color:var(--accent)}
+
+/* ===== STAT CARDS ===== */
+.stats-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:28px}
+.stat{background:var(--bg-elevated);border:1px solid var(--border);border-radius:var(--radius);padding:18px 20px;transition:all var(--dur) var(--ease);position:relative;overflow:hidden}
+.stat:hover{border-color:var(--border-hover)}
+.stat::before{content:'';position:absolute;top:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,var(--accent-muted),transparent);opacity:0;transition:opacity var(--dur) var(--ease)}
+.stat:hover::before{opacity:1}
+.stat-label{font-size:11px;color:var(--text-tertiary);text-transform:uppercase;letter-spacing:.8px;font-weight:500;margin-bottom:8px;display:flex;align-items:center;gap:6px}
+.stat-label svg{width:13px;height:13px;stroke-width:1.8}
+.stat-val{font-size:32px;font-weight:800;letter-spacing:-.5px;line-height:1}
+.stat-val .dim{font-size:15px;color:var(--text-tertiary);font-weight:400;margin-left:2px}
+.stat-sub{font-size:11px;color:var(--text-tertiary);margin-top:6px}
+
+/* ===== PANELS ===== */
+.panel{background:var(--bg-elevated);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;margin-bottom:16px}
+.panel-head{padding:14px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between}
+.panel-head h3{font-size:14px;font-weight:600;letter-spacing:-.2px;display:flex;align-items:center;gap:7px}
+.panel-head h3 svg{width:15px;height:15px;stroke-width:1.8;color:var(--text-secondary)}
+.panel-body{padding:12px 18px}
+
+/* ===== LIST ITEMS ===== */
+.li{display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--border)}
+.li:last-child{border-bottom:none}
+.li-icon{width:32px;height:32px;border-radius:var(--radius-sm);display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.li-icon svg{width:16px;height:16px;stroke-width:1.8}
+.li-body{flex:1;min-width:0}
+.li-title{font-size:13px;font-weight:500}.li-sub{font-size:11px;color:var(--text-tertiary);margin-top:1px}
+.li-right{flex-shrink:0;display:flex;align-items:center;gap:8px}
+
+/* ===== STATUS DOT ===== */
+.dot{width:7px;height:7px;border-radius:50%;flex-shrink:0}
+.dot-green{background:var(--green);box-shadow:0 0 6px var(--green)}
+.dot-amber{background:var(--amber);box-shadow:0 0 6px var(--amber)}
+.dot-blue{background:var(--blue);box-shadow:0 0 6px var(--blue)}
+.dot-gray{background:var(--text-quaternary)}
+.dot-pulse{animation:pulse 2.5s ease-in-out infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
+
+/* ===== TAGS ===== */
+.tag{font-size:10px;padding:2px 8px;border-radius:5px;font-weight:500;white-space:nowrap}
+.tag-accent{background:var(--accent-muted);color:var(--accent);border:1px solid var(--accent-border)}
+.tag-green{background:var(--green-muted);color:var(--green);border:1px solid var(--green-border)}
+.tag-amber{background:var(--amber-muted);color:var(--amber);border:1px solid var(--amber-border)}
+.tag-red{background:var(--red-muted);color:var(--red);border:1px solid var(--red-border)}
+.tag-blue{background:var(--blue-muted);color:var(--blue);border:1px solid var(--blue-border)}
+.tag-neutral{background:var(--overlay);color:var(--text-secondary);border:1px solid var(--border)}
+
+/* ===== SERVER CARDS ===== */
+.server-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px;margin-bottom:20px}
+.server-card{background:var(--bg-elevated);border:1px solid var(--border);border-radius:var(--radius);padding:20px;cursor:pointer;transition:all var(--dur) var(--ease);position:relative}
+.server-card:hover{border-color:var(--border-hover);box-shadow:var(--shadow)}
+.server-card .head{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px}
+.server-card .card-top{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px}
+.server-card .card-ssh{flex-shrink:0}
+.server-card h4{font-size:14px;font-weight:600;letter-spacing:-.2px}
+.server-card .spec{font-size:12px;color:var(--text-secondary);margin-bottom:12px}
+.server-card .meta{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:12px}
+.server-card .foot{font-size:11px;color:var(--text-tertiary);display:flex;justify-content:space-between;align-items:center;padding-top:12px;border-top:1px solid var(--border)}
+.expiry-track{height:2px;border-radius:1px;background:var(--border);margin-top:10px;overflow:hidden}
+.expiry-track .bar{height:100%;border-radius:1px;transition:width .6s var(--ease)}
+.sidebar-alerts{border-top:1px solid var(--border);padding:4px 10px 8px}
+.sidebar-alerts-head{display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:var(--radius-sm);cursor:pointer;color:var(--text-secondary);font-size:12px;font-weight:600;transition:all var(--dur) var(--ease)}
+.sidebar-alerts-head:hover{background:var(--overlay);color:var(--text)}
+.sidebar-alerts-chevron{width:13px;height:13px;display:flex;align-items:center;justify-content:center;color:var(--text-tertiary)}
+.sidebar-alerts-chevron svg{width:13px;height:13px;stroke-width:2.2}
+.sidebar-alerts-title{flex:1;letter-spacing:.3px}
+.sidebar-alerts-count{background:var(--amber-muted);color:var(--amber);border:1px solid var(--amber-border);font-size:10px;padding:1px 7px;border-radius:10px;font-weight:600;line-height:1.4}
+.sidebar-alerts-count.high{background:var(--red-muted);color:var(--red);border-color:var(--red-border)}
+.sidebar-alerts-items{display:flex;flex-direction:column;gap:1px;padding:4px 4px 0}
+.sidebar-alert-item{display:flex;gap:8px;padding:6px 8px;border-radius:var(--radius-sm);cursor:pointer;transition:background var(--dur) var(--ease);align-items:flex-start}
+.sidebar-alert-item:hover{background:var(--overlay)}
+.sidebar-alert-icon{flex-shrink:0;color:var(--amber);margin-top:1px}
+.sidebar-alert-item.high .sidebar-alert-icon{color:var(--red)}
+.sidebar-alert-icon svg{width:13px;height:13px;stroke-width:2}
+.sidebar-alert-text{flex:1;min-width:0;overflow:hidden}
+.sidebar-alert-name{font-size:11.5px;color:var(--text-primary);font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;line-height:1.3}
+.sidebar-alert-sub{font-size:10px;color:var(--text-tertiary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;line-height:1.3;margin-top:1px}
+.quick-actions{display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap}
+.quick-action{display:flex;align-items:center;gap:6px;padding:8px 12px;background:var(--bg-elevated);border:1px solid var(--border);border-radius:var(--radius-sm);cursor:pointer;font-size:12px;color:var(--text-secondary);transition:all var(--dur) var(--ease)}
+.quick-action:hover{border-color:var(--border-hover);color:var(--text-primary);transform:translateY(-1px)}
+.quick-action svg{width:14px;height:14px;stroke-width:1.8}
+.stat-trend{font-size:10px;margin-top:4px;display:flex;align-items:center;gap:3px}
+.stat-trend.up{color:var(--green)}
+.stat-trend.down{color:var(--red)}
+.stat-trend.flat{color:var(--text-tertiary)}
+.stat-trend svg{width:10px;height:10px;stroke-width:2.5}
+.provider-badge{width:36px;height:36px;border-radius:10px;display:flex;align-items:center;justify-content:center;margin-bottom:12px}
+.provider-badge svg{width:18px;height:18px;stroke-width:1.6}
+
+/* ===== PROJECT CARDS ===== */
+.project-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:14px}
+.project-card{background:var(--bg-elevated);border:1px solid var(--border);border-radius:var(--radius);padding:20px;cursor:pointer;transition:all var(--dur) var(--ease)}
+.project-card:hover{border-color:var(--border-hover);box-shadow:var(--shadow)}
+.project-card .card-top{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px}
+.project-card h4{font-size:14px;font-weight:600;letter-spacing:-.2px}
+.project-card .desc{font-size:12px;color:var(--text-secondary);margin-bottom:14px;line-height:1.6;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.project-card .card-tags{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:14px}
+.progress{height:3px;border-radius:2px;background:var(--border);overflow:hidden;margin-bottom:8px}
+.progress .bar{height:100%;border-radius:2px;background:linear-gradient(90deg,var(--accent),rgba(var(--accent-rgb),.5));transition:width .6s var(--ease)}
+.progress-info{display:flex;justify-content:space-between;font-size:11px;color:var(--text-tertiary)}
+.card-foot{display:flex;justify-content:space-between;align-items:center;margin-top:14px;padding-top:14px;border-top:1px solid var(--border)}
+.card-foot .server-info{font-size:11px;color:var(--text-tertiary);display:flex;align-items:center;gap:4px}
+.card-foot .server-info svg{width:12px;height:12px;stroke-width:1.8}
+.card-foot .time{font-size:11px;color:var(--text-tertiary)}
+.card-actions{display:flex;gap:6px;margin-top:12px}
+.sync-result{font-size:11px;padding:6px 10px;border-radius:var(--radius-xs);margin-top:10px;display:flex;align-items:center;gap:6px;line-height:1.4}
+.sync-result svg{width:13px;height:13px;flex-shrink:0}
+.sync-result.sync-ok{background:var(--green-muted);color:var(--green);border:1px solid rgba(34,197,94,.15)}
+.sync-result.sync-fail{background:var(--red-muted);color:var(--red);border:1px solid rgba(239,68,68,.15)}
+
+/* Log Viewer */
+.log-panel{position:fixed;bottom:0;left:232px;right:0;height:40vh;background:var(--bg-deep);border-top:1px solid var(--border);display:flex;flex-direction:column;z-index:100;transition:height .3s var(--ease)}
+.log-panel.collapsed{height:36px}
+.log-head{display:flex;align-items:center;justify-content:space-between;padding:6px 16px;background:var(--bg-base);border-bottom:1px solid var(--border);flex-shrink:0;cursor:pointer;user-select:none}
+.log-head h4{font-size:12px;display:flex;align-items:center;gap:6px;color:var(--text)}
+.log-head-actions{display:flex;align-items:center;gap:8px}
+.log-body{flex:1;overflow-y:auto;padding:8px 16px;font-family:var(--mono);font-size:11px;line-height:1.7;color:var(--text-secondary)}
+.log-line{white-space:pre-wrap;word-break:break-all;padding:1px 0}
+.log-line.stderr{color:var(--red)}
+.log-line.error{color:var(--red);font-weight:600}
+.log-line.info{color:var(--blue)}
+.log-ts{color:var(--text-quaternary);margin-right:8px;font-size:10px}
+.log-level{font-size:9px;padding:1px 4px;border-radius:3px;margin-right:6px;text-transform:uppercase;font-weight:600}
+.log-level.stdout{background:var(--green-muted);color:var(--green)}
+.log-level.stderr{background:var(--red-muted);color:var(--red)}
+.log-level.info{background:var(--blue-muted);color:var(--blue)}
+.log-level.error{background:var(--red-muted);color:var(--red)}
+
+/* ===== SERVER GROUP ===== */
+.server-group{background:var(--bg-elevated);border:1px solid var(--border);border-radius:var(--radius);margin-bottom:12px;overflow:hidden;transition:all var(--dur) var(--ease)}
+.server-group:hover{border-color:var(--border-hover)}
+.group-header{display:flex;align-items:center;padding:14px 18px;cursor:pointer;gap:12px;transition:background var(--dur) var(--ease)}
+.group-header:hover{background:var(--overlay)}
+.group-chevron{transition:transform var(--dur) var(--ease);color:var(--text-tertiary)}
+.group-chevron svg{width:16px;height:16px;stroke-width:2}
+.server-group.collapsed .group-chevron{transform:rotate(-90deg)}
+.group-header .server-label{font-size:13px;font-weight:600;letter-spacing:-.1px;flex:1}
+.group-header .server-spec{font-size:11px;color:var(--text-tertiary)}
+.group-header .proj-count{font-size:11px;color:var(--text-tertiary);background:var(--overlay);padding:2px 8px;border-radius:4px}
+.group-body{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px;padding:0 14px 14px}
+.server-group.collapsed .group-body{display:none}
+.group-body .project-card{background:var(--bg-card)}
+
+/* ===== DOMAINS ===== */
+.domain-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px}
+.domain-card{background:var(--bg-elevated);border:1px solid var(--border);border-radius:var(--radius);padding:20px;cursor:pointer;transition:all var(--dur) var(--ease)}
+.domain-card:hover{border-color:var(--border-hover);box-shadow:var(--shadow)}
+.domain-card .card-top{display:flex;align-items:center;gap:12px;margin-bottom:12px}
+.domain-icon{width:36px;height:36px;border-radius:8px;background:var(--accent-muted);color:var(--accent);display:flex;align-items:center;justify-content:center}
+.domain-icon svg{width:18px;height:18px}
+.domain-card h4{font-size:14px;font-weight:600;letter-spacing:-.2px}
+.domain-registrar{font-size:11px;color:var(--text-tertiary)}
+.subdomain-list{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:12px}
+.domain-meta{display:flex;justify-content:space-between;font-size:11px;color:var(--text-tertiary);margin-bottom:8px}
+.empty-state{text-align:center;padding:60px 20px;color:var(--text-tertiary)}
+.empty-state svg{width:48px;height:48px;margin-bottom:16px;opacity:.3}
+.empty-state p{font-size:13px}
+
+/* ===== AGENT ===== */
+.agent-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:14px;margin-bottom:20px}
+.agent-card{background:var(--bg-elevated);border:1px solid var(--border);border-radius:var(--radius);padding:20px;transition:all var(--dur) var(--ease)}
+.agent-card:hover{border-color:var(--border-hover)}
+.agent-card .agent-head{display:flex;align-items:center;gap:12px;margin-bottom:12px}
+.agent-icon{width:40px;height:40px;border-radius:10px;display:flex;align-items:center;justify-content:center}
+.agent-icon svg{width:20px;height:20px;stroke-width:1.6}
+.agent-card h4{font-size:14px;font-weight:600;letter-spacing:-.2px}
+.agent-card .agent-sub{font-size:11px;color:var(--text-tertiary)}
+.agent-card .agent-desc{font-size:12px;color:var(--text-secondary);margin-bottom:14px;line-height:1.6}
+.agent-card .server-tags{display:flex;flex-wrap:wrap;gap:4px}
+
+/* ===== MATRIX TABLE ===== */
+.matrix{width:100%;border-collapse:collapse;font-size:13px}
+.matrix th{text-align:left;padding:10px 14px;border-bottom:1px solid var(--border);color:var(--text-tertiary);font-weight:500;font-size:11px;text-transform:uppercase;letter-spacing:.5px}
+.matrix th:not(:first-child){text-align:center}
+.matrix td{padding:10px 14px;border-bottom:1px solid var(--border)}
+.matrix td:not(:first-child){text-align:center}
+.matrix .dot-yes{color:var(--green)}.matrix .dot-no{color:var(--text-quaternary)}
+
+/* ===== KB ===== */
+.kb-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:14px}
+.kb-card{background:var(--bg-elevated);border:1px solid var(--border);border-radius:var(--radius);padding:20px;cursor:pointer;transition:all var(--dur) var(--ease)}
+.kb-card:hover{border-color:var(--border-hover);box-shadow:var(--shadow)}
+.kb-card .kb-icon{width:40px;height:40px;border-radius:10px;display:flex;align-items:center;justify-content:center;margin-bottom:14px}
+.kb-card .kb-icon svg{width:20px;height:20px;stroke-width:1.6}
+.kb-card h4{font-size:14px;font-weight:600;letter-spacing:-.2px;margin-bottom:6px}
+.kb-card p{font-size:12px;color:var(--text-secondary);line-height:1.6}
+.kb-card .count{font-size:11px;color:var(--text-tertiary);margin-top:10px}
+
+/* ===== MODAL ===== */
+.modal-overlay{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.45);backdrop-filter:blur(8px);z-index:100;display:flex;align-items:center;justify-content:center;opacity:0;pointer-events:none;transition:opacity .25s var(--ease)}
+.modal-overlay.show{opacity:1;pointer-events:all}
+.modal{background:var(--bg-base);border:1px solid var(--border);border-radius:16px;width:92%;max-width:700px;max-height:85vh;display:flex;flex-direction:column;transform:translateY(16px) scale(.98);transition:transform .25s var(--ease);box-shadow:var(--shadow-lg)}
+.modal-overlay.show .modal{transform:none}
+.modal-header{padding:20px 24px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;flex-shrink:0}
+.modal-header h2{font-size:17px;font-weight:700;letter-spacing:-.3px}
+.modal-close{width:30px;height:30px;border-radius:8px;border:1px solid var(--border);background:var(--bg-elevated);color:var(--text-tertiary);cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all var(--dur) var(--ease)}
+.modal-close:hover{background:var(--red-muted);color:var(--red)}
+.modal-close svg{width:16px;height:16px;stroke-width:2}
+.modal-body{flex:1;overflow-y:auto;padding:20px 24px}
+.modal-actions{display:flex;gap:8px;padding-bottom:14px;margin-bottom:14px;border-bottom:1px solid var(--border);flex-wrap:wrap}
+
+/* ===== DETAIL: INFO ROW ===== */
+.info-row{display:flex;align-items:center;gap:16px;flex-wrap:wrap;padding:14px 18px;background:var(--bg-elevated);border:1px solid var(--border);border-radius:var(--radius-sm);margin-bottom:20px}
+.info-item{display:flex;align-items:center;gap:5px;font-size:12px;color:var(--text-secondary);white-space:nowrap}
+.info-item svg{width:13px;height:13px;stroke-width:1.8;opacity:.6}
+.info-item strong{color:var(--text);font-weight:600}
+.info-divider{width:1px;height:14px;background:var(--border);flex-shrink:0}
+
+/* ===== DETAIL: TODO LIST ===== */
+.todo-section{margin-bottom:20px}
+.todo-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
+.todo-head h4{font-size:13px;font-weight:600;display:flex;align-items:center;gap:6px}
+.todo-head h4 svg{width:14px;height:14px;stroke-width:1.8;color:var(--text-secondary)}
+.todo-head .todo-count{font-size:11px;color:var(--text-tertiary);font-weight:400;margin-left:4px}
+.todo-list{display:flex;flex-direction:column;gap:4px}
+.todo-item{display:flex;align-items:center;gap:10px;padding:10px 14px;background:var(--bg-elevated);border:1px solid var(--border);border-radius:var(--radius-xs);transition:all var(--dur) var(--ease);cursor:pointer}
+.todo-item:hover{border-color:var(--border-hover)}
+.todo-item.done{opacity:.45}
+.todo-item.done .todo-name{text-decoration:line-through;color:var(--text-tertiary)}
+.todo-check{width:18px;height:18px;border-radius:50%;border:2px solid var(--border-hover);display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:all var(--dur) var(--ease)}
+.todo-item.done .todo-check{background:var(--green);border-color:var(--green)}
+.todo-check svg{width:12px;height:12px;stroke-width:2.5;color:transparent}
+.todo-item.done .todo-check svg{color:#fff}
+.todo-name{font-size:13px;flex:1}
+.todo-tag{font-size:10px;padding:1px 6px;border-radius:4px}
+
+/* ===== DETAIL: SECTIONS ===== */
+.detail-section{margin-bottom:20px}
+.detail-section h4{font-size:11px;font-weight:600;color:var(--text-tertiary);text-transform:uppercase;letter-spacing:.6px;margin-bottom:10px;display:flex;align-items:center;gap:6px}
+.detail-section h4 svg{width:13px;height:13px;stroke-width:1.8}
+.feat-list{list-style:none}
+.feat-list li{padding:8px 12px;background:var(--bg-elevated);border-radius:var(--radius-xs);margin-bottom:4px;font-size:13px;display:flex;align-items:center;gap:8px}
+.feat-list li svg{width:14px;height:14px;stroke-width:2;flex-shrink:0}
+.ssh-block{background:var(--bg-deep);border:1px solid var(--border);border-radius:var(--radius-sm);padding:14px 16px;font-family:var(--mono);font-size:12px;color:var(--green);line-height:1.8}
+.ssh-block .comment{color:var(--text-tertiary)}
+
+/* ===== DETAIL GRID (for server modal) ===== */
+.detail-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:20px}
+.detail-item{background:var(--bg-elevated);border-radius:var(--radius-sm);padding:12px 14px}
+.detail-item .label{font-size:10px;color:var(--text-tertiary);text-transform:uppercase;letter-spacing:.6px;margin-bottom:4px;font-weight:500}
+.detail-item .value{font-size:13px;font-weight:600}
+
+/* ===== SECTION HEAD ===== */
+.sec-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px}
+.sec-head h3{font-size:14px;font-weight:600;letter-spacing:-.2px;display:flex;align-items:center;gap:7px}
+.sec-head h3 svg{width:15px;height:15px;stroke-width:1.8;color:var(--text-secondary)}
+.grid-2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+
+/* ===== ANIMATIONS ===== */
+.fade-in{animation:fadeIn .3s var(--ease)}
+@keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+.empty{text-align:center;padding:48px 24px;color:var(--text-tertiary)}
+.empty svg{width:40px;height:40px;stroke-width:1.2;margin-bottom:12px;opacity:.3}
+.empty p{font-size:13px}
+
+/* ===== SSH TOAST ===== */
+.toast{position:fixed;bottom:24px;right:24px;background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);padding:12px 18px;font-size:13px;display:flex;align-items:center;gap:8px;box-shadow:var(--shadow-lg);z-index:200;transform:translateY(80px);opacity:0;transition:all .3s var(--ease)}
+.toast.show{transform:translateY(0);opacity:1}
+.toast svg{width:16px;height:16px;stroke-width:2;flex-shrink:0}
+
+/* ===== LIGHT THEME OVERRIDES ===== */
+[data-theme="light"] .ssh-block{background:#f1f5f9;color:#16a34a;border-color:#e2e8f0}
+[data-theme="light"] .ssh-block .comment{color:#94a3b8}
+[data-theme="light"] .modal-overlay{background:rgba(0,0,0,.18)}
+[data-theme="light"] .nav-item .badge{box-shadow:0 0 0 1px rgba(255,255,255,.6)}
+[data-theme="light"] .dot-green{box-shadow:0 0 4px rgba(34,197,94,.4)}
+[data-theme="light"] .dot-amber{box-shadow:0 0 4px rgba(234,179,8,.4)}
+[data-theme="light"] .dot-blue{box-shadow:0 0 4px rgba(59,130,246,.4)}
+[data-theme="light"] .btn-primary{color:#fff}
+[data-theme="light"] .logo-mark svg{color:#fff}
+[data-theme="light"] .avatar{color:#fff}
+[data-theme="light"] body{-webkit-font-smoothing:antialiased}
+
+/* ===== FORMS ===== */
+.form-group{margin-bottom:12px}
+.form-label{display:block;font-size:11px;color:var(--text-tertiary);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px;font-weight:500}
+.form-input{width:100%;padding:8px 12px;border-radius:var(--radius-xs);border:1px solid var(--border);background:var(--bg-card);color:var(--text);font-size:13px;font-family:var(--font);transition:border-color var(--dur) var(--ease);outline:none}
+.form-input:focus{border-color:var(--accent)}
+.form-input::placeholder{color:var(--text-quaternary)}
+select.form-input{cursor:pointer;appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23a1a1aa' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 10px center;padding-right:30px}
+.form-row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.form-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:20px;padding-top:16px;border-top:1px solid var(--border)}
+.btn-danger{background:var(--red-muted);border-color:var(--red-border);color:var(--red)}
+.btn-danger:hover{background:var(--red);border-color:var(--red);color:#fff}
+.btn-success{background:var(--green);border-color:var(--green);color:#fff}
+.btn-success:hover{background:#16a34a;border-color:#16a34a}
+
+/* ===== TOAST ===== */
+.toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%) translateY(100px);padding:12px 24px;background:var(--bg-elevated);border:1px solid var(--border);border-radius:var(--radius-sm);box-shadow:var(--shadow-lg);font-size:13px;font-weight:500;z-index:1000;opacity:0;transition:all .3s var(--ease)}
+.toast.show{transform:translateX(-50%) translateY(0);opacity:1}
+
+/* ===== LOG PANEL ===== */
+.log-panel{position:fixed;bottom:0;left:232px;right:0;height:40vh;background:var(--bg-deep);border-top:1px solid var(--border);display:flex;flex-direction:column;z-index:100;transition:height .3s var(--ease)}
+.log-panel.collapsed{height:36px}
+.log-head{display:flex;align-items:center;justify-content:space-between;padding:6px 16px;background:var(--bg-base);border-bottom:1px solid var(--border);flex-shrink:0;cursor:pointer;user-select:none}
+.log-head-left{display:flex;align-items:center;gap:8px;font-size:12px;font-weight:600;color:var(--text-secondary)}
+.log-head-left svg{width:14px;height:14px}
+.log-head-actions{display:flex;align-items:center;gap:6px}
+.log-head-actions button{font-size:11px;padding:2px 8px}
+.log-body{flex:1;overflow-y:auto;padding:8px 16px;font-family:var(--mono);font-size:11.5px;line-height:1.7}
+.log-line{display:flex;gap:8px;padding:1px 0}
+.log-ts{color:var(--text-quaternary);white-space:nowrap;min-width:75px}
+.log-level{font-weight:600;min-width:36px;text-transform:uppercase}
+.log-level.info{color:var(--blue)}
+.log-level.warn{color:var(--amber)}
+.log-level.error{color:var(--red)}
+.log-level.debug{color:var(--text-tertiary)}
+.log-text{color:var(--text-secondary);word-break:break-all}
+.log-empty{text-align:center;padding:40px;color:var(--text-tertiary);font-size:13px}
+/* Sync progress modal */
+.sync-progress{padding:8px 0}
+.sync-phase{font-size:14px;color:var(--text-secondary);margin-bottom:12px;font-weight:500}
+.sync-bar-wrap{background:var(--bg-tertiary);border-radius:var(--radius-sm);height:6px;margin-bottom:14px;overflow:hidden}
+.sync-bar{height:100%;background:var(--accent);border-radius:var(--radius-sm);transition:width .3s ease;width:0}
+.sync-stats{display:flex;gap:20px;font-size:13px;color:var(--text-secondary);margin-bottom:12px;flex-wrap:wrap}
+.sync-stat{display:flex;align-items:center;gap:4px}
+.sync-stat .dot{width:6px;height:6px;border-radius:50%;flex-shrink:0}
+.sync-log{font-family:var(--mono);font-size:11px;line-height:1.7;max-height:200px;overflow-y:auto;border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;background:var(--bg-deep);color:var(--text-tertiary)}
+.sync-log-entry{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sync-summary{margin-top:12px;padding:12px;background:var(--bg-elevated);border-radius:var(--radius-sm);font-size:13px}
+.sync-summary-row{display:flex;justify-content:space-between;padding:3px 0;color:var(--text-secondary)}
+.sync-summary-row.error{color:var(--red)}
+.sync-spinner{display:inline-block;width:14px;height:14px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:sync-spin .8s linear infinite;vertical-align:middle;margin-right:6px}
+@keyframes sync-spin{to{transform:rotate(360deg)}}
+/* Floating sync widget */
+.sync-float{position:fixed;top:auto;left:auto;width:360px;height:auto;min-width:280px;min-height:120px;max-width:90vw;max-height:90vh;background:var(--bg-elevated);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow-lg);z-index:9999;overflow:hidden;display:flex;flex-direction:column}
+.sync-float.minimized{width:220px!important;height:auto!important;max-width:220px}
+.sync-float.minimized .sync-float-body{display:none}
+.sync-float.minimized .sync-float-resize{display:none}
+.sync-float.maximized{top:40px!important;left:10px!important;right:10px!important;bottom:10px!important;width:auto!important;height:auto!important;max-width:none!important;max-height:none!important;border-radius:var(--radius)}
+.sync-float-head{display:flex;align-items:center;gap:6px;padding:8px 12px;cursor:move;border-bottom:1px solid var(--border);user-select:none;flex-shrink:0}
+.sync-float.minimized .sync-float-head{border-bottom:none}
+.sync-float-head .title{flex:1;font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sync-float-head .btn-ctrl{width:22px;height:22px;border:none;background:var(--overlay);border-radius:4px;cursor:pointer;display:flex;align-items:center;justify-content:center;color:var(--text-tertiary);font-size:12px;line-height:1}
+.sync-float-head .btn-ctrl:hover{background:var(--overlay-hover);color:var(--text)}
+.sync-float-body{padding:12px 14px;overflow-y:auto;flex:1}
+.sync-float .sync-phase{font-size:12px;margin-bottom:8px}
+.sync-float .sync-bar-wrap{margin-bottom:8px}
+.sync-float .sync-stats{font-size:11px;margin-bottom:0}
+.sync-float .sync-log{max-height:200px;font-size:10px;overflow-y:auto}
+.sync-float .sync-summary{margin-top:8px;padding:8px;font-size:12px}
+.sync-float-done{padding:10px 14px;display:flex;align-items:center;justify-content:space-between}
+.sync-float-done .msg{font-size:12px;font-weight:500}
+.sync-float-done .msg.ok{color:var(--green)}
+.sync-float-done .msg.err{color:var(--red)}
+/* Resize handles - all 4 edges + 4 corners */
+.sync-float-resize{position:absolute;z-index:10}
+.sync-resize-n{top:-3px;left:8px;right:8px;height:6px;cursor:ns-resize}
+.sync-resize-s{bottom:-3px;left:8px;right:8px;height:6px;cursor:ns-resize}
+.sync-resize-w{top:8px;left:-3px;bottom:8px;width:6px;cursor:ew-resize}
+.sync-resize-e{top:8px;right:-3px;bottom:8px;width:6px;cursor:ew-resize}
+.sync-resize-nw{top:-3px;left:-3px;width:12px;height:12px;cursor:nwse-resize}
+.sync-resize-ne{top:-3px;right:-3px;width:12px;height:12px;cursor:nesw-resize}
+.sync-resize-sw{bottom:-3px;left:-3px;width:12px;height:12px;cursor:nesw-resize}
+.sync-resize-se{bottom:-3px;right:-3px;width:12px;height:12px;cursor:nwse-resize}
+.sync-resize-se::after{content:'';position:absolute;bottom:2px;right:2px;width:8px;height:8px;border-right:2px solid var(--text-tertiary);border-bottom:2px solid var(--text-tertiary);opacity:.3}
+</style>
+</head>
+<body>
+<div id="app" class="app"></div>
+
+<script>
+const APP_VERSION = '1.4.11';
+// ==================== THEMES ====================
+const themes = {
+  violet: {
+    label:'紫罗兰', dot:'#8b5cf6', isLight:false,
+    bgDeep:'14,14,20', bgBase:'18,18,26', bgElevated:'26,26,38', bgCard:'34,34,48',
+    bgCardHover:'42,42,58', border:'50,50,66', borderHover:'72,72,90',
+    text:'245,245,250', textSec:'150,150,175', textTer:'90,90,115', textQuat:'58,58,78',
+    overlay:'255,255,255', overlayA:'.04', overlayHoverA:'.07', overlayBorderA:'.09',
+    shadowC:'0,0,0', shadowA:'.2', shadowLgA:'.35',
+    accent:'#8b5cf6', accentHover:'#7c3aed', accentRGB:'139,92,246'
+  },
+  blue: {
+    label:'天空蓝', dot:'#3b82f6', isLight:false,
+    bgDeep:'12,16,26', bgBase:'16,22,36', bgElevated:'24,34,52', bgCard:'30,42,62',
+    bgCardHover:'38,52,74', border:'44,60,82', borderHover:'60,78,102',
+    text:'245,245,250', textSec:'150,160,185', textTer:'90,100,130', textQuat:'48,60,85',
+    overlay:'255,255,255', overlayA:'.04', overlayHoverA:'.07', overlayBorderA:'.09',
+    shadowC:'0,0,0', shadowA:'.2', shadowLgA:'.35',
+    accent:'#3b82f6', accentHover:'#2563eb', accentRGB:'59,130,246'
+  },
+  emerald: {
+    label:'翡翠绿', dot:'#10b981', isLight:false,
+    bgDeep:'12,20,16', bgBase:'16,26,20', bgElevated:'24,40,32', bgCard:'30,50,40',
+    bgCardHover:'38,60,48', border:'44,68,54', borderHover:'58,85,68',
+    text:'245,250,248', textSec:'150,175,162', textTer:'90,115,100', textQuat:'44,65,55',
+    overlay:'255,255,255', overlayA:'.04', overlayHoverA:'.07', overlayBorderA:'.09',
+    shadowC:'0,0,0', shadowA:'.2', shadowLgA:'.35',
+    accent:'#10b981', accentHover:'#059669', accentRGB:'16,185,129'
+  },
+  amber: {
+    label:'琥珀橙', dot:'#f59e0b', isLight:false,
+    bgDeep:'20,16,10', bgBase:'26,20,14', bgElevated:'38,30,20', bgCard:'48,38,26',
+    bgCardHover:'58,46,32', border:'64,52,34', borderHover:'82,68,46',
+    text:'250,248,245', textSec:'175,162,145', textTer:'115,100,80', textQuat:'70,58,38',
+    overlay:'255,255,255', overlayA:'.04', overlayHoverA:'.07', overlayBorderA:'.09',
+    shadowC:'0,0,0', shadowA:'.2', shadowLgA:'.35',
+    accent:'#f59e0b', accentHover:'#d97706', accentRGB:'245,158,11'
+  },
+  pink: {
+    label:'樱花粉', dot:'#ec4899', isLight:false,
+    bgDeep:'20,12,18', bgBase:'26,16,24', bgElevated:'38,24,34', bgCard:'48,32,44',
+    bgCardHover:'58,40,52', border:'64,44,58', borderHover:'82,58,74',
+    text:'250,245,248', textSec:'175,150,168', textTer:'115,90,108', textQuat:'70,48,62',
+    overlay:'255,255,255', overlayA:'.04', overlayHoverA:'.07', overlayBorderA:'.09',
+    shadowC:'0,0,0', shadowA:'.2', shadowLgA:'.35',
+    accent:'#ec4899', accentHover:'#db2777', accentRGB:'236,72,153'
+  },
+  light: {
+    label:'明亮白', dot:'#cbd5e1', isLight:true,
+    bgDeep:'241,245,249', bgBase:'248,250,252', bgElevated:'255,255,255', bgCard:'255,255,255',
+    bgCardHover:'248,250,252', border:'226,232,240', borderHover:'203,213,225',
+    text:'15,23,42', textSec:'71,85,105', textTer:'148,163,184', textQuat:'203,213,225',
+    overlay:'0,0,0', overlayA:'.03', overlayHoverA:'.06', overlayBorderA:'.06',
+    shadowC:'0,0,0', shadowA:'.06', shadowLgA:'.1',
+    accent:'#7c3aed', accentHover:'#6d28d9', accentRGB:'124,58,237'
+  }
+};
+let currentTheme = 'violet';
+try {
+  let s = localStorage.getItem('dc-theme');
+  if (s === 'rose') s = 'pink'; // migrate old theme name
+  if (s === 'cyan') s = 'violet'; // removed theme fallback
+  if (s && themes[s]) currentTheme = s;
+} catch(e){}
+document.documentElement.dataset.theme = themes[currentTheme].isLight ? 'light' : 'dark';
+
+function applyTheme(name) {
+  const t = themes[name]; if (!t) return;
+  currentTheme = name;
+  const r = document.documentElement.style;
+  // Backgrounds
+  r.setProperty('--bg-deep', `rgb(${t.bgDeep})`);
+  r.setProperty('--bg-base', `rgb(${t.bgBase})`);
+  r.setProperty('--bg-elevated', `rgb(${t.bgElevated})`);
+  r.setProperty('--bg-card', `rgb(${t.bgCard})`);
+  r.setProperty('--bg-card-hover', `rgb(${t.bgCardHover})`);
+  r.setProperty('--bg-input', `rgb(${t.bgBase})`);
+  // Borders
+  r.setProperty('--border', `rgb(${t.border})`);
+  r.setProperty('--border-hover', `rgb(${t.borderHover})`);
+  // Text
+  r.setProperty('--text', `rgb(${t.text})`);
+  r.setProperty('--text-secondary', `rgb(${t.textSec})`);
+  r.setProperty('--text-tertiary', `rgb(${t.textTer})`);
+  r.setProperty('--text-quaternary', `rgb(${t.textQuat})`);
+  // Overlays
+  r.setProperty('--overlay', `rgba(${t.overlay},${t.overlayA})`);
+  r.setProperty('--overlay-hover', `rgba(${t.overlay},${t.overlayHoverA})`);
+  r.setProperty('--overlay-border', `rgba(${t.overlay},${t.overlayBorderA})`);
+  // Shadows
+  r.setProperty('--shadow-color', `rgba(${t.shadowC},${t.shadowA})`);
+  r.setProperty('--shadow-color-lg', `rgba(${t.shadowC},${t.shadowLgA})`);
+  // Accent
+  r.setProperty('--accent', t.accent);
+  r.setProperty('--accent-hover', t.accentHover);
+  r.setProperty('--accent-rgb', t.accentRGB);
+  r.setProperty('--accent-muted', `rgba(${t.accentRGB},.1)`);
+  r.setProperty('--accent-border', `rgba(${t.accentRGB},.22)`);
+  // Light mode attribute
+  document.documentElement.dataset.theme = t.isLight ? 'light' : 'dark';
+  document.querySelectorAll('.theme-dot').forEach(d => d.classList.toggle('active', d.dataset.theme === name));
+  try { localStorage.setItem('dc-theme', name); } catch(e) {}
+}
+
+// ==================== DATA ====================
+const NOW = Date.now();
+function hoursAgo(h){ return new Date(NOW - h*3600000).toISOString(); }
+function daysAgo(d){ return hoursAgo(d*24); }
+
+let todoIdCounter = 100;
+const state = {
+  view:'dashboard', projectViewMode:'grouped', collapsedGroups:{}, alertsCollapsed:false, modal:null,
+  servers:[
+    {id:'ali',name:'阿里云轻量',provider:'阿里云',providerHue:24,cpu:2,ram:2,disk:'60G SSD',ip:'47.xx.xx.xx',region:'杭州',os:'Ubuntu 22.04',tools:['OpenClaw','Claude Code'],expiry:'2027-02-01',status:'online',projects:['ecommerce-platform','api-gateway'],sshPort:22,sshUser:'root',sshKey:'~/.ssh/ali_key'},
+    {id:'tx',name:'腾讯云轻量',provider:'腾讯云',providerHue:210,cpu:4,ram:4,disk:'80G SSD',ip:'101.xx.xx.xx',region:'上海',os:'Ubuntu 22.04',tools:['OpenClaw','Claude Code'],expiry:'2027-05-15',status:'online',projects:['ai-chatbot','data-dashboard'],sshPort:22,sshUser:'root',sshKey:'~/.ssh/tx_key'},
+    {id:'gcp',name:'GCP 主力',provider:'Google Cloud',providerHue:220,cpu:2,ram:8,disk:'50G SSD',ip:'34.xx.xx.xx',region:'东京',os:'Debian 12',tools:['Hermes','Claude Code','OpenCode'],expiry:'2026-08-01',status:'online',projects:['knowledge-base'],sshPort:22,sshUser:'admin',sshKey:'~/.ssh/gcp_key'},
+    {id:'gcp-free',name:'GCP 免费小鸡',provider:'Google Cloud',providerHue:220,cpu:2,ram:1,disk:'30G',ip:'35.xx.xx.xx',region:'美西',os:'Debian 12',tools:['Hermes'],expiry:'长期',status:'online',projects:[],sshPort:22,sshUser:'admin',sshKey:'~/.ssh/gcp_free_key'},
+    {id:'local',name:'本地 Win11',provider:'本地',providerHue:252,cpu:'-',ram:32,disk:'1T SSD',ip:'localhost',region:'本地',os:'Windows 11',tools:['Claude Code','OpenCode'],expiry:'永久',status:'online',projects:['dev-center'],sshPort:null,sshUser:null,sshKey:null},
+    {id:'future',name:'首尔服务器',provider:'计划中',providerHue:0,cpu:2,ram:4,disk:'待定',ip:'待购',region:'首尔',os:'待定',tools:['Hermes','Claude Code','OpenCode'],expiry:'计划中',status:'planned',projects:[],sshPort:null,sshUser:null,sshKey:null}
+  ],
+  projects:[
+    {id:'ecommerce-platform',name:'多商户电商平台',desc:'支持多商户入驻的 B2B2C 电商平台',server:'ali',status:'dev',priority:'high',progress:35,techStack:['Next.js','PostgreSQL','Redis','Stripe'],
+      features:[{name:'用户注册/登录',done:true},{name:'商品 CRUD',done:true},{name:'购物车',done:true},{name:'订单系统',done:false},{name:'支付集成',done:false},{name:'商户后台',done:false},{name:'数据统计',done:false}],
+      todos:[{id:1,name:'集成 Stripe 支付流程',done:false},{id:2,name:'商户入驻审核模块',done:false},{id:3,name:'首页商品推荐算法',done:false},{id:4,name:'移动端 H5 适配',done:false},{id:5,name:'订单导出功能',done:true}],
+      lastUpdate:hoursAgo(2),agent:'Claude Code'},
+    {id:'ai-chatbot',name:'AI 客服系统',desc:'基于 LLM 的智能客服系统',server:'tx',status:'active',priority:'high',progress:60,techStack:['React','Python','FastAPI','Vector DB'],
+      features:[{name:'对话引擎',done:true},{name:'知识库导入',done:true},{name:'RAG 检索',done:true},{name:'多轮对话',done:true},{name:'工单系统',done:false},{name:'数据分析面板',done:false}],
+      todos:[{id:10,name:'工单自动分配逻辑',done:false},{id:11,name:'会话历史导出',done:false},{id:12,name:'Webhook 回调集成',done:false},{id:13,name:'Token 用量统计',done:true}],
+      lastUpdate:hoursAgo(5),agent:'Claude Code + OpenClaw'},
+    {id:'data-dashboard',name:'数据分析面板',desc:'可视化数据看板',server:'tx',status:'dev',priority:'medium',progress:20,techStack:['Vue3','ECharts','Node.js','ClickHouse'],
+      features:[{name:'数据源管理',done:true},{name:'基础图表',done:false},{name:'自定义看板',done:false},{name:'定时报告',done:false}],
+      todos:[{id:20,name:'ClickHouse 查询优化',done:false},{id:21,name:'图表拖拽布局',done:false},{id:22,name:'CSV/Excel 导出',done:false}],
+      lastUpdate:daysAgo(3),agent:'Claude Code'},
+    {id:'knowledge-base',name:'知识库系统',desc:'个人/团队知识管理工具',server:'gcp',status:'dev',priority:'medium',progress:15,techStack:['Svelte','Supabase','LLM API'],
+      features:[{name:'Markdown 编辑器',done:true},{name:'文章管理',done:false},{name:'AI 自动摘要',done:false},{name:'双向链接',done:false},{name:'全文搜索',done:false}],
+      todos:[{id:30,name:'Supabase 数据库 Schema',done:false},{id:31,name:'AI 摘要 API 对接',done:false},{id:32,name:'标签管理系统',done:false}],
+      lastUpdate:daysAgo(7),agent:'OpenCode'},
+    {id:'api-gateway',name:'API 网关服务',desc:'统一 API 管理网关',server:'ali',status:'planned',priority:'low',progress:5,techStack:['Go','Redis','Nginx'],
+      features:[{name:'路由转发',done:false},{name:'JWT 鉴权',done:false},{name:'限流',done:false},{name:'日志收集',done:false}],
+      todos:[{id:40,name:'技术选型调研',done:true},{id:41,name:'路由转发原型',done:false},{id:42,name:'性能基准测试',done:false}],
+      lastUpdate:daysAgo(30),agent:'-'},
+    {id:'dev-center',name:'Dev Center 管理系统',desc:'统一管理服务器、项目、Agent 的本地驾驶舱',server:'local',status:'dev',priority:'high',progress:15,techStack:['HTML/JS','Node.js','WebSocket'],
+      features:[{name:'首页概览',done:true},{name:'服务器管理',done:true},{name:'项目中心',done:true},{name:'Agent 中心',done:true},{name:'知识库',done:true},{name:'SSH 远程连接',done:false},{name:'后端 API',done:false}],
+      todos:[{id:50,name:'Node.js 后端 API 框架',done:false},{id:51,name:'WebSocket SSH 终端',done:false},{id:52,name:'数据持久化方案',done:false},{id:53,name:'Agent 任务下发接口',done:false}],
+      lastUpdate:hoursAgo(1),agent:'QoderWork'}
+  ],
+  agents:[
+    {id:'claude-code',name:'Claude Code',icon:'bot',color:'#d97706',bg:'rgba(217,119,6,.1)',desc:'Anthropic 官方 CLI 编码工具，擅长复杂代码生成与重构',servers:['ali','tx','gcp','local']},
+    {id:'opencode',name:'OpenCode',icon:'terminal',color:'#3b82f6',bg:'rgba(59,130,246,.1)',desc:'开源终端 AI 编程 Agent，支持多种模型后端',servers:['gcp','local']},
+    {id:'openclaw',name:'OpenClaw',icon:'code-2',color:'#ef4444',bg:'rgba(239,68,68,.1)',desc:'AI 编程辅助工具，部署在阿里云和腾讯云服务器',servers:['ali','tx']},
+    {id:'hermes',name:'Hermes',icon:'zap',color:'#8b5cf6',bg:'rgba(139,92,246,.1)',desc:'AI 代理服务，部署在 Google Cloud 服务器上',servers:['gcp','gcp-free']}
+  ],
+  domains:[],
+  assets:[]
+};
+
+// Edit mode state
+let editMode = null; // null | { type: 'server'|'project', id: string|null, data: {...} }
+
+// ==================== I18N ====================
+let lang = localStorage.getItem('dev-center-lang') || 'zh';
+const I18N = {
+  // Sidebar nav
+  nav_dashboard:{zh:'首页概览',en:'Dashboard'},
+  nav_servers:{zh:'服务器管理',en:'Servers'},
+  nav_projects:{zh:'项目中心',en:'Projects'},
+  nav_agents:{zh:'Agent 中心',en:'Agents'},
+  nav_knowledge:{zh:'知识库',en:'Knowledge'},
+  nav_role:{zh:'全栈独立开发',en:'Full-Stack Dev'},
+  // Topbar titles & subs
+  top_dashboard:{zh:'首页概览',en:'Dashboard'},
+  top_dashboard_sub:{zh:'全局掌控你的开发资源',en:'Full control of your dev resources'},
+  top_servers:{zh:'服务器管理',en:'Servers'},
+  top_servers_sub:{zh:'台服务器',en:'servers'},
+  top_projects:{zh:'项目中心',en:'Projects'},
+  top_projects_sub:{zh:'个项目',en:'projects'},
+  top_agents:{zh:'Agent 中心',en:'Agents'},
+  top_agents_sub:{zh:'个 AI 工具',en:'AI tools'},
+  top_knowledge:{zh:'知识库',en:'Knowledge Base'},
+  top_knowledge_sub:{zh:'项目文档与知识沉淀',en:'Project docs & knowledge'},
+  // Connection badges
+  conn_ok:{zh:'已连接',en:'Connected'},
+  conn_demo:{zh:'演示数据',en:'Demo Data'},
+  // Theme & settings
+  theme:{zh:'主题',en:'Theme'},
+  llm_settings:{zh:'LLM 设置',en:'LLM Settings'},
+  // Dashboard stats
+  stat_online:{zh:'在线服务器',en:'Online Servers'},
+  stat_planned:{zh:'台计划中',en:'planned'},
+  stat_active:{zh:'活跃项目',en:'Active Projects'},
+  stat_total:{zh:'共',en:'Total'},
+  stat_avg_progress:{zh:'平均进度',en:'Avg Progress'},
+  stat_ai_tools:{zh:'AI 工具',en:'AI Tools'},
+  stat_on_servers:{zh:'分布在',en:'On'},
+  stat_servers_unit:{zh:'台服务器',en:'servers'},
+  stat_progress:{zh:'总体进度',en:'Overall Progress'},
+  stat_all_avg:{zh:'全部项目平均',en:'Average across all'},
+  // Quick actions
+  qa_new_project:{zh:'新建项目',en:'New Project'},
+  qa_add_server:{zh:'添加服务器',en:'Add Server'},
+  // Dashboard panels
+  panel_server_status:{zh:'服务器状态',en:'Server Status'},
+  panel_agent_dist:{zh:'Agent 分布',en:'Agent Distribution'},
+  panel_project_overview:{zh:'项目概览',en:'Project Overview'},
+  view_all:{zh:'查看全部',en:'View All'},
+  // Status
+  st_active:{zh:'运行中',en:'Active'},
+  st_dev:{zh:'开发中',en:'Dev'},
+  st_planned:{zh:'计划中',en:'Planned'},
+  st_paused:{zh:'已暂停',en:'Paused'},
+  st_online:{zh:'在线',en:'Online'},
+  st_offline:{zh:'离线',en:'Offline'},
+  // Servers view
+  all_servers:{zh:'全部服务器',en:'All Servers'},
+  add_server:{zh:'+ 添加服务器',en:'+ Add Server'},
+  days_left:{zh:'天后到期',en:'days left'},
+  // Projects view
+  all_projects:{zh:'全部项目',en:'All Projects'},
+  add_project:{zh:'+ 添加项目',en:'+ Add Project'},
+  view_grouped:{zh:'按服务器分组',en:'Group by Server'},
+  view_cards:{zh:'卡片视图',en:'Card View'},
+  projects_unit:{zh:'个项目',en:'projects'},
+  no_projects:{zh:'暂无项目',en:'No projects'},
+  // Project card
+  synced:{zh:'已同步',en:'Synced'},
+  progress_label:{zh:'进度',en:'Progress'},
+  features_label:{zh:'功能',en:'Features'},
+  download_sync:{zh:'下载同步',en:'Download'},
+  upload_sync:{zh:'上传同步',en:'Upload'},
+  analyze_only:{zh:'仅分析',en:'Analyze'},
+  visit_web:{zh:'访问网页',en:'Visit'},
+  // Sync result
+  sync_upload:{zh:'上传',en:'Upload'},
+  sync_download:{zh:'下载',en:'Download'},
+  sync_skip:{zh:'跳过',en:'Skipped'},
+  sync_fail:{zh:'失败',en:'Failed'},
+  // Project detail
+  pd_ssh_login:{zh:'SSH 登录',en:'SSH Login'},
+  pd_agent_task:{zh:'下发 Agent 任务',en:'Assign Agent Task'},
+  pd_llm_analyzed:{zh:'LLM 已分析',en:'LLM Analyzed'},
+  pd_llm_not_run:{zh:'LLM 未运行',en:'LLM Not Run'},
+  pd_llm_summary:{zh:'LLM 摘要',en:'LLM Summary'},
+  pd_todos:{zh:'待办事项',en:'Todos'},
+  pd_add:{zh:'添加',en:'Add'},
+  pd_no_todos:{zh:'暂无待办事项',en:'No todos'},
+  pd_features:{zh:'功能清单',en:'Features'},
+  pd_no_features:{zh:'暂无功能',en:'No features'},
+  pd_dev_env:{zh:'开发环境',en:'Dev Environment'},
+  pd_tech_stack:{zh:'技术栈',en:'Tech Stack'},
+  pd_local_sync:{zh:'本地同步',en:'Local Sync'},
+  pd_pick_dir:{zh:'选择目录',en:'Pick Dir'},
+  pd_local_path_placeholder:{zh:'点击右侧文件夹选择本地目录',en:'Click folder icon to pick directory'},
+  pd_description:{zh:'描述',en:'Description'},
+  pd_clone:{zh:'复制为新项目',en:'Clone'},
+  pd_edit:{zh:'编辑',en:'Edit'},
+  pd_delete:{zh:'删除',en:'Delete'},
+  // Server detail
+  sd_provider:{zh:'服务商',en:'Provider'},
+  sd_config:{zh:'配置',en:'Config'},
+  sd_region:{zh:'地区',en:'Region'},
+  sd_os:{zh:'系统',en:'OS'},
+  sd_expiry:{zh:'到期',en:'Expires'},
+  sd_days_left:{zh:'天后',en:'days'},
+  sd_tools:{zh:'已安装工具',en:'Installed Tools'},
+  sd_running_projects:{zh:'运行项目',en:'Running Projects'},
+  sd_ssh:{zh:'SSH 连接',en:'SSH Connection'},
+  sd_key:{zh:'密钥',en:'Key'},
+  sd_clone:{zh:'复制为新服务器',en:'Clone'},
+  sd_edit:{zh:'编辑',en:'Edit'},
+  sd_delete:{zh:'删除',en:'Delete'},
+  // Agents view
+  ag_deployed:{zh:'部署在',en:'Deployed on'},
+  ag_servers_unit:{zh:'台服务器',en:'servers'},
+  ag_matrix:{zh:'Agent × 服务器 矩阵',en:'Agent × Server Matrix'},
+  ag_server_col:{zh:'服务器',en:'Server'},
+  // Knowledge view
+  kb_arch:{zh:'架构设计',en:'Architecture'},
+  kb_arch_desc:{zh:'系统架构文档、技术选型、设计模式',en:'System architecture, tech selection, design patterns'},
+  kb_dev:{zh:'开发文档',en:'Dev Docs'},
+  kb_dev_desc:{zh:'各项目的 API 文档、数据库设计、部署流程',en:'API docs, DB design, deployment guides'},
+  kb_ops:{zh:'运维笔记',en:'Ops Notes'},
+  kb_ops_desc:{zh:'服务器配置、Docker 部署、故障排查',en:'Server config, Docker, troubleshooting'},
+  kb_ai:{zh:'AI 工具指南',en:'AI Tool Guides'},
+  kb_ai_desc:{zh:'Claude Code、OpenCode 等工具使用技巧',en:'Claude Code, OpenCode tips & tricks'},
+  kb_template:{zh:'项目模板',en:'Templates'},
+  kb_template_desc:{zh:'可复用的项目模板、脚手架、通用组件',en:'Reusable templates, scaffolds, components'},
+  kb_inspiration:{zh:'灵感收集',en:'Inspiration'},
+  kb_inspiration_desc:{zh:'产品想法、竞品分析、技术方案草稿',en:'Product ideas, competitor analysis, drafts'},
+  kb_todo:{zh:'待整理',en:'To be organized'},
+  kb_building:{zh:'待建设',en:'Coming soon'},
+  kb_about:{zh:'知识库说明',en:'About Knowledge Base'},
+  kb_about_text:{zh:'知识库用于沉淀你的项目文档和开发经验。后续可集成 Markdown 编辑器，支持直接在系统内编写和管理文档。',en:'Knowledge base for your project docs and dev experience. Markdown editor integration coming soon.'},
+  about_title:{zh:'关于',en:'About'},
+  about_version:{zh:'版本',en:'Version'},
+  about_desc:{zh:'Personal AI Dev Center 是一个本地化的多服务器管理与项目开发面板，支持 SSH 同步、LLM 分析、文件上传下载等功能。',en:'Personal AI Dev Center is a local multi-server management and project development dashboard with SSH sync, LLM analysis, file upload/download and more.'},
+  about_author:{zh:'开发者',en:'Developer'},
+  about_github:{zh:'GitHub',en:'GitHub'},
+  kb_projects:{zh:'个项目',en:'projects'},
+  kb_servers:{zh:'台服务器',en:'servers'},
+  kb_tools:{zh:'个工具',en:'tools'},
+  // Alerts
+  alert_title:{zh:'需要关注',en:'Attention'},
+  alert_days_expire:{zh:'天后到期',en:'days to expire'},
+  alert_days_no_update:{zh:'天未更新',en:'days no update'},
+  // Domains
+  nav_domains:{zh:'域名管理',en:'Domains'},
+  top_domains:{zh:'域名管理',en:'Domain Management'},
+  top_domains_sub:{zh:'管理你的域名和二级域名',en:'Manage your domains and subdomains'},
+  domain_add:{zh:'添加域名',en:'Add Domain'},
+  domain_edit:{zh:'编辑域名',en:'Edit Domain'},
+  domain_name:{zh:'域名',en:'Domain'},
+  domain_registrar:{zh:'注册商',en:'Registrar'},
+  domain_expiry:{zh:'到期时间',en:'Expiry Date'},
+  domain_auto_renew:{zh:'自动续费',en:'Auto Renew'},
+  domain_status:{zh:'状态',en:'Status'},
+  domain_subdomains:{zh:'二级域名',en:'Subdomains'},
+  domain_note:{zh:'备注',en:'Note'},
+  domain_no_data:{zh:'暂无域名，点击添加',en:'No domains yet, click to add'},
+  domain_sub_name:{zh:'子域名',en:'Subdomain'},
+  domain_sub_type:{zh:'类型',en:'Type'},
+  domain_sub_value:{zh:'记录值',en:'Value'},
+  // Assets
+  nav_assets:{zh:'个人资产',en:'Assets'},
+  top_assets:{zh:'个人资产管理',en:'Personal Assets'},
+  top_assets_sub:{zh:'SIM卡、信用卡、会员订阅',en:'SIM cards, credit cards, memberships'},
+  asset_add:{zh:'添加资产',en:'Add Asset'},
+  asset_edit:{zh:'编辑资产',en:'Edit Asset'},
+  asset_category:{zh:'分类',en:'Category'},
+  asset_cat_sim:{zh:'SIM 卡',en:'SIM Card'},
+  asset_cat_card:{zh:'信用卡',en:'Credit Card'},
+  asset_cat_member:{zh:'会员订阅',en:'Membership'},
+  asset_name:{zh:'名称',en:'Name'},
+  asset_detail:{zh:'详情',en:'Detail'},
+  asset_provider:{zh:'提供商',en:'Provider'},
+  asset_monthly_fee:{zh:'月费',en:'Monthly Fee'},
+  asset_expiry:{zh:'到期时间',en:'Expiry Date'},
+  asset_status:{zh:'状态',en:'Status'},
+  asset_note:{zh:'备注',en:'Note'},
+  asset_no_data:{zh:'暂无资产，点击添加',en:'No assets yet, click to add'},
+  // Priority tags
+  pri_high:{zh:'高优先',en:'High'},
+  pri_medium:{zh:'中优先',en:'Medium'},
+  pri_low:{zh:'低优先',en:'Low'},
+  // Relative time
+  rt_just_now:{zh:'刚刚',en:'Just now'},
+  rt_min_ago:{zh:'分钟前',en:'min ago'},
+  rt_hour_ago:{zh:'小时前',en:'hours ago'},
+  rt_day_ago:{zh:'天前',en:'days ago'},
+  rt_month_ago:{zh:'个月前',en:'months ago'},
+  // Trend
+  trend_no_change:{zh:'无变化',en:'No change'},
+  trend_vs_yesterday:{zh:'vs 昨日',en:'vs yesterday'},
+  // LLM settings
+  llm_title:{zh:'LLM 智能分析设置',en:'LLM Analysis Settings'},
+  llm_enable:{zh:'启用 LLM 智能分析',en:'Enable LLM Analysis'},
+  llm_enable_desc:{zh:'自动分析项目 MD 文档，提取问题、待办、功能等信息',en:'Auto-analyze project MD docs, extract issues, todos, features'},
+  llm_saved_configs:{zh:'已保存配置',en:'Saved Configs'},
+  llm_add:{zh:'新增',en:'Add'},
+  llm_no_config:{zh:'暂无配置，点击上方按钮新增',en:'No configs, click button above to add'},
+  llm_current:{zh:'当前使用',en:'Active'},
+  llm_switch:{zh:'切换使用',en:'Switch'},
+  llm_not_set:{zh:'未设置',en:'Not set'},
+  llm_default_name:{zh:'默认配置',en:'Default'},
+  llm_new_name:{zh:'新配置',en:'New Config'},
+  llm_tips_title:{zh:'提示',en:'Tips'},
+  llm_tip1:{zh:'使用 OpenAI 兼容协议，支持任意第三方中转',en:'OpenAI-compatible protocol, supports any proxy'},
+  llm_tip2:{zh:'可保存多套配置，随时切换',en:'Save multiple configs, switch anytime'},
+  llm_tip3:{zh:'点击配置名称可编辑详情',en:'Click config name to edit'},
+  llm_edit_config:{zh:'编辑配置',en:'Edit Config'},
+  llm_config_name:{zh:'配置名称',en:'Config Name'},
+  llm_config_name_ph:{zh:'如：DeepSeek 中转、OpenAI 官方',en:'e.g. DeepSeek Proxy, OpenAI Official'},
+  llm_provider:{zh:'LLM 提供商',en:'LLM Provider'},
+  llm_provider_ph:{zh:'如 Anthropic、OpenAI、DeepSeek、硅基流动等',en:'e.g. Anthropic, OpenAI, DeepSeek, etc.'},
+  llm_base_url_note:{zh:'OpenAI 兼容协议的接口地址',en:'OpenAI-compatible API endpoint'},
+  llm_model:{zh:'模型',en:'Model'},
+  llm_model_ph:{zh:'如 claude-3-5-sonnet、gpt-4o、deepseek-chat',en:'e.g. claude-3-5-sonnet, gpt-4o, deepseek-chat'},
+  llm_back:{zh:'返回',en:'Back'},
+  llm_test:{zh:'测试连接',en:'Test'},
+  llm_testing:{zh:'测试中...',en:'Testing...'},
+  llm_save:{zh:'保存',en:'Save'},
+  llm_saved:{zh:'配置已保存',en:'Config saved'},
+  llm_save_fail:{zh:'保存失败',en:'Save failed'},
+  llm_confirm_delete:{zh:'确定删除此配置？',en:'Delete this config?'},
+  // CRUD
+  crud_new_server:{zh:'新增服务器',en:'New Server'},
+  crud_new_project:{zh:'新增项目',en:'New Project'},
+  crud_edit:{zh:'编辑',en:'Edit'},
+  crud_cancel:{zh:'取消',en:'Cancel'},
+  crud_save:{zh:'保存',en:'Save'},
+  crud_delete:{zh:'删除',en:'Delete'},
+  // SSH
+  ssh_opened:{zh:'终端已打开',en:'Terminal opened'},
+  ssh_fail:{zh:'终端启动失败，命令已复制',en:'Terminal failed, command copied'},
+  ssh_no_backend:{zh:'无法连接后端，SSH 命令已复制',en:'Cannot connect backend, SSH copied'},
+  // Sync
+  sync_syncing:{zh:'正在同步数据...',en:'Syncing data...'},
+  sync_done:{zh:'同步完成',en:'Sync complete'},
+  sync_fail_msg:{zh:'同步失败',en:'Sync failed'},
+  sync_no_api:{zh:'无法连接后端 API，请确认已启动',en:'Cannot connect API'},
+  // Log viewer
+  log_title:{zh:'后端日志',en:'Backend Logs'},
+  log_refresh:{zh:'刷新',en:'Refresh'},
+  log_clear:{zh:'清空',en:'Clear'},
+  log_auto_scroll:{zh:'自动滚动',en:'Auto Scroll'},
+  log_no_logs:{zh:'暂无日志',en:'No logs yet'},
+  log_btn:{zh:'日志',en:'Logs'},
+  // Loading
+  loading:{zh:'加载中...',en:'Loading...'},
+  // Theme labels
+  theme_violet:{zh:'紫罗兰',en:'Violet'},
+  theme_blue:{zh:'天空蓝',en:'Sky Blue'},
+  theme_emerald:{zh:'翡翠绿',en:'Emerald'},
+  theme_amber:{zh:'琥珀橙',en:'Amber'},
+  theme_pink:{zh:'樱花粉',en:'Sakura'},
+  theme_light:{zh:'明亮白',en:'Light'},
+  // Expiry
+  expiry_permanent:{zh:'永久',en:'Permanent'},
+  expiry_longterm:{zh:'长期',en:'Long-term'},
+  // Units
+  unit_cores:{zh:'核',en:'cores'},
+  // Form labels
+  form_name:{zh:'名称',en:'Name'},
+  form_ip:{zh:'IP 地址',en:'IP Address'},
+  form_ssh_port:{zh:'SSH 端口',en:'SSH Port'},
+  form_ssh_user:{zh:'SSH 用户',en:'SSH User'},
+  form_ssh_key:{zh:'SSH 密钥',en:'SSH Key'},
+  form_cpu:{zh:'CPU (核)',en:'CPU (cores)'},
+  form_ram:{zh:'内存 (GB)',en:'RAM (GB)'},
+  form_disk:{zh:'磁盘',en:'Disk'},
+  form_tools:{zh:'工具 (逗号分隔)',en:'Tools (comma separated)'},
+  form_expiry:{zh:'到期日',en:'Expiry Date'},
+  form_status:{zh:'状态',en:'Status'},
+  form_linked_projects:{zh:'关联项目ID (逗号分隔)',en:'Linked Project IDs (comma separated)'},
+  form_server:{zh:'服务器',en:'Server'},
+  form_priority:{zh:'优先级',en:'Priority'},
+  form_progress:{zh:'进度 (0-100)',en:'Progress (0-100)'},
+  form_tech_stack:{zh:'技术栈 (逗号分隔)',en:'Tech Stack (comma separated)'},
+  form_remote_path:{zh:'远程路径',en:'Remote Path'},
+  form_url:{zh:'网页链接 (URL / IP:端口)',en:'Web URL (URL / IP:Port)'},
+  // CRUD messages
+  crud_create_success:{zh:'创建成功',en:'Created successfully'},
+  crud_save_success:{zh:'保存成功',en:'Saved successfully'},
+  crud_save_fail:{zh:'保存失败',en:'Save failed'},
+  crud_delete_fail:{zh:'删除失败',en:'Delete failed'},
+  confirm_delete_server:{zh:'确定要删除这台服务器吗？',en:'Are you sure you want to delete this server?'},
+  confirm_delete_project:{zh:'确定要删除这个项目吗？',en:'Are you sure you want to delete this project?'},
+  server_deleted:{zh:'服务器已删除',en:'Server deleted'},
+  project_deleted:{zh:'项目已删除',en:'Project deleted'},
+  // Clone
+  clone_suffix:{zh:' (副本)',en:' (Copy)'},
+  clone_server_title:{zh:'复制新服务器',en:'Clone Server'},
+  clone_project_title:{zh:'复制新项目',en:'Clone Project'},
+  // Todo / Feature
+  todo_prompt:{zh:'输入待办事项:',en:'Enter todo item:'},
+  confirm_delete_todo:{zh:'确定删除这个待办事项吗?',en:'Delete this todo item?'},
+  confirm_delete_feature:{zh:'确定删除这个功能吗?',en:'Delete this feature?'},
+  // Error
+  error_unknown:{zh:'未知错误',en:'Unknown error'},
+  // Sync operations
+  sync_project_syncing:{zh:'正在同步',en:'Syncing'},
+  sync_project_done:{zh:'同步完成',en:'Sync complete'},
+  sync_llm_rewritten:{zh:'，LLM 已重写结果',en:', LLM rewrote results'},
+  sync_llm_not_run:{zh:'，LLM 未运行：',en:', LLM not run: '},
+  sync_no_changes:{zh:'无变化',en:'No changes'},
+  sync_files_unit:{zh:'个文件',en:'files'},
+  sync_dl_syncing:{zh:'正在从服务器下载',en:'Downloading from server'},
+  sync_dl_done:{zh:'下载完成',en:'Download complete'},
+  sync_dl_fail:{zh:'下载失败',en:'Download failed'},
+  sync_dl_partial:{zh:'下载部分失败',en:'Partial download failure'},
+  sync_ul_confirm:{zh:'确认上传本地文件到服务器？这会覆盖服务器上的同名文件。',en:'Upload local files to server? This will overwrite files with the same name.'},
+  sync_ul_syncing:{zh:'正在上传到服务器',en:'Uploading to server'},
+  sync_ul_done:{zh:'上传完成',en:'Upload complete'},
+  sync_ul_fail:{zh:'上传失败',en:'Upload failed'},
+  sync_ul_partial:{zh:'上传部分失败',en:'Partial upload failure'},
+  // Sync progress modal
+  sync_dl_progress:{zh:'下载进度',en:'Download Progress'},
+  sync_ul_progress:{zh:'上传进度',en:'Upload Progress'},
+  sync_phase_connecting:{zh:'正在连接服务器...',en:'Connecting to server...'},
+  sync_phase_scanning:{zh:'正在扫描文件...',en:'Scanning files...'},
+  sync_phase_transferring:{zh:'正在传输文件',en:'Transferring files'},
+  sync_phase_done:{zh:'同步完成',en:'Sync Complete'},
+  sync_phase_error:{zh:'同步出错',en:'Sync Error'},
+  sync_phase_retrying:{zh:'网络中断，正在重试',en:'Network interrupted, retrying'},
+  sync_files_to_transfer:{zh:'需要传输',en:'to transfer'},
+  sync_files_skipped:{zh:'已跳过',en:'skipped'},
+  sync_result_downloaded:{zh:'已下载',en:'Downloaded'},
+  sync_result_uploaded:{zh:'已上传',en:'Uploaded'},
+  sync_result_failed:{zh:'失败',en:'Failed'},
+  sync_result_skipped:{zh:'跳过',en:'Skipped'},
+  sync_error_list:{zh:'错误详情',en:'Error Details'},
+  sync_elapsed:{zh:'耗时',en:'Elapsed'},
+  sync_timeout:{zh:'连接超时，传输被中断',en:'Connection timed out, transfer interrupted'},
+  sync_interrupted:{zh:'传输被中断，部分文件可能已传输。请重试。',en:'Transfer interrupted. Some files may have been transferred. Please retry.'},
+  // Pick directory / local path
+  pick_dir_fail:{zh:'无法打开目录选择器',en:'Cannot open directory picker'},
+  local_path_saved:{zh:'本地路径已保存',en:'Local path saved'},
+  // Analyze
+  analyze_title:{zh:'分析',en:'Analyze'},
+  analyze_connecting:{zh:'正在连接...',en:'Connecting...'},
+  analyze_connect_fail:{zh:'连接失败',en:'Connection failed'},
+  btn_close:{zh:'关闭',en:'Close'},
+  // Issue prefix
+  issue_prefix:{zh:'[问题] ',en:'[Issue] '},
+  // Alert subtitles (template parts)
+  alert_days_expire_tpl:{zh:'天后到期',en:'days to expire'},
+  alert_days_no_update_tpl:{zh:'天未更新',en:'days no update'},
+  // LLM test
+  llm_test_fail:{zh:'测试失败',en:'Test failed'},
+};
+function t(key){return (I18N[key]&&I18N[key][lang])||I18N[key]&&I18N[key]['zh']||key}
+function toggleLang(){lang=lang==='zh'?'en':'zh';localStorage.setItem('dev-center-lang',lang);render()}
+function langToggleHTML(){return `<button class="btn-ghost" onclick="toggleLang()" style="font-size:11px;padding:3px 8px;border-radius:var(--radius-xs);border:1px solid var(--border);background:var(--bg-elevated);cursor:pointer;color:var(--text-secondary)">${lang==='zh'?'EN':'中'}</button>`}
+
+// ==================== HELPERS ====================
+function formatBytes(b){if(b<1024)return b+' B';if(b<1048576)return(b/1024).toFixed(1)+' KB';if(b<1073741824)return(b/1048576).toFixed(1)+' MB';return(b/1073741824).toFixed(2)+' GB'}
+function escapeHtml(str) {
+  if (typeof str !== 'string') return str;
+  return str.replace(/[&<>"'`]/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;','`':'&#96;'}[m]));
+}
+function icon(n,c){return `<i data-lucide="${n}" class="${c||''}"></i>`}
+function getServer(id){return state.servers.find(s=>s.id===id)}
+function daysUntil(d){if(!d||['永久','长期','计划中'].some(k=>d.includes(k)))return null;return Math.ceil((new Date(d)-new Date())/864e5)}
+function expiryColor(d){if(d===null)return'var(--text-tertiary)';if(d<=60)return'var(--red)';if(d<=120)return'var(--amber)';return'var(--green)'}
+function relativeTime(iso){const d=Date.now()-new Date(iso).getTime(),m=Math.floor(d/6e4),h=Math.floor(d/36e5),dy=Math.floor(d/864e5);if(m<1)return t('rt_just_now');if(m<60)return m+' '+t('rt_min_ago');if(h<24)return h+' '+t('rt_hour_ago');if(dy<30)return dy+' '+t('rt_day_ago');return Math.floor(dy/30)+' '+t('rt_month_ago')}
+function statusText(s){return{active:t('st_active'),dev:t('st_dev'),planned:t('st_planned'),paused:t('st_paused'),online:t('st_online'),offline:t('st_offline')}[s]||s}
+
+// ==================== STATS HISTORY (localStorage) ====================
+const STATS_KEY='dev-center-stats';
+function getStatsHistory(){try{return JSON.parse(localStorage.getItem(STATS_KEY)||'{}')}catch{return{}}}
+function saveStatsSnapshot(stats){const h=getStatsHistory(),today=new Date().toISOString().slice(0,10);if(!h[today]){h[today]=stats;const dates=Object.keys(h).sort();if(dates.length>30)dates.slice(0,dates.length-30).forEach(d=>delete h[d]);localStorage.setItem(STATS_KEY,JSON.stringify(h))}}
+function getTrend(current,key){const h=getStatsHistory(),dates=Object.keys(h).sort();if(dates.length<1)return null;const prev=h[dates[dates.length-1]][key];if(prev===undefined||prev===null||prev===0)return null;const diff=current-prev;if(diff===0)return{dir:'flat',pct:0,diff:0};return{dir:diff>0?'up':'down',pct:Math.abs(Math.round(diff/prev*100)),diff}}
+function trendHTML(tr){if(!tr)return'';const arrow=tr.dir==='up'?'arrow-up':tr.dir==='down'?'arrow-down':'minus';const sign=tr.dir==='up'?'+':tr.dir==='down'?'-':'';const text=tr.dir==='flat'?t('trend_no_change'):`${sign}${tr.pct}% ${t('trend_vs_yesterday')}`;return`<div class="stat-trend ${tr.dir}">${icon(arrow)} ${text}</div>`}
+
+// ==================== ALERTS ====================
+function computeAlerts(){const a=[];state.servers.filter(s=>s.id!=='future'&&s.status!=='planned').forEach(s=>{const d=daysUntil(s.expiry);if(d!==null&&d>0&&d<=30)a.push({level:d<=7?'high':'medium',icon:'clock',name:s.name,sub:`${d} ${t('alert_days_expire_tpl')}`,action:`openServerDetail('${s.id}')`})});state.projects.filter(p=>p.status==='active'||p.status==='dev').forEach(p=>{const dy=Math.floor((Date.now()-new Date(p.lastUpdate).getTime())/864e5);if(dy>=7)a.push({level:dy>=30?'high':'medium',icon:'alert-triangle',name:p.name,sub:`${dy} ${t('alert_days_no_update_tpl')}`,action:`openProjectDetail('${p.id}')`})});return a}
+function toggleAlerts(){state.alertsCollapsed=!state.alertsCollapsed;render()}
+function alertsHTML(){const a=computeAlerts();if(!a.length)return'';const c=state.alertsCollapsed,hasHigh=a.some(x=>x.level==='high');return`<div class="sidebar-alerts"><div class="sidebar-alerts-head" onclick="toggleAlerts()"><div class="sidebar-alerts-chevron">${icon(c?'chevron-right':'chevron-down')}</div><span class="sidebar-alerts-title">${t('alert_title')}</span><span class="sidebar-alerts-count ${hasHigh?'high':''}">${a.length}</span></div>${c?'':`<div class="sidebar-alerts-items">${a.map(x=>`<div class="sidebar-alert-item ${x.level}" onclick="${x.action}"><div class="sidebar-alert-icon">${icon(x.icon)}</div><div class="sidebar-alert-text"><div class="sidebar-alert-name">${x.name}</div><div class="sidebar-alert-sub">${x.sub}</div></div></div>`).join('')}</div>`}</div>`}
+function dotClass(s){return{active:'dot-green dot-pulse',dev:'dot-amber',planned:'dot-blue',paused:'dot-gray',online:'dot-green dot-pulse',offline:'dot-gray'}[s]||'dot-gray'}
+function priorityTag(p){const m={high:['tag-red',t('pri_high')],medium:['tag-amber',t('pri_medium')],low:['tag-blue',t('pri_low')]};const[c,l]=m[p]||['tag-neutral',''];return`<span class="tag ${c}">${l}</span>`}
+function showToast(msg, iconName='check-circle'){
+  let el=document.getElementById('toast-el');
+  if(!el){el=document.createElement('div');el.id='toast-el';el.className='toast';document.body.appendChild(el)}
+  el.innerHTML=icon(iconName)+msg;el.classList.add('show');
+  clearTimeout(el._timer);el._timer=setTimeout(()=>el.classList.remove('show'),2500);
+  if(window.lucide)lucide.createIcons();
+}
+
+// ==================== RENDER ====================
+function render(){
+  document.getElementById('app').innerHTML=`${sidebarHTML()}<div class="main">${topbarHTML()}<div class="content fade-in">${renderView()}</div></div>${modalHTML()}`;
+  applyTheme(currentTheme);
+  if(window.lucide)lucide.createIcons();
+  if(editMode) renderEditModal();
+}
+
+function sidebarHTML(){
+  const items=[{v:'dashboard',icon:'layout-dashboard',label:t('nav_dashboard')},{v:'servers',icon:'server',label:t('nav_servers'),badge:state.servers.filter(s=>s.status==='online').length},{v:'projects',icon:'folder-kanban',label:t('nav_projects'),badge:state.projects.length},{v:'domains',icon:'globe',label:t('nav_domains'),badge:state.domains.length},{v:'assets',icon:'credit-card',label:t('nav_assets'),badge:state.assets.length},{v:'agents',icon:'bot',label:t('nav_agents')},{v:'knowledge',icon:'book-open',label:t('nav_knowledge')}];
+  return`<aside class="sidebar"><div class="sidebar-header"><div class="logo"><div class="logo-mark">${icon('rocket')}</div><div><div class="logo-text">Dev Center</div><div class="logo-sub">Personal Console</div></div></div></div><nav class="sidebar-nav">${items.map(i=>`<div class="nav-item ${state.view===i.v?'active':''}" onclick="navigate('${i.v}')">${icon(i.icon)}<span>${i.label}</span>${i.badge?`<span class="badge">${i.badge}</span>`:''}</div>`).join('')}</nav>${alertsHTML()}<div class="sidebar-footer"><div class="user-row"><div class="avatar">D</div><div><div class="user-name">Developer</div><div class="user-role">${t('nav_role')}</div></div></div><div style="margin-top:8px;font-size:10px;color:var(--text-tertiary);letter-spacing:.5px">v${APP_VERSION}</div></div></aside>`}
+
+function topbarHTML(){
+  const titles={dashboard:[t('top_dashboard'),t('top_dashboard_sub')],servers:[t('top_servers'),state.servers.length+' '+t('top_servers_sub')],projects:[t('top_projects'),state.projects.length+' '+t('top_projects_sub')],domains:[t('top_domains'),state.domains.length+' '+t('top_domains_sub')],assets:[t('top_assets'),state.assets.length+' '+t('top_assets_sub')],agents:[t('top_agents'),state.agents.length+' '+t('top_agents_sub')],knowledge:[t('top_knowledge'),t('top_knowledge_sub')]};
+  const[title,sub]=titles[state.view]||['',''];
+  const connBadge = apiConnected
+    ? `<span class="conn-badge conn-ok"><span class="dot dot-green dot-pulse" style="width:6px;height:6px"></span>${t('conn_ok')}</span>`
+    : `<span class="conn-badge conn-demo"><span class="dot dot-amber" style="width:6px;height:6px"></span>${t('conn_demo')}</span>`;
+  return`<header class="topbar"><div class="topbar-left"><span class="topbar-title">${title}</span><span class="topbar-sub">${sub}</span></div><div class="topbar-right">${langToggleHTML()}${connBadge}<button class="btn-icon" onclick="openAboutModal()" title="${t('about_title')}">${icon('info')}</button><button class="btn-icon" onclick="openSettingsModal()" title="${t('llm_settings')}">${icon('settings')}</button><button class="btn-icon" onclick="openLogViewer()" title="${t('log_btn')}">${icon('terminal')}</button><span class="theme-label">${t('theme')}</span><div class="theme-dots">${Object.entries(themes).map(([k,v])=>`<div class="theme-dot ${currentTheme===k?'active':''}" data-theme="${k}" style="background:${v.dot}" title="${t('theme_'+k)}" onclick="applyTheme('${k}');render()"></div>`).join('')}</div></div></header>`}
+
+function renderView(){return({dashboard:viewDashboard,servers:viewServers,projects:viewProjects,domains:viewDomains,assets:viewAssets,agents:viewAgents,knowledge:viewKnowledge})[state.view]()}
+
+// ==================== DASHBOARD ====================
+function viewDashboard(){
+  const onC=state.servers.filter(s=>s.status==='online').length,actP=state.projects.filter(p=>p.status==='active'||p.status==='dev').length;
+  const avgP=Math.round(state.projects.reduce((a,p)=>a+p.progress,0)/state.projects.length);
+  const agS=new Set(state.agents.flatMap(a=>a.servers)).size;
+  saveStatsSnapshot({online:onC,active:actP,agents:state.agents.length,progress:avgP});
+  const tOnline=getTrend(onC,'online'),tActive=getTrend(actP,'active'),tAgents=getTrend(state.agents.length,'agents'),tProgress=getTrend(avgP,'progress');
+  const quickActions=`<div class="quick-actions"><div class="quick-action" onclick="addProject()">${icon('plus')} ${t('qa_new_project')}</div><div class="quick-action" onclick="addServer()">${icon('server')} ${t('qa_add_server')}</div><div style="flex:1"></div><div style="font-size:11px;color:var(--text-tertiary);align-self:center">v${APP_VERSION}</div></div>`;
+  return`${quickActions}<div class="stats-grid">
+    <div class="stat"><div class="stat-label">${icon('server')} ${t('stat_online')}</div><div class="stat-val">${onC}<span class="dim"> / ${state.servers.length}</span></div><div class="stat-sub">${state.servers.filter(s=>s.status==='planned').length} ${t('stat_planned')}</div>${trendHTML(tOnline)}</div>
+    <div class="stat"><div class="stat-label">${icon('folder-kanban')} ${t('stat_active')}</div><div class="stat-val">${actP}</div><div class="stat-sub">${t('stat_total')} ${state.projects.length} · ${t('stat_avg_progress')} ${avgP}%</div>${trendHTML(tActive)}</div>
+    <div class="stat"><div class="stat-label">${icon('bot')} ${t('stat_ai_tools')}</div><div class="stat-val">${state.agents.length}</div><div class="stat-sub">${t('stat_on_servers')} ${agS} ${t('stat_servers_unit')}</div>${trendHTML(tAgents)}</div>
+    <div class="stat"><div class="stat-label">${icon('trending-up')} ${t('stat_progress')}</div><div class="stat-val">${avgP}<span class="dim">%</span></div><div class="stat-sub">${t('stat_all_avg')}</div>${trendHTML(tProgress)}</div>
+  </div>
+  <div class="grid-2">
+    <div class="panel"><div class="panel-head"><h3>${icon('server')} ${t('panel_server_status')}</h3></div><div class="panel-body">${state.servers.filter(s=>s.id!=='future').map(s=>`<div class="li" style="cursor:pointer" onclick="openServerDetail('${s.id}')"><div class="li-icon" style="background:${s.status==='online'?'var(--green-muted)':'var(--blue-muted)'}"><div class="dot ${dotClass(s.status)}"></div></div><div class="li-body"><div class="li-title">${s.name}</div><div class="li-sub">${s.cpu} ${t('unit_cores')} ${s.ram}G · ${s.region}</div></div><div style="display:flex;align-items:center;gap:6px">${s.sshUser?`<button class="btn btn-sm" onclick="event.stopPropagation();sshLogin('${s.ip}',${s.sshPort},'${s.sshUser}','${s.sshKey}')" title="${t('pd_ssh_login')}">${icon('terminal')} SSH</button>`:''}<span class="tag ${s.status==='online'?'tag-green':'tag-blue'}">${statusText(s.status)}</span></div></div>`).join('')}</div></div>
+    <div class="panel"><div class="panel-head"><h3>${icon('bot')} ${t('panel_agent_dist')}</h3></div><div class="panel-body">${state.agents.map(a=>`<div class="li"><div class="li-icon" style="background:${a.bg}">${icon(a.icon)}</div><div class="li-body"><div class="li-title">${a.name}</div><div class="li-sub">${a.servers.map(sid=>{const s=getServer(sid);return s?s.name:sid}).join(' · ')}</div></div></div>`).join('')}</div></div>
+  </div>
+  <div class="panel" style="margin-bottom:16px"><div class="panel-head"><h3>${icon('folder-kanban')} ${t('panel_project_overview')}</h3><button class="btn btn-sm" onclick="navigate('projects')">${t('view_all')} ${icon('arrow-right')}</button></div><div class="panel-body">${state.projects.map(p=>{const srv=getServer(p.server);return`<div class="li" style="cursor:pointer" onclick="openProjectDetail('${p.id}')"><div class="li-icon" style="background:${p.status==='active'?'var(--green-muted)':p.status==='dev'?'var(--amber-muted)':'var(--blue-muted)'}"><div class="dot ${dotClass(p.status)}"></div></div><div class="li-body"><div class="li-title">${p.name}</div><div class="li-sub">${statusText(p.status)} · ${srv?srv.name:'-'} · ${relativeTime(p.lastUpdate)}</div></div><div style="display:flex;align-items:center;gap:6px">${srv&&srv.sshUser?`<button class="btn btn-sm" onclick="event.stopPropagation();sshLogin('${srv.ip}',${srv.sshPort},'${srv.sshUser}','${srv.sshKey}')" title="${t('pd_ssh_login')}">${icon('terminal')} SSH</button>`:''}<div style="width:80px"><div class="progress"><div class="bar" style="width:${p.progress}%"></div></div><div style="font-size:10px;color:var(--text-tertiary);text-align:right;margin-top:2px">${p.progress}%</div></div></div></div>`}).join('')}</div></div>`}
+
+// ==================== SERVERS ====================
+function viewServers(){
+  return`<div class="sec-head"><h3>${icon('server')} ${t('all_servers')}</h3><div style="display:flex;gap:8px"><button class="btn btn-sm" onclick="toggleSpeedTest()">${icon('zap')} 实时测速</button><button class="btn btn-sm btn-primary" onclick="addServer()">${t('add_server')}</button></div></div><div class="server-grid">${state.servers.map(s=>{const d=daysUntil(s.expiry),pct=d!==null?Math.max(0,Math.min(100,(1-d/365)*100)):0;return`<div class="server-card" onclick="openServerDetail('${s.id}')"><div class="card-top"><div class="provider-badge" style="background:hsl(${s.providerHue},60%,50%,.1);color:hsl(${s.providerHue},60%,60%)">${icon(s.id==='local'?'monitor':s.id==='future'?'plus-circle':'cloud')}</div><div style="display:flex;gap:4px">${s.sshUser?`<button class="btn btn-sm card-ssh" onclick="event.stopPropagation();sshLogin('${s.ip}',${s.sshPort},'${s.sshUser}','${s.sshKey}')">${icon('terminal')} SSH</button>`:''}<button class="btn btn-sm" onclick="event.stopPropagation();testServerSpeed('${s.id}')" title="测速">${icon('zap')}</button></div></div><div class="head"><h4>${s.name}</h4><div class="dot ${dotClass(s.status)}"></div></div><div class="spec">${s.cpu} ${t('unit_cores')} ${s.ram}GB · ${s.disk} · ${s.region}</div><div class="meta"><span class="tag ${s.status==='online'?'tag-green':'tag-blue'}">${statusText(s.status)}</span>${s.tools.map(tool=>`<span class="tag tag-accent">${tool}</span>`).join('')}<span class="tag" id="speed-${s.id}" style="display:none"></span></div>${s.projects.length?`<div style="font-size:11px;color:var(--text-tertiary)">${s.projects.map(pid=>{const p=state.projects.find(x=>x.id===pid);return p?p.name:''}).filter(Boolean).join(', ')}</div>`:''}<div class="foot"><span>${s.os}</span>${d!==null?`<span style="color:${expiryColor(d)}">${d} ${t('days_left')}</span>`:`<span>${s.expiry}</span>`}</div>${d!==null?`<div class="expiry-track"><div class="bar" style="width:${pct}%;background:${expiryColor(d)}"></div></div>`:''}</div>`}).join('')}</div>`}
+
+// ==================== PROJECTS ====================
+function viewProjects(){
+  const g=state.projectViewMode==='grouped';
+  return`<div class="sec-head"><h3>${icon('folder-kanban')} ${t('all_projects')}</h3><div class="view-toggle"><div class="btn-icon ${g?'active':''}" title="${t('view_grouped')}" onclick="state.projectViewMode='grouped';render()">${icon('layers')}</div><div class="btn-icon ${!g?'active':''}" title="${t('view_cards')}" onclick="state.projectViewMode='card';render()">${icon('layout-grid')}</div></div><button class="btn btn-sm btn-primary" onclick="addProject()">${t('add_project')}</button></div>${g?renderGrouped():renderCards()}`}
+
+function renderCards(){return`<div class="project-grid">${state.projects.map(p=>projectCardHTML(p)).join('')}</div>`}
+
+function renderGrouped(){
+  const groups={};state.servers.forEach(s=>{groups[s.id]={server:s,projects:[]}});
+  state.projects.forEach(p=>{if(groups[p.server])groups[p.server].projects.push(p)});
+  return Object.values(groups).filter(g=>g.projects.length>0||g.server.status==='online').map(g=>{
+    const s=g.server,c=state.collapsedGroups[s.id];
+    return`<div class="server-group ${c?'collapsed':''}"><div class="group-header" onclick="toggleGroup('${s.id}')"><div class="group-chevron">${icon('chevron-down')}</div><div class="dot ${dotClass(s.status)}"></div><span class="server-label">${s.name}</span><span class="server-spec">${s.cpu} ${t('unit_cores')} ${s.ram}G · ${s.region}</span><span class="proj-count">${g.projects.length} ${t('projects_unit')}</span></div><div class="group-body">${g.projects.length?g.projects.map(p=>projectCardHTML(p,true)).join(''):`<div class="empty" style="grid-column:1/-1;padding:24px">${icon('inbox')}<p>${t('no_projects')}</p></div>`}</div></div>`}).join('')}
+
+function syncResultHTML(p) {
+  if (!p._syncResult) return '';
+  const r = p._syncResult;
+  const isOk = r.failed === 0;
+  const label = r.type === 'upload' ? t('sync_upload') : t('sync_download');
+  const parts = [];
+  if (r.uploaded) parts.push(`${r.type === 'upload' ? t('sync_upload') : t('sync_download')} ${r.uploaded}`);
+  if (r.skipped) parts.push(`${t('sync_skip')} ${r.skipped}`);
+  if (r.failed) parts.push(`${t('sync_fail')} ${r.failed}`);
+  const errHint = r.errors && r.errors.length > 0 ? ` title="${r.errors.slice(0,3).join('&#10;').replace(/"/g,'&quot;')}"` : '';
+  return `<div class="sync-result ${isOk?'sync-ok':'sync-fail'}"${errHint}>${icon(isOk?'check-circle':'alert-circle')} ${r.time} ${label}: ${parts.join(', ')} / ${r.total}</div>`;
+}
+
+function projectCardHTML(p,inG){
+  const srv=getServer(p.server);
+  const features=Array.isArray(p.features)?p.features.filter(f=>f&&typeof f==='object'&&'name' in f):[];
+  const doneF=features.filter(f=>f.done).length;
+  return`<div class="project-card" onclick="openProjectDetail('${p.id}')"><div class="card-top"><div><h4>${escapeHtml(p.name)}</h4><div style="margin-top:5px;display:flex;gap:5px;flex-wrap:wrap">${priorityTag(p.priority)}<span class="tag ${p.status==='active'?'tag-green':p.status==='dev'?'tag-amber':'tag-blue'}">${statusText(p.status)}</span>${p._syncedAt?`<span class="tag tag-accent">${t('synced')}</span>`:''}</div></div><div style="display:flex;gap:4px">${p.localPath?`<button class="btn btn-sm" onclick="event.stopPropagation();syncDownload('${p.id}')" title="${t('download_sync')}">${icon('download')}</button><button class="btn btn-sm" onclick="event.stopPropagation();openUploadModal('${p.id}')" title="${t('upload_sync')}">${icon('upload')}</button><button class="btn btn-sm" onclick="event.stopPropagation();analyzeLocal('${p.id}')" title="${t('analyze_only')}">${icon('sparkles')}</button>`:''}</div></div><div class="desc">${escapeHtml(p.desc)}</div><div class="progress"><div class="bar" style="width:${p.progress}%"></div></div><div class="progress-info"><span>${t('progress_label')} ${p.progress}%</span><span>${t('features_label')} ${doneF}/${features.length}</span></div>${syncResultHTML(p)}<div class="card-actions">${srv&&srv.sshUser?`<button class="btn btn-sm" onclick="event.stopPropagation();sshLogin('${srv.ip}',${srv.sshPort},'${srv.sshUser}','${srv.sshKey}')">${icon('terminal')} SSH</button>`:''}${p.url?`<button class="btn btn-sm" onclick="event.stopPropagation();window.open('${p.url}','_blank')">${icon('globe')} ${t('visit_web')}</button>`:''}</div><div class="card-foot"><div class="server-info">${icon('server')} ${srv?escapeHtml(srv.name):'-'}</div>${p.localPath?`<span style="font-size:11px;color:var(--text-tertiary)">${escapeHtml(p.localPath)}</span>`:`<span class="time">${relativeTime(p.lastUpdate)}</span>`}</div></div>`}
+
+function toggleGroup(id){state.collapsedGroups[id]=!state.collapsedGroups[id];render()}
+
+// ==================== DOMAINS ====================
+function viewDomains(){
+  return`<div class="sec-head"><h3>${icon('globe')} ${t('nav_domains')}</h3><button class="btn btn-sm btn-primary" onclick="addDomain()">${icon('plus')} ${t('domain_add')}</button></div>
+  ${state.domains.length===0?`<div class="empty-state">${icon('globe')}<p>${t('domain_no_data')}</p></div>`:`<div class="domain-grid">${state.domains.map(d=>domainCardHTML(d)).join('')}</div>`}`}
+
+function domainCardHTML(d){
+  const days=daysUntil(d.expiry);
+  const pct=days!==null?Math.max(0,Math.min(100,(1-days/365)*100)):0;
+  return`<div class="domain-card" onclick="editDomain('${d.id}')">
+    <div class="card-top"><div class="domain-icon">${icon('globe')}</div><div style="flex:1"><h4>${escapeHtml(d.name)}</h4><div class="domain-registrar">${escapeHtml(d.registrar||'-')}</div></div>
+    <span class="tag ${d.status==='active'?'tag-green':d.status==='expired'?'tag-red':'tag-amber'}">${d.status==='active'?'正常':d.status==='expired'?'已过期':'待处理'}</span></div>
+    ${d.subdomains&&d.subdomains.length?`<div class="subdomain-list">${d.subdomains.slice(0,3).map(s=>`<span class="tag tag-accent">${s.name}.${d.name}</span>`).join('')}${d.subdomains.length>3?`<span class="tag">+${d.subdomains.length-3}</span>`:''}</div>`:''}
+    <div class="domain-meta"><span>${d.auto_renew?'🔄 自动续费':'手动续费'}</span>${days!==null?`<span style="color:${expiryColor(days)}">${days} 天后到期</span>`:`<span>${d.expiry||'-'}</span>`}</div>
+    ${days!==null?`<div class="expiry-track"><div class="bar" style="width:${pct}%;background:${expiryColor(days)}"></div></div>`:''}
+  </div>`}
+
+function addDomain(){
+  editMode={type:'domain',id:null,data:{name:'',registrar:'',expiry:'',auto_renew:false,status:'active',subdomains:[],note:''}};
+  state.modal={title:t('domain_add'),body:'<div style="color:var(--text-tertiary);font-size:13px">'+t('loading')+'</div>'};
+  render();renderDomainEditModal();
+}
+
+function editDomain(id){
+  const d=state.domains.find(x=>x.id===id);if(!d)return;
+  editMode={type:'domain',id:id,data:JSON.parse(JSON.stringify(d))};
+  state.modal={title:t('domain_edit')+' - '+d.name,body:'<div style="color:var(--text-tertiary);font-size:13px">'+t('loading')+'</div>'};
+  render();renderDomainEditModal();
+}
+
+function renderDomainEditModal(){
+  if(!editMode||editMode.type!=='domain')return;
+  const d=editMode.data;
+  const subdomainRows=(d.subdomains||[]).map((s,i)=>`<tr><td><input class="form-input" style="width:100%" value="${s.name||''}" onchange="editMode.data.subdomains[${i}].name=this.value"></td><td><select class="form-input" onchange="editMode.data.subdomains[${i}].type=this.value"><option ${s.type==='A'?'selected':''}>A</option><option ${s.type==='CNAME'?'selected':''}>CNAME</option><option ${s.type==='MX'?'selected':''}>MX</option><option ${s.type==='TXT'?'selected':''}>TXT</option></select></td><td><input class="form-input" style="width:100%" value="${s.value||''}" onchange="editMode.data.subdomains[${i}].value=this.value"></td><td><button class="btn btn-sm btn-danger" onclick="editMode.data.subdomains.splice(${i},1);renderDomainEditModal()">×</button></td></tr>`).join('');
+  const formHTML=`
+    <div class="form-row">${renderFormField(t('domain_name'),'domain_name',d.name,'text')}${renderFormField(t('domain_registrar'),'domain_registrar',d.registrar,'text')}</div>
+    <div class="form-row">${renderFormField(t('domain_expiry'),'domain_expiry',d.expiry,'date')}<div class="form-group"><label class="form-label">${t('domain_auto_renew')}</label><select class="form-input" name="domain_auto_renew"><option value="false" ${!d.auto_renew?'selected':''}>否</option><option value="true" ${d.auto_renew?'selected':''}>是</option></select></div></div>
+    <div class="form-row">${renderFormField(t('domain_status'),'domain_status',d.status,'select',[{value:'active',label:'正常'},{value:'expired',label:'已过期'},{value:'pending',label:'待处理'}])}${renderFormField(t('domain_note'),'domain_note',d.note,'text')}</div>
+    <div class="form-group"><label class="form-label">${t('domain_subdomains')}</label>
+      <table class="matrix" style="width:100%"><thead><tr><th>${t('domain_sub_name')}</th><th>${t('domain_sub_type')}</th><th>${t('domain_sub_value')}</th><th></th></tr></thead><tbody id="subdomain-rows">${subdomainRows}</tbody></table>
+      <button class="btn btn-sm" style="margin-top:8px" onclick="editMode.data.subdomains=editMode.data.subdomains||[];editMode.data.subdomains.push({name:'',type:'A',value:''});renderDomainEditModal()">${icon('plus')} 添加二级域名</button>
+    </div>
+    <div class="form-actions"><button class="btn btn-danger" onclick="deleteDomain('${editMode.id||''}')">${t('crud_delete')}</button><div style="flex:1"></div><button class="btn" onclick="editMode=null;closeModal()">${t('crud_cancel')}</button><button class="btn btn-success" onclick="saveDomain()">${t('crud_save')}</button></div>`;
+  const modalBody=document.querySelector('.modal-body');
+  if(modalBody)modalBody.innerHTML='<div class="fade-in">'+formHTML+'</div>';
+  if(window.lucide)lucide.createIcons();
+}
+
+async function saveDomain(){
+  if(!editMode||editMode.type!=='domain')return;
+  const d=editMode.data;
+  const data={
+    id:editMode.id||('dom-'+Date.now()),
+    name:document.querySelector('[name="domain_name"]').value,
+    registrar:document.querySelector('[name="domain_registrar"]').value,
+    expiry:document.querySelector('[name="domain_expiry"]').value,
+    auto_renew:document.querySelector('[name="domain_auto_renew"]').value==='true',
+    status:document.querySelector('[name="domain_status"]').value,
+    note:document.querySelector('[name="domain_note"]').value,
+    subdomains:d.subdomains||[]
+  };
+  try{
+    const url=API_BASE+'/api/domains'+(editMode.id?'/'+editMode.id:'');
+    const method=editMode.id?'PUT':'POST';
+    const res=await fetch(url,{method,headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});
+    if(!res.ok)throw new Error('API error: '+res.status);
+    if(editMode.id){const idx=state.domains.findIndex(x=>x.id===editMode.id);if(idx>=0)state.domains[idx]=data;}
+    else{state.domains.push(data);}
+    editMode=null;state.modal=null;render();showToast(t('crud_save_success'),'check-circle');
+  }catch(e){showToast(t('crud_save_fail')+': '+e.message,'alert-circle');}
+}
+
+async function deleteDomain(id){
+  if(!id)return;if(!confirm('确定删除此域名？'))return;
+  try{
+    const res=await fetch(API_BASE+'/api/domains/'+id,{method:'DELETE'});
+    if(!res.ok)throw new Error('API error: '+res.status);
+    state.domains=state.domains.filter(x=>x.id!==id);
+    editMode=null;state.modal=null;render();showToast('已删除','check-circle');
+  }catch(e){showToast('删除失败: '+e.message,'alert-circle');}
+}
+
+// ==================== ASSETS ====================
+let exchangeRates = {CNY:1, USD:7.25, JPY:0.048, GBP:9.15, EUR:7.85, KRW:0.0053, HKD:0.93, TWD:0.23};
+
+async function fetchExchangeRates(){
+  try{
+    const res=await fetch(API_BASE+'/api/exchange-rate',{signal:AbortSignal.timeout(5000)});
+    if(res.ok){const d=await res.json();if(d.rates)exchangeRates=d.rates;}
+  }catch(e){}
+}
+
+function toCNY(amount, currency){
+  if(!amount||!currency||currency==='CNY')return amount||0;
+  const rate=exchangeRates[currency]||1;
+  return Math.round(amount*rate*100)/100;
+}
+
+function calcMonthlyFee(a){
+  if(!a.total_fee||!a.expiry)return 0;
+  const now=new Date();const exp=new Date(a.expiry);
+  const months=Math.max(1,(exp-now)/(1000*60*60*24*30));
+  return Math.round(a.total_fee/months*100)/100;
+}
+
+function currencySymbol(c){return{CNY:'¥',USD:'$',JPY:'¥',GBP:'£',EUR:'€',KRW:'₩',HKD:'HK$',TWD:'NT$'}[c]||c}
+
+function viewAssets(){
+  const cats=[{id:'sim',label:t('asset_cat_sim'),icon:'smartphone'},{id:'credit_card',label:t('asset_cat_card'),icon:'credit-card'},{id:'membership',label:t('asset_cat_member'),icon:'star'}];
+  return`<div class="sec-head"><h3>${icon('credit-card')} ${t('nav_assets')}</h3><button class="btn btn-sm btn-primary" onclick="addAsset()">${icon('plus')} ${t('asset_add')}</button></div>
+  ${cats.map(c=>{const items=state.assets.filter(a=>a.category===c.id);return`<div class="panel" style="margin-bottom:16px"><div class="panel-head"><h3>${icon(c.icon)} ${c.label} (${items.length})</h3></div><div class="panel-body">${items.length===0?`<div style="color:var(--text-tertiary);font-size:13px;padding:12px">${t('asset_no_data')}</div>`:items.map(a=>assetRowHTML(a)).join('')}</div></div>`}).join('')}`}
+
+function assetRowHTML(a){
+  const days=daysUntil(a.expiry||(a.category==='membership'?a.paid_expiry:a.expiry));
+  let sub='';
+  if(a.category==='sim'){
+    sub=`${a.home_region||''} ${a.phone_number?'· ****'+a.phone_number.slice(-4):''} ${a.data_allowance?'· '+a.data_allowance:''}`;
+  }else if(a.category==='credit_card'){
+    sub=`${a.card_network||''} ${a.last_four?'· ****'+a.last_four:''} ${a.card_form==='virtual'?'· 虚拟卡':'· 实体卡'} ${a.annual_fee?'· 年费'+currencySymbol(a.currency)+a.annual_fee:''}`;
+  }else{
+    const planLabel=a.plan_type==='trial'?'试用中':'付费';
+    sub=`${planLabel} ${a.total_fee?'· '+currencySymbol(a.currency)+a.total_fee:''} ${a.currency!=='CNY'&&a.total_fee?'(≈¥'+toCNY(a.total_fee,a.currency)+')':''}`;
+  }
+  const monthly=calcMonthlyFee(a);
+  const feeInfo=a.category==='credit_card'?(a.annual_fee?`年费 ${currencySymbol(a.currency)}${a.annual_fee}`:''):(monthly?`${currencySymbol(a.currency)}${monthly}/月`:'');
+  return`<div class="li" style="cursor:pointer" onclick="editAsset('${a.id}')"><div class="li-icon" style="background:${a.status==='active'?'var(--green-muted)':a.status==='expired'?'var(--red-muted)':'var(--amber-muted)'}"><div class="dot ${a.status==='active'?'dot-green':a.status==='expired'?'dot-red':'dot-amber'}"></div></div><div class="li-body"><div class="li-title">${escapeHtml(a.name)}${a.provider?` <span style="font-weight:400;color:var(--text-tertiary);font-size:12px">${escapeHtml(a.provider)}</span>`:''}</div><div class="li-sub">${escapeHtml(sub)}</div></div><div style="text-align:right"><div style="font-size:12px;font-weight:600;color:var(--accent)">${feeInfo}</div><div style="font-size:11px;color:${days!==null&&days<30?'var(--red)':'var(--text-tertiary)'}">${days!==null?days+'天后到期':(a.expiry||'-')}</div></div></div>`}
+
+function addAsset(){
+  editMode={type:'asset',id:null,data:{category:'sim',name:'',provider:'',status:'active',note:'',total_fee:0,currency:'CNY',expiry:'',phone_number:'',home_region:'',data_allowance:'',throttle_speed:'',sms_capable:true,voice_capable:false,roaming:false,roaming_data:'',contract_months:0,card_network:'',card_form:'physical',last_four:'',issuing_bank:'',annual_fee:0,credit_limit:0,billing_day:0,payment_due_day:0,plan_type:'paid',trial_expiry:'',paid_expiry:'',auto_renew:false}};
+  state.modal={title:t('asset_add'),body:'<div style="color:var(--text-tertiary);font-size:13px">'+t('loading')+'</div>'};
+  render();renderAssetEditModal();
+}
+
+function editAsset(id){
+  const a=state.assets.find(x=>x.id===id);if(!a)return;
+  editMode={type:'asset',id:id,data:Object.assign({category:'sim',name:'',provider:'',status:'active',note:'',total_fee:0,currency:'CNY',expiry:'',phone_number:'',home_region:'',data_allowance:'',throttle_speed:'',sms_capable:true,voice_capable:false,roaming:false,roaming_data:'',contract_months:0,card_network:'',card_form:'physical',last_four:'',issuing_bank:'',annual_fee:0,credit_limit:0,billing_day:0,payment_due_day:0,plan_type:'paid',trial_expiry:'',paid_expiry:'',auto_renew:false},JSON.parse(JSON.stringify(a)))};
+  state.modal={title:t('asset_edit')+' - '+a.name,body:'<div style="color:var(--text-tertiary);font-size:13px">'+t('loading')+'</div>'};
+  render();renderAssetEditModal();
+}
+
+function renderAssetEditModal(){
+  if(!editMode||editMode.type!=='asset')return;
+  const a=editMode.data;
+  const curOpts=[{value:'CNY',label:'人民币 ¥'},{value:'USD',label:'美元 $'},{value:'JPY',label:'日元 ¥'},{value:'GBP',label:'英镑 £'},{value:'EUR',label:'欧元 €'},{value:'KRW',label:'韩元 ₩'},{value:'HKD',label:'港币 HK$'},{value:'TWD',label:'台币 NT$'}];
+  let catFields='';
+  if(a.category==='sim'){
+    catFields=`
+    <div class="form-row">${renderFormField('手机号码','asset_phone',a.phone_number,'text')}${renderFormField('归属地','asset_region',a.home_region,'text')}</div>
+    <div class="form-row">${renderFormField('流量额度','asset_data',a.data_allowance,'text')}${renderFormField('超量降速','asset_throttle',a.throttle_speed,'text')}</div>
+    <div class="form-row"><div class="form-group"><label class="form-label">短信功能</label><select class="form-input" name="asset_sms"><option value="true" ${a.sms_capable?'selected':''}>可收短信</option><option value="false" ${!a.sms_capable?'selected':''}>不支持</option></select></div><div class="form-group"><label class="form-label">通话功能</label><select class="form-input" name="asset_voice"><option value="true" ${a.voice_capable?'selected':''}>可打电话</option><option value="false" ${!a.voice_capable?'selected':''}>不支持</option></select></div></div>
+    <div class="form-row"><div class="form-group"><label class="form-label">海外漫游</label><select class="form-input" name="asset_roaming"><option value="true" ${a.roaming?'selected':''}>支持</option><option value="false" ${!a.roaming?'selected':''}>不支持</option></select></div>${renderFormField('海外流量','asset_roaming_data',a.roaming_data,'text')}</div>
+    <div class="form-row">${renderFormField('合约期限(月)','asset_contract',a.contract_months,'number')}${renderFormField('到期时间','asset_expiry',a.expiry,'date')}</div>`;
+  }else if(a.category==='credit_card'){
+    catFields=`
+    <div class="form-row"><div class="form-group"><label class="form-label">卡组织</label><select class="form-input" name="asset_network"><option value="VISA" ${a.card_network==='VISA'?'selected':''}>VISA</option><option value="Mastercard" ${a.card_network==='Mastercard'?'selected':''}>Mastercard</option><option value="JCB" ${a.card_network==='JCB'?'selected':''}>JCB</option><option value="UnionPay" ${a.card_network==='UnionPay'?'selected':''}>银联 UnionPay</option><option value="Amex" ${a.card_network==='Amex'?'selected':''}>American Express</option></select></div><div class="form-group"><label class="form-label">卡片形式</label><select class="form-input" name="asset_form"><option value="physical" ${a.card_form==='physical'?'selected':''}>实体卡</option><option value="virtual" ${a.card_form==='virtual'?'selected':''}>虚拟卡</option></select></div></div>
+    <div class="form-row">${renderFormField('卡号后四位','asset_last4',a.last_four,'text')}${renderFormField('发卡银行','asset_bank',a.issuing_bank,'text')}</div>
+    <div class="form-row">${renderFormField('年费','asset_annual_fee',a.annual_fee,'number')}${renderFormField('信用额度','asset_limit',a.credit_limit,'number')}</div>
+    <div class="form-row">${renderFormField('账单日(每月几号)','asset_billing',a.billing_day,'number')}${renderFormField('还款日(每月几号)','asset_payment_due',a.payment_due_day,'number')}</div>
+    <div class="form-row">${renderFormField('卡片有效期','asset_expiry',a.expiry,'date')}<div class="form-group"></div></div>`;
+  }else{
+    catFields=`
+    <div class="form-row"><div class="form-group"><label class="form-label">订阅类型</label><select class="form-input" name="asset_plan_type"><option value="trial" ${a.plan_type==='trial'?'selected':''}>免费试用</option><option value="paid" ${a.plan_type==='paid'?'selected':''}>正式付费</option></select></div><div class="form-group"><label class="form-label">自动续费</label><select class="form-input" name="asset_auto_renew"><option value="true" ${a.auto_renew?'selected':''}>是</option><option value="false" ${!a.auto_renew?'selected':''}>否</option></select></div></div>
+    <div class="form-row">${renderFormField('试用到期日','asset_trial_expiry',a.trial_expiry,'date')}${renderFormField('付费到期日','asset_paid_expiry',a.paid_expiry,'date')}</div>
+    <div class="form-row">${renderFormField('到期时间','asset_expiry',a.expiry||a.paid_expiry,'date')}<div class="form-group"></div></div>`;
+  }
+  const formHTML=`
+    <div class="form-row"><div class="form-group"><label class="form-label">${t('asset_category')}</label><select class="form-input" name="asset_category" onchange="editMode.data.category=this.value;renderAssetEditModal()"><option value="sim" ${a.category==='sim'?'selected':''}>${t('asset_cat_sim')}</option><option value="credit_card" ${a.category==='credit_card'?'selected':''}>${t('asset_cat_card')}</option><option value="membership" ${a.category==='membership'?'selected':''}>${t('asset_cat_member')}</option></select></div>${renderFormField(t('asset_name'),'asset_name',a.name,'text')}</div>
+    <div class="form-row">${renderFormField(t('asset_provider'),'asset_provider',a.provider,'text')}<div class="form-group"><label class="form-label">货币</label><select class="form-input" name="asset_currency">${curOpts.map(c=>`<option value="${c.value}" ${a.currency===c.value?'selected':''}>${c.label}</option>`).join('')}</select></div></div>
+    ${a.category!=='credit_card'?`<div class="form-row">${renderFormField('总费用','asset_total_fee',a.total_fee,'number')}<div class="form-group"><label class="form-label">≈ 月费(自动计算)</label><input class="form-input" value="${calcMonthlyFee(a)?currencySymbol(a.currency)+calcMonthlyFee(a)+'/月':'—'}" disabled style="opacity:.6"></div></div>`:''}
+    ${catFields}
+    <div class="form-row">${renderFormField(t('asset_status'),'asset_status',a.status,'select',[{value:'active',label:'正常'},{value:'suspended',label:'暂停'},{value:'expired',label:'已过期'},{value:'pending',label:'待激活'}])}${renderFormField(t('asset_note'),'asset_note',a.note,'text')}</div>
+    <div class="form-actions"><button class="btn btn-danger" onclick="deleteAsset('${editMode.id||''}')">${t('crud_delete')}</button><div style="flex:1"></div><button class="btn" onclick="editMode=null;closeModal()">${t('crud_cancel')}</button><button class="btn btn-success" onclick="saveAsset()">${t('crud_save')}</button></div>`;
+  const modalBody=document.querySelector('.modal-body');
+  if(modalBody)modalBody.innerHTML='<div class="fade-in">'+formHTML+'</div>';
+  if(window.lucide)lucide.createIcons();
+}
+
+async function saveAsset(){
+  if(!editMode||editMode.type!=='asset')return;
+  const g=n=>document.querySelector('[name="'+n+'"]');
+  const v=n=>g(n)?g(n).value:'';
+  const cat=v('asset_category');
+  const data={
+    id:editMode.id||('ast-'+Date.now()),
+    category:cat,
+    name:v('asset_name'),
+    provider:v('asset_provider'),
+    status:v('asset_status'),
+    note:v('asset_note'),
+    total_fee:parseFloat(v('asset_total_fee'))||0,
+    currency:v('asset_currency')||'CNY',
+    expiry:v('asset_expiry'),
+    // SIM
+    phone_number:v('asset_phone'),
+    home_region:v('asset_region'),
+    data_allowance:v('asset_data'),
+    throttle_speed:v('asset_throttle'),
+    sms_capable:v('asset_sms')==='true',
+    voice_capable:v('asset_voice')==='true',
+    roaming:v('asset_roaming')==='true',
+    roaming_data:v('asset_roaming_data'),
+    contract_months:parseInt(v('asset_contract'))||0,
+    // Credit card
+    card_network:v('asset_network'),
+    card_form:v('asset_form')||'physical',
+    last_four:v('asset_last4'),
+    issuing_bank:v('asset_bank'),
+    annual_fee:parseFloat(v('asset_annual_fee'))||0,
+    credit_limit:parseFloat(v('asset_limit'))||0,
+    billing_day:parseInt(v('asset_billing'))||0,
+    payment_due_day:parseInt(v('asset_payment_due'))||0,
+    // Membership
+    plan_type:v('asset_plan_type')||'paid',
+    trial_expiry:v('asset_trial_expiry'),
+    paid_expiry:v('asset_paid_expiry'),
+    auto_renew:v('asset_auto_renew')==='true'
+  };
+  try{
+    const url=API_BASE+'/api/assets'+(editMode.id?'/'+editMode.id:'');
+    const method=editMode.id?'PUT':'POST';
+    const res=await fetch(url,{method,headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});
+    if(!res.ok)throw new Error('API error: '+res.status);
+    if(editMode.id){const idx=state.assets.findIndex(x=>x.id===editMode.id);if(idx>=0)state.assets[idx]=data;}
+    else{state.assets.push(data);}
+    editMode=null;state.modal=null;render();showToast(t('crud_save_success'),'check-circle');
+  }catch(e){showToast(t('crud_save_fail')+': '+e.message,'alert-circle');}
+}
+
+async function deleteAsset(id){
+  if(!id)return;if(!confirm('确定删除此资产？'))return;
+  try{
+    const res=await fetch(API_BASE+'/api/assets/'+id,{method:'DELETE'});
+    if(!res.ok)throw new Error('API error: '+res.status);
+    state.assets=state.assets.filter(x=>x.id!==id);
+    editMode=null;state.modal=null;render();showToast('已删除','check-circle');
+  }catch(e){showToast('删除失败: '+e.message,'alert-circle');}
+}
+
+// ==================== AGENTS ====================
+function viewAgents(){
+  return`<div class="agent-grid">${state.agents.map(a=>`<div class="agent-card"><div class="agent-head"><div class="agent-icon" style="background:${a.bg};color:${a.color}">${icon(a.icon)}</div><div><h4>${a.name}</h4><div class="agent-sub">${t('ag_deployed')} ${a.servers.length} ${t('ag_servers_unit')}</div></div></div><div class="agent-desc">${a.desc}</div><div class="server-tags">${a.servers.map(sid=>{const s=getServer(sid);return s?`<span class="tag tag-accent">${s.name}</span>`:''}).join('')}</div></div>`).join('')}</div>
+  <div class="panel"><div class="panel-head"><h3>${icon('grid-3x3')} ${t('ag_matrix')}</h3></div><div class="panel-body" style="overflow-x:auto"><table class="matrix"><thead><tr><th>${t('ag_server_col')}</th>${state.agents.map(a=>`<th>${a.name}</th>`).join('')}</tr></thead><tbody>${state.servers.filter(s=>s.id!=='future').map(s=>`<tr><td>${s.name}</td>${state.agents.map(a=>`<td><span class="${a.servers.includes(s.id)?'dot-yes':'dot-no'}">${a.servers.includes(s.id)?icon('check-circle'):icon('circle')}</span></td>`).join('')}</tr>`).join('')}</tbody></table></div></div>`}
+
+// ==================== KNOWLEDGE ====================
+function viewKnowledge(){
+  const cats=[{icon:'blocks',name:t('kb_arch'),desc:t('kb_arch_desc'),count:t('kb_todo'),hue:252},{icon:'file-text',name:t('kb_dev'),desc:t('kb_dev_desc'),count:state.projects.length+' '+t('kb_projects'),hue:217},{icon:'wrench',name:t('kb_ops'),desc:t('kb_ops_desc'),count:state.servers.length+' '+t('kb_servers'),hue:160},{icon:'sparkles',name:t('kb_ai'),desc:t('kb_ai_desc'),count:state.agents.length+' '+t('kb_tools'),hue:32},{icon:'copy',name:t('kb_template'),desc:t('kb_template_desc'),count:t('kb_building'),hue:188},{icon:'lightbulb',name:t('kb_inspiration'),desc:t('kb_inspiration_desc'),count:t('kb_building'),hue:347}];
+  return`<div class="kb-grid">${cats.map(c=>`<div class="kb-card"><div class="kb-icon" style="background:hsl(${c.hue},60%,50%,.1);color:hsl(${c.hue},60%,65%)">${icon(c.icon)}</div><h4>${c.name}</h4><p>${c.desc}</p><div class="count" style="color:hsl(${c.hue},60%,65%)">${c.count}</div></div>`).join('')}</div>
+  <div class="panel" style="margin-top:16px"><div class="panel-head"><h3>${icon('info')} ${t('kb_about')}</h3></div><div class="panel-body" style="color:var(--text-secondary);font-size:13px;line-height:1.8">${t('kb_about_text')}</div></div>`}
+
+// ==================== SSH LOGIN ====================
+async function sshLogin(ip, port, user, keyPath) {
+  const cmd = `ssh ${user}@${ip} -p ${port}` + (keyPath && keyPath !== 'null' ? ` -i ${keyPath}` : '');
+  try {
+    const res = await fetch(`${API_BASE}/api/ssh-launch`, {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ host: ip, port: parseInt(port) || 22, user: user, key_path: keyPath || null })
+    });
+    const data = await res.json();
+    if (data.success) {
+      showToast(t('ssh_opened'), 'terminal');
+    } else {
+      navigator.clipboard.writeText(cmd).catch(()=>{});
+      showToast(t('ssh_fail') + ': ' + (data.error || ''), 'alert-circle');
+    }
+  } catch(e) {
+    navigator.clipboard.writeText(cmd).catch(()=>{});
+    showToast(t('ssh_no_backend'), 'terminal');
+  }
+}
+
+// ==================== MODAL ====================
+function modalHTML(){
+  if(!state.modal)return'<div class="modal-overlay" id="modal-overlay"></div>';
+  return`<div class="modal-overlay show" id="modal-overlay"><div class="modal"><div class="modal-header"><h2>${state.modal.title}</h2><button class="modal-close" onclick="closeModal()">${icon('x')}</button></div><div class="modal-body">${state.modal.body}</div></div></div>`}
+
+function openProjectDetail(id){
+  const p=state.projects.find(x=>x.id===id);if(!p)return;
+  const srv=getServer(p.server);
+  const features=Array.isArray(p.features)?p.features:[];
+  const doneF=features.filter(f=>f&&f.done).length;
+  const sshCmd=srv&&srv.sshUser?`ssh ${srv.sshUser}@${srv.ip} -p ${srv.sshPort}${srv.sshKey?' -i '+srv.sshKey:''}`:null;
+  const todos=Array.isArray(p.todos)?p.todos:[];
+  const doneTodos=todos.filter(t=>t&&t.done).length;
+
+  state.modal={title:p.name,body:`
+    <div class="modal-actions">${srv&&srv.sshUser?`<button class="btn btn-sm" onclick="sshLogin('${srv.ip}',${srv.sshPort},'${srv.sshUser}','${srv.sshKey}')">${icon('terminal')} ${t('pd_ssh_login')}</button>`:''}<button class="btn btn-sm">${icon('bot')} ${t('pd_agent_task')}</button>${p.url?`<button class="btn btn-sm" onclick="window.open('${p.url}','_blank')">${icon('globe')} ${t('visit_web')}</button>`:''}</div>
+
+    ${syncResultHTML(p)}
+
+    <div class="info-row">
+      <div class="info-item"><div class="dot ${dotClass(p.status)}"></div><strong>${statusText(p.status)}</strong></div>
+      <div class="info-divider"></div>
+      <div class="info-item">${icon('server')} <strong>${srv?escapeHtml(srv.name):'-'}</strong></div>
+      <div class="info-divider"></div>
+      <div class="info-item">${icon('bot')} <strong>${escapeHtml(p.agent)}</strong></div>
+      <div class="info-divider"></div>
+      <div class="info-item">${icon('trending-up')} <strong>${p.progress}%</strong></div>
+      <div class="info-divider"></div>
+      <div class="info-item">${icon('clock')} ${relativeTime(p.lastUpdate)}</div>
+      ${p._llmAnalyzed?`<div class="info-divider"></div><div class="info-item">${icon('sparkles')} <strong>${t('pd_llm_analyzed')}</strong></div>`:(p._llmStatus?`<div class="info-divider"></div><div class="info-item">${icon('alert-circle')} ${t('pd_llm_not_run')}：${escapeHtml(p._llmStatus)}</div>`:'')}
+    </div>
+
+    ${p._llmSummary?`<div class="detail-section"><h4>${icon('sparkles')} ${t('pd_llm_summary')}</h4><div style="font-size:13px;color:var(--text-secondary);line-height:1.7">${escapeHtml(p._llmSummary)}</div></div>`:''}
+
+    <div class="todo-section">
+      <div class="todo-head">
+        <h4>${icon('list-checks')} ${t('pd_todos')}<span class="todo-count">${doneTodos}/${todos.length}</span></h4>
+        <button class="btn btn-sm" onclick="addTodo('${p.id}')">${icon('plus')} ${t('pd_add')}</button>
+      </div>
+      <div class="progress" style="margin-bottom:12px"><div class="bar" style="width:${todos.length?Math.round(doneTodos/todos.length*100):0}%"></div></div>
+      <div class="todo-list">
+        ${todos.map((t, idx)=>t?`<div class="todo-item ${t.done?'done':''}" style="display:flex;justify-content:space-between;align-items:center" onclick="toggleTodo('${p.id}',${t.id})">
+          <div style="display:flex;align-items:center;gap:8px;min-width:0">
+            <div class="todo-check">${icon('check')}</div>
+            <span class="todo-name" style="min-width:0">${escapeHtml(t.name)}</span>
+          </div>
+          <button class="btn btn-sm" onclick="event.stopPropagation();deleteTodo('${p.id}', ${idx})" style="padding:4px 8px">${icon('trash-2')}</button>
+        </div>`:'').join('')}
+        ${todos.length===0?`<div style="font-size:12px;color:var(--text-tertiary);padding:12px 0">${t('pd_no_todos')}</div>`:''}
+      </div>
+    </div>
+
+    <div class="detail-section">
+      <h4>${icon('list-checks')} ${t('pd_features')} (${doneF}/${features.length})</h4>
+      <div class="progress" style="margin-bottom:12px"><div class="bar" style="width:${features.length?Math.round(doneF/features.length*100):0}%"></div></div>
+      <ul class="feat-list" style="list-style:none;padding:0;margin:0">
+        ${features.map((f, idx)=>f?`<li style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;cursor:pointer" onclick="toggleFeature('${p.id}', ${idx})">
+          <div style="display:flex;align-items:center;gap:8px;min-width:0">
+            ${f.done?`<span style="color:var(--green)">${icon('check-circle')}</span>`:`<span style="color:var(--text-quaternary)">${icon('circle')}</span>`}
+            <span style="min-width:0;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(f.name||'')}</span>
+          </div>
+          <button class="btn btn-sm" onclick="event.stopPropagation();deleteFeature('${p.id}', ${idx})" style="padding:4px 8px">${icon('trash-2')}</button>
+        </li>`:'').join('')}
+        ${features.length===0?`<div style="font-size:12px;color:var(--text-tertiary);padding:12px 0">${t('pd_no_features')}</div>`:''}
+      </ul>
+    </div>
+
+    ${sshCmd?`<div class="detail-section">
+      <h4>${icon('terminal')} ${t('pd_dev_env')}</h4>
+      <div class="ssh-block"><div>$ ${sshCmd}</div><div class="comment"># 连接后可使用 ${p.agent} 进行开发</div></div>
+    </div>`:''}
+
+    <div class="detail-section">
+      <h4>${icon('code-2')} ${t('pd_tech_stack')}</h4>
+      <div style="display:flex;flex-wrap:wrap;gap:5px">${(p.techStack||[]).map(t=>`<span class="tag tag-accent">${escapeHtml(t)}</span>`).join('')}</div>
+    </div>
+
+    <div class="detail-section">
+      <h4>${icon('folder-down')} ${t('pd_local_sync')}</h4>
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+        <input class="form-input" type="text" id="local-path-input" placeholder="${t('pd_local_path_placeholder')}" value="${escapeHtml(p.localPath || '')}" style="flex:1;font-size:12px" onchange="saveLocalPath('${p.id}')">
+        <button class="btn btn-sm" onclick="pickDirectory('${p.id}')" title="${t('pd_pick_dir')}">${icon('folder-open')}</button>
+      </div>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-sm" onclick="syncDownload('${p.id}')" ${!p.localPath?'disabled':''}>${icon('download')} ${t('download_sync')}</button>
+        <button class="btn btn-sm" onclick="openUploadModal('${p.id}')" ${!p.localPath?'disabled':''}>${icon('upload')} ${t('upload_sync')}</button>
+        <button class="btn btn-sm" onclick="analyzeLocal('${p.id}')" ${!p.localPath?'disabled':''}>${icon('sparkles')} ${t('analyze_only')}</button>
+      </div>
+      ${p.localPath?`<p style="font-size:11px;color:var(--text-tertiary);margin-top:6px">${escapeHtml(p.localPath)}</p>`:''}
+    </div>
+
+    <div class="detail-section">
+      <h4>${icon('file-text')} ${t('pd_description')}</h4>
+      <div style="font-size:13px;color:var(--text-secondary);line-height:1.7">${escapeHtml(p.desc)}</div>
+    </div>
+
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:20px;padding-top:16px;border-top:1px solid var(--border)">
+      <button class="btn btn-sm" onclick="cloneProject('${p.id}')">${icon('copy')} ${t('pd_clone')}</button>
+      <button class="btn btn-sm" onclick="editProject('${p.id}')">${icon('pencil')} ${t('pd_edit')}</button>
+      <button class="btn btn-sm btn-danger" onclick="deleteProject('${p.id}')">${icon('trash-2')} ${t('pd_delete')}</button>
+    </div>
+  `};
+  render();
+}
+
+var _speedTestTimer = null;
+
+function toggleSpeedTest() {
+  if (_speedTestTimer) {
+    // 关闭实时测速
+    clearInterval(_speedTestTimer);
+    _speedTestTimer = null;
+    showToast('实时测速已关闭', 'zap');
+    // 恢复按钮文字
+    var btn = document.querySelector('[onclick="toggleSpeedTest()"]');
+    if (btn) btn.innerHTML = icon('zap') + ' 实时测速';
+  } else {
+    // 开启实时测速
+    runSpeedTest();
+    _speedTestTimer = setInterval(runSpeedTest, 5000);
+    showToast('实时测速已开启（每5秒刷新）', 'zap');
+    // 更新按钮文字
+    var btn = document.querySelector('[onclick="toggleSpeedTest()"]');
+    if (btn) btn.innerHTML = icon('x') + ' 停止测速';
+  }
+}
+
+async function runSpeedTest() {
+  try {
+    var res = await fetch(API_BASE + '/api/speed-test', { signal: AbortSignal.timeout(30000) });
+    if (!res.ok) throw new Error('测速失败');
+    var results = await res.json();
+    for (var id in results) {
+      var el = document.getElementById('speed-' + id);
+      if (!el) continue;
+      var r = results[id];
+      el.style.display = '';
+      if (r.status === 'ok') {
+        var color = r.latency < 100 ? 'var(--green)' : r.latency < 200 ? 'var(--amber)' : 'var(--red)';
+        el.style.background = color;
+        el.style.color = '#fff';
+        el.textContent = r.latency + 'ms';
+      } else if (r.status === 'skip') {
+        el.style.background = 'var(--bg-card)';
+        el.style.color = 'var(--text-tertiary)';
+        el.textContent = '跳过';
+      } else {
+        el.style.background = 'var(--red)';
+        el.style.color = '#fff';
+        el.textContent = '超时';
+      }
+    }
+  } catch(e) {
+    // 静默失败，不打扰用户
+  }
+}
+
+async function testServerSpeed(id) {
+  var el = document.getElementById('speed-' + id);
+  if (el) {
+    el.style.display = '';
+    el.style.background = 'var(--bg-card)';
+    el.style.color = 'var(--text-tertiary)';
+    el.textContent = '测速中...';
+  }
+  try {
+    var res = await fetch(API_BASE + '/api/speed-test', { signal: AbortSignal.timeout(30000) });
+    if (!res.ok) throw new Error('测速失败');
+    var results = await res.json();
+    var r = results[id];
+    if (el && r) {
+      if (r.status === 'ok') {
+        var color = r.latency < 100 ? 'var(--green)' : r.latency < 200 ? 'var(--amber)' : 'var(--red)';
+        el.style.background = color;
+        el.style.color = '#fff';
+        el.textContent = r.latency + 'ms';
+      } else if (r.status === 'skip') {
+        el.textContent = '跳过';
+      } else {
+        el.style.background = 'var(--red)';
+        el.style.color = '#fff';
+        el.textContent = '超时';
+      }
+    }
+  } catch(e) {
+    if (el) {
+      el.style.background = 'var(--red)';
+      el.style.color = '#fff';
+      el.textContent = '失败';
+    }
+  }
+}
+
+function openServerDetail(id){
+  const s=getServer(id);if(!s)return;const d=daysUntil(s.expiry);
+  const projs=s.projects.map(pid=>state.projects.find(p=>p.id===pid)).filter(Boolean);
+  state.modal={title:s.name,body:`
+    <div class="detail-grid">
+      <div class="detail-item"><div class="label">${t('sd_provider')}</div><div class="value">${s.provider}</div></div>
+      <div class="detail-item"><div class="label">${t('sd_config')}</div><div class="value">${s.cpu} ${t('unit_cores')} ${s.ram}GB / ${s.disk}</div></div>
+      <div class="detail-item"><div class="label">${t('sd_region')}</div><div class="value">${s.region}</div></div>
+      <div class="detail-item"><div class="label">${t('sd_os')}</div><div class="value">${s.os}</div></div>
+      <div class="detail-item"><div class="label">IP</div><div class="value" style="font-family:var(--mono)">${s.ip}</div></div>
+      <div class="detail-item"><div class="label">${t('sd_expiry')}</div><div class="value" style="color:${expiryColor(d)}">${s.expiry}${d!==null?' ('+d+' '+t('sd_days_left')+')':''}</div></div>
+    </div>
+    <div class="detail-section"><h4>${icon('package')} ${t('sd_tools')}</h4><div style="display:flex;flex-wrap:wrap;gap:5px">${s.tools.map(tool=>`<span class="tag tag-accent">${tool}</span>`).join('')}</div></div>
+    ${projs.length?`<div class="detail-section"><h4>${icon('folder-kanban')} ${t('sd_running_projects')} (${projs.length})</h4>${projs.map(p=>`<div class="li" style="cursor:pointer" onclick="closeModal();setTimeout(()=>openProjectDetail('${p.id}'),200)"><div class="li-icon" style="background:${p.status==='active'?'var(--green-muted)':'var(--amber-muted)'}"><div class="dot ${dotClass(p.status)}"></div></div><div class="li-body"><div class="li-title">${p.name}</div><div class="li-sub">${statusText(p.status)} · ${p.progress}%</div></div></div>`).join('')}</div>`:''}
+    ${s.sshUser?`<div class="detail-section"><h4>${icon('terminal')} ${t('sd_ssh')}</h4><div class="ssh-block"><div>$ ssh ${s.sshUser}@${s.ip} -p ${s.sshPort}${s.sshKey?' -i '+s.sshKey:''}</div><div class="comment"># ${t('sd_key')}: ${s.sshKey}</div></div><div style="margin-top:10px"><button class="btn btn-sm" onclick="sshLogin('${s.ip}',${s.sshPort},'${s.sshUser}','${s.sshKey}')">${icon('terminal')} ${t('pd_ssh_login')}</button></div></div>`:''}
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:20px;padding-top:16px;border-top:1px solid var(--border)">
+      <button class="btn btn-sm" onclick="cloneServer('${s.id}')">${icon('copy')} ${t('sd_clone')}</button>
+      <button class="btn btn-sm" onclick="editServer('${s.id}')">${icon('pencil')} ${t('sd_edit')}</button>
+      <button class="btn btn-sm btn-danger" onclick="deleteServer('${s.id}')">${icon('trash-2')} ${t('sd_delete')}</button>
+    </div>
+  `};
+  render();
+}
+
+function closeModal(){state.modal=null;editMode=null;render()}
+
+// ==================== LLM SETTINGS ====================
+let llmConfigs = [];
+let activeConfigId = null;
+let editingConfigId = null; // 当前在编辑的配置ID
+
+function getActiveLLMConfig() {
+  if (!activeConfigId) return null;
+  return llmConfigs.find(c => c.id === activeConfigId) || null;
+}
+
+function getEditingConfig() {
+  if (!editingConfigId) return null;
+  return llmConfigs.find(c => c.id === editingConfigId) || null;
+}
+
+async function loadLLMConfig() {
+  try {
+    const res = await fetch(`${API_BASE}/api/config/full`, { signal: AbortSignal.timeout(3000) });
+    if (!res.ok) return;
+    const config = await res.json();
+    if (config.llm_configs && Array.isArray(config.llm_configs)) {
+      llmConfigs = config.llm_configs;
+      activeConfigId = config.llm_active_id || null;
+    } else if (config.llm) {
+      const legacy = config.llm;
+      const id = 'cfg-default';
+      llmConfigs = [{ id, name: t('llm_default_name'), ...legacy }];
+      activeConfigId = legacy.enabled ? id : null;
+    }
+  } catch(e) {
+    console.log('Failed to load LLM config');
+  }
+}
+
+async function saveAllLLMConfigs() {
+  llmConfigs.forEach(c => c.enabled = c.id === activeConfigId);
+  const active = getActiveLLMConfig();
+  try {
+    const res = await fetch(`${API_BASE}/api/config`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        llm_configs: llmConfigs,
+        llm_active_id: activeConfigId,
+        llm: active ? Object.fromEntries(Object.entries(active).filter(([k]) => !['id', 'name'].includes(k))) : { enabled: false }
+      }),
+      signal: AbortSignal.timeout(3000)
+    });
+    if (!res.ok) throw new Error('Save failed');
+    showToast('✓ ' + t('llm_saved'));
+  } catch(e) {
+    showToast('❌ ' + t('llm_save_fail') + ': ' + e.message);
+  }
+}
+
+function addLLMConfig() {
+  const id = 'cfg-' + Date.now();
+  llmConfigs.push({
+    id, name: t('llm_new_name'), enabled: true,
+    provider: 'anthropic', base_url: '', api_key: '', model: 'claude-sonnet-4-6'
+  });
+  activeConfigId = id;
+  editingConfigId = id;
+  renderSettingsForm();
+}
+
+function switchLLMConfig(id) {
+  activeConfigId = id;
+  saveAllLLMConfigs();
+  renderSettingsList();
+}
+
+function deleteLLMConfig(id) {
+  if (!confirm(t('llm_confirm_delete'))) return;
+  llmConfigs = llmConfigs.filter(c => c.id !== id);
+  if (activeConfigId === id) activeConfigId = llmConfigs.length > 0 ? llmConfigs[0].id : null;
+  if (editingConfigId === id) editingConfigId = null;
+  saveAllLLMConfigs();
+  renderSettingsList();
+}
+
+function editLLMConfig(id) {
+  editingConfigId = id;
+  renderSettingsForm();
+}
+
+function backToList() {
+  editingConfigId = null;
+  renderSettingsList();
+}
+
+function saveCurrentConfig() {
+  if (editingConfigId) activeConfigId = editingConfigId;
+  saveAllLLMConfigs();
+  editingConfigId = null;
+  renderSettingsList();
+}
+
+function renderSettingsList() {
+  const body = document.querySelector('.modal-body');
+  if (!body) return;
+  const activeCfg = getActiveLLMConfig();
+  body.innerHTML = `<div class="fade-in">
+    <div class="form-group">
+      <label class="form-label" style="display:flex;align-items:center;gap:8px">
+        <input type="checkbox" ${activeCfg ? 'checked' : ''} onchange="toggleLLMEnabled(this.checked)" style="width:auto;margin:0">
+        ${t('llm_enable')}
+      </label>
+      <p style="font-size:12px;color:var(--text-tertiary);margin-top:6px">${t('llm_enable_desc')}</p>
+    </div>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+      <label class="form-label" style="margin:0">${t('llm_saved_configs')}</label>
+      <button class="btn btn-sm btn-primary" onclick="addLLMConfig()">${icon('plus')} ${t('llm_add')}</button>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:16px">
+      ${llmConfigs.length === 0 ? `<p style="font-size:12px;color:var(--text-tertiary);text-align:center;padding:16px">${t('llm_no_config')}</p>` :
+        llmConfigs.map(c => `
+          <div style="display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:var(--radius-sm);border:1px solid ${c.id === activeConfigId ? 'var(--accent-border)' : 'var(--border)'};background:${c.id === activeConfigId ? 'var(--accent-muted)' : 'var(--bg-card)'}">
+            <div style="flex:1;cursor:pointer" onclick="editLLMConfig('${c.id}')">
+              <div style="font-size:13px;font-weight:500">${c.name}</div>
+              <div style="font-size:11px;color:var(--text-tertiary);margin-top:2px">${c.provider || t('llm_not_set')} · ${c.model || t('llm_not_set')}</div>
+            </div>
+            ${c.id === activeConfigId ? `<span class="tag tag-green">${t('llm_current')}</span>` : `<button class="btn btn-sm" onclick="switchLLMConfig('${c.id}')">${t('llm_switch')}</button>`}
+            <button class="btn-icon" onclick="deleteLLMConfig('${c.id}')" title="${t('pd_delete')}" style="color:var(--text-tertiary)">${icon('trash-2')}</button>
+          </div>
+        `).join('')}
+    </div>
+    <div style="background:var(--accent-muted);border:1px solid var(--accent-border);border-radius:var(--radius-sm);padding:12px">
+      <h4 style="font-size:13px;margin-bottom:8px;display:flex;align-items:center;gap:6px">${icon('info')} ${t('llm_tips_title')}</h4>
+      <ul style="font-size:12px;color:var(--text-secondary);margin-left:18px;line-height:1.8">
+        <li>${t('llm_tip1')}</li>
+        <li>${t('llm_tip2')}</li>
+        <li>${t('llm_tip3')}</li>
+      </ul>
+    </div>
+  </div>`;
+  if (window.lucide) lucide.createIcons();
+}
+
+function renderSettingsForm() {
+  const body = document.querySelector('.modal-body');
+  if (!body) return;
+  const c = getEditingConfig();
+  if (!c) return renderSettingsList();
+  body.innerHTML = `<div class="fade-in">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:16px">
+      <button class="btn-icon" onclick="backToList()">${icon('arrow-left')}</button>
+      <span style="font-size:14px;font-weight:600">${t('llm_edit_config')}</span>
+    </div>
+    <div class="form-group">
+      <label class="form-label">${t('llm_config_name')}</label>
+      <input class="form-input" type="text" placeholder="${t('llm_config_name_ph')}" value="${c.name || ''}" oninput="getEditingConfig().name=this.value">
+    </div>
+    <div class="form-group">
+      <label class="form-label">${t('llm_provider')}</label>
+      <input class="form-input" type="text" placeholder="${t('llm_provider_ph')}" value="${c.provider || ''}" oninput="getEditingConfig().provider=this.value">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Base URL</label>
+      <input class="form-input" type="text" placeholder="https://api.openai.com/v1" value="${c.base_url || ''}" oninput="getEditingConfig().base_url=this.value">
+      <p style="font-size:11px;color:var(--text-tertiary);margin-top:4px">${t('llm_base_url_note')}</p>
+    </div>
+    <div class="form-group">
+      <label class="form-label">API Key</label>
+      <input class="form-input" type="password" placeholder="sk-..." value="${c.api_key || ''}" oninput="getEditingConfig().api_key=this.value">
+    </div>
+    <div class="form-group">
+      <label class="form-label">${t('llm_model')}</label>
+      <input class="form-input" type="text" placeholder="${t('llm_model_ph')}" value="${c.model || ''}" oninput="getEditingConfig().model=this.value">
+    </div>
+    <div class="form-actions">
+      <button class="btn" onclick="backToList()">${t('llm_back')}</button>
+      <button class="btn" onclick="testCurrentLLMConfig()" id="btn-test-llm">${icon('zap')} ${t('llm_test')}</button>
+      <button class="btn btn-primary" onclick="saveCurrentConfig()">${icon('save')} ${t('llm_save')}</button>
+    </div>
+  </div>`;
+  if (window.lucide) lucide.createIcons();
+}
+
+function toggleLLMEnabled(checked) {
+  if (checked) {
+    if (llmConfigs.length === 0) {
+      addLLMConfig();
+      return;
+    }
+    if (!activeConfigId) activeConfigId = llmConfigs[0].id;
+  } else {
+    activeConfigId = null;
+  }
+  saveAllLLMConfigs();
+  renderSettingsList();
+}
+
+async function testCurrentLLMConfig() {
+  const c = getEditingConfig();
+  if (!c) return;
+  const btn = document.getElementById('btn-test-llm');
+  if (btn) { btn.disabled = true; btn.textContent = t('llm_testing'); }
+  try {
+    const res = await fetch(`${API_BASE}/api/llm-test`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ llm: Object.fromEntries(Object.entries(c).filter(([k]) => !['id', 'name'].includes(k))) }),
+      signal: AbortSignal.timeout(30000)
+    });
+    const data = await res.json();
+    if (data.success) {
+      showToast('✓ ' + data.message, 'check-circle');
+    } else {
+      alert('❌ ' + data.message + (data.detail ? '\n\n' + data.detail : ''));
+    }
+  } catch(e) {
+    showToast('❌ ' + t('llm_test_fail') + ': ' + e.message, 'alert-circle');
+  } finally {
+    if (btn) { btn.disabled = false; btn.innerHTML = icon('zap') + ' ' + t('llm_test'); if (window.lucide) lucide.createIcons(); }
+  }
+}
+
+function openAboutModal() {
+  state.modal = {
+    title: icon('info') + ' ' + t('about_title'),
+    body: `<div style="text-align:center;padding:24px">
+      <div style="font-size:48px;margin-bottom:16px">${icon('rocket')}</div>
+      <h2 style="margin-bottom:8px">Personal AI Dev Center</h2>
+      <div style="font-size:13px;color:var(--text-tertiary);margin-bottom:16px">${t('about_version')}: <span style="color:var(--accent);font-weight:600">v${APP_VERSION}</span></div>
+      <p style="font-size:13px;color:var(--text-secondary);line-height:1.8;max-width:400px;margin:0 auto 20px">${t('about_desc')}</p>
+      <div style="display:flex;justify-content:center;gap:16px;font-size:12px;color:var(--text-tertiary)">
+        <span>${t('about_author')}: Developer</span>
+        <span>·</span>
+        <span>2026</span>
+      </div>
+    </div>`
+  };
+  render();
+}
+
+function openSettingsModal() {
+  editingConfigId = null;
+  loadLLMConfig().then(() => {
+    state.modal = { title: '⚙️ ' + t('llm_title'), body: `<div style="text-align:center;padding:24px;color:var(--text-tertiary)">${t('loading')}</div>` };
+    render();
+    renderSettingsList();
+  });
+}
+
+// Toast notification
+function showToast(message) {
+  const toast = document.createElement('div');
+  toast.className = 'toast';
+  toast.textContent = message;
+  document.body.appendChild(toast);
+  
+  setTimeout(() => {
+    toast.classList.add('show');
+    setTimeout(() => {
+      toast.classList.remove('show');
+      setTimeout(() => toast.remove(), 300);
+    }, 2000);
+  }, 10);
+}
+
+// ==================== CRUD OPERATIONS ====================
+function renderFormField(label, name, value, type='text', options=[]) {
+  const v = (value !== undefined && value !== null) ? String(value).replace(/"/g, '&quot;') : '';
+  if (type === 'select') {
+    return '<div class="form-group"><label class="form-label">' + label + '</label><select class="form-input" name="' + name + '">' +
+      options.map(function(o) {
+        var val = typeof o === 'object' ? o.value : o;
+        var lbl = typeof o === 'object' ? o.label : o;
+        return '<option value="' + val + '"' + (val === String(value) ? ' selected' : '') + '>' + lbl + '</option>';
+      }).join('') +
+      '</select></div>';
+  }
+  if (type === 'textarea') {
+    return '<div class="form-group"><label class="form-label">' + label + '</label><textarea class="form-input" name="' + name + '" rows="3">' + v + '</textarea></div>';
+  }
+  return '<div class="form-group"><label class="form-label">' + label + '</label><input class="form-input" type="' + type + '" name="' + name + '" value="' + v + '"></div>';
+}
+
+function renderEditModal() {
+  if (!editMode) return;
+  var isServer = editMode.type === 'server';
+  var d = editMode.data;
+  var isNew = !editMode.id;
+  var title = isNew ? (isServer ? t('crud_new_server') : t('crud_new_project')) : (t('crud_edit') + ' ' + d.name);
+  var formHTML = '';
+
+  if (isServer) {
+    formHTML =
+      '<div class="form-row">' + renderFormField(t('form_name'), 'name', d.name, 'text') + renderFormField(t('sd_provider'), 'provider', d.provider, 'text') + '</div>' +
+      '<div class="form-row">' + renderFormField(t('form_ip'), 'ip', d.ip, 'text') + renderFormField(t('form_ssh_port'), 'sshPort', d.sshPort || 22, 'number') + '</div>' +
+      '<div class="form-row">' + renderFormField(t('form_ssh_user'), 'sshUser', d.sshUser || '', 'text') + renderFormField(t('form_ssh_key'), 'sshKey', d.sshKey || '', 'text') + '</div>' +
+      '<div class="form-row">' + renderFormField(t('sd_region'), 'region', d.region, 'text') + renderFormField(t('sd_os'), 'os', d.os, 'text') + '</div>' +
+      '<div class="form-row">' + renderFormField(t('form_cpu'), 'cpu', d.cpu, 'number') + renderFormField(t('form_ram'), 'ram', d.ram, 'number') + '</div>' +
+      renderFormField(t('form_disk'), 'disk', d.disk, 'text') +
+      renderFormField(t('form_tools'), 'tools', Array.isArray(d.tools) ? d.tools.join(', ') : (d.tools || ''), 'text') +
+      '<div class="form-row">' + renderFormField(t('form_expiry'), 'expiry', d.expiry, 'text') + renderFormField(t('form_status'), 'status', d.status, 'select', [{value:'online',label:t('st_online')},{value:'offline',label:t('st_offline')},{value:'planned',label:t('st_planned')}]) + '</div>' +
+      renderFormField(t('form_linked_projects'), 'projects', Array.isArray(d.projects) ? d.projects.join(', ') : (d.projects || ''), 'text');
+  } else {
+    var serverOpts = state.servers.map(function(s) { return {value: s.id, label: s.name + ' (' + (s.ip || s.host || '-') + ')'}; });
+    formHTML =
+      renderFormField(t('form_name'), 'name', d.name, 'text') +
+      renderFormField(t('pd_description'), 'desc', d.desc, 'textarea') +
+      '<div class="form-row">' + renderFormField(t('form_server'), 'server', d.server, 'select', serverOpts) + renderFormField(t('form_status'), 'status', d.status, 'select', [{value:'active',label:t('st_active')},{value:'dev',label:t('st_dev')},{value:'planned',label:t('st_planned')},{value:'paused',label:t('st_paused')}]) + '</div>' +
+      '<div class="form-row">' + renderFormField(t('form_priority'), 'priority', d.priority, 'select', [{value:'high',label:t('pri_high')},{value:'medium',label:t('pri_medium')},{value:'low',label:t('pri_low')}]) + renderFormField(t('form_progress'), 'progress', d.progress, 'number') + '</div>' +
+      renderFormField(t('form_tech_stack'), 'techStack', Array.isArray(d.techStack) ? d.techStack.join(', ') : (d.techStack || ''), 'text') +
+      '<div class="form-row">' + renderFormField('Agent', 'agent', d.agent || '', 'text') + renderFormField(t('form_remote_path'), 'remote_path', d.remote_path || '', 'text') + '</div>' +
+      renderFormField(t('form_url'), 'url', d.url || '', 'text');
+  }
+
+  var modalBody = document.querySelector('.modal-body');
+  var modalTitle = document.querySelector('.modal-header h2');
+  if (modalBody) modalBody.innerHTML = '<div class="fade-in">' + formHTML + '<div class="form-actions"><button class="btn btn-danger" onclick="delete' + (isServer ? 'Server' : 'Project') + '(\'' + (editMode.id || '') + '\')">' + t('crud_delete') + '</button><div style="flex:1"></div><button class="btn" onclick="editMode=null;closeModal()">' + t('crud_cancel') + '</button><button class="btn btn-success" onclick="saveEdit()">' + t('crud_save') + '</button></div></div>';
+  if (modalTitle) modalTitle.textContent = title;
+  if (window.lucide) lucide.createIcons();
+}
+
+async function saveEdit() {
+  if (!editMode) return;
+  var isServer = editMode.type === 'server';
+  var isNew = !editMode.id;
+  var data = {};
+
+  if (isServer) {
+    var existingServer = editMode.id ? state.servers.find(function(s){return s.id === editMode.id}) : null;
+    data = {
+      id: editMode.id || ('srv-' + Date.now()),
+      name: document.querySelector('[name="name"]').value,
+      provider: document.querySelector('[name="provider"]').value,
+      providerHue: existingServer ? existingServer.providerHue : 0,
+      ip: document.querySelector('[name="ip"]').value,
+      host: document.querySelector('[name="ip"]').value,
+      sshPort: parseInt(document.querySelector('[name="sshPort"]').value) || 22,
+      sshUser: document.querySelector('[name="sshUser"]').value || null,
+      sshKey: document.querySelector('[name="sshKey"]').value || null,
+      region: document.querySelector('[name="region"]').value,
+      os: document.querySelector('[name="os"]').value,
+      cpu: document.querySelector('[name="cpu"]').value,
+      ram: parseFloat(document.querySelector('[name="ram"]').value) || 0,
+      disk: document.querySelector('[name="disk"]').value,
+      tools: document.querySelector('[name="tools"]').value.split(',').map(function(s){return s.trim()}).filter(Boolean),
+      expiry: document.querySelector('[name="expiry"]').value,
+      status: document.querySelector('[name="status"]').value,
+      projects: document.querySelector('[name="projects"]').value.split(',').map(function(s){return s.trim()}).filter(Boolean)
+    };
+  } else {
+    var existingProject = editMode.id ? state.projects.find(function(p){return p.id===editMode.id}) : null;
+    data = {
+      id: editMode.id || ('proj-' + Date.now()),
+      name: document.querySelector('[name="name"]').value,
+      desc: document.querySelector('[name="desc"]').value,
+      server: document.querySelector('[name="server"]').value,
+      status: document.querySelector('[name="status"]').value,
+      priority: document.querySelector('[name="priority"]').value,
+      progress: parseInt(document.querySelector('[name="progress"]').value) || 0,
+      techStack: document.querySelector('[name="techStack"]').value.split(',').map(function(s){return s.trim()}).filter(Boolean),
+      features: existingProject ? existingProject.features || [] : [],
+      todos: existingProject ? existingProject.todos || [] : [],
+      lastUpdate: new Date().toISOString(),
+      agent: document.querySelector('[name="agent"]').value,
+      remote_path: document.querySelector('[name="remote_path"]').value,
+      localPath: existingProject ? existingProject.localPath || '' : '',
+      url: document.querySelector('[name="url"]').value
+    };
+  }
+
+  try {
+    var url, method;
+    if (isNew) {
+      url = API_BASE + '/api/' + (isServer ? 'servers' : 'projects');
+      method = 'POST';
+    } else {
+      url = API_BASE + '/api/' + (isServer ? 'servers' : 'projects') + '/' + editMode.id;
+      method = 'PUT';
+    }
+    var res = await fetch(url, { method: method, headers: {'Content-Type':'application/json'}, body: JSON.stringify(data) });
+    if (!res.ok) throw new Error('API error: ' + res.status);
+    var result = await res.json();
+    var saved = Object.assign({}, data, result);
+
+    if (isServer) {
+      if (isNew) {
+        if (!saved.id) saved.id = 'srv-' + Date.now();
+        if (!saved.providerHue) saved.providerHue = 0;
+        state.servers.push(saved);
+      } else {
+        var idx = state.servers.findIndex(function(s){return s.id === editMode.id});
+        if (idx >= 0) { saved.id = editMode.id; state.servers[idx] = saved; }
+      }
+    } else {
+      if (isNew) {
+        if (!saved.id) saved.id = 'proj-' + Date.now();
+        saved.features = saved.features || [];
+        saved.todos = saved.todos || [];
+        saved.lastUpdate = new Date().toISOString();
+        state.projects.push(saved);
+      } else {
+        var idx = state.projects.findIndex(function(p){return p.id === editMode.id});
+        if (idx >= 0) {
+          saved.id = editMode.id;
+          saved.features = state.projects[idx].features;
+          saved.todos = state.projects[idx].todos;
+          saved.lastUpdate = new Date().toISOString();
+          state.projects[idx] = saved;
+          // 更新服务器的 projects 数组
+          var oldServer = state.projects[idx] ? state.servers.find(s => s.id === state.projects[idx].server) : null;
+          var newServer = state.servers.find(s => s.id === saved.server);
+          // 从旧服务器移除
+          state.servers.forEach(function(s) {
+            if (s.id !== saved.server && s.projects) {
+              s.projects = s.projects.filter(pid => pid !== saved.id);
+            }
+          });
+          // 添加到新服务器
+          if (newServer && newServer.projects && !newServer.projects.includes(saved.id)) {
+            newServer.projects.push(saved.id);
+          }
+        }
+      }
+    }
+
+    editMode = null;
+    state.modal = null;
+    render();
+    showToast(isNew ? t('crud_create_success') : t('crud_save_success'), 'check-circle');
+  } catch(e) {
+    showToast(t('crud_save_fail') + ': ' + e.message, 'alert-circle');
+  }
+}
+
+async function deleteServer(id) {
+  if (!id) return;
+  if (!confirm(t('confirm_delete_server'))) return;
+  try {
+    var res = await fetch(API_BASE + '/api/servers/' + id, { method: 'DELETE' });
+    if (!res.ok) throw new Error('API error: ' + res.status);
+    state.servers = state.servers.filter(function(s){return s.id !== id});
+    editMode = null;
+    state.modal = null;
+    render();
+    showToast(t('server_deleted'), 'check-circle');
+  } catch(e) {
+    showToast(t('crud_delete_fail') + ': ' + e.message, 'alert-circle');
+  }
+}
+
+async function deleteProject(id) {
+  if (!id) return;
+  if (!confirm(t('confirm_delete_project'))) return;
+  try {
+    var res = await fetch(API_BASE + '/api/projects/' + id, { method: 'DELETE' });
+    if (!res.ok) throw new Error('API error: ' + res.status);
+    state.projects = state.projects.filter(function(p){return p.id !== id});
+    editMode = null;
+    state.modal = null;
+    render();
+    showToast(t('project_deleted'), 'check-circle');
+  } catch(e) {
+    showToast(t('crud_delete_fail') + ': ' + e.message, 'alert-circle');
+  }
+}
+
+function editServer(id) {
+  var s = getServer(id); if (!s) return;
+  editMode = { type: 'server', id: id, data: JSON.parse(JSON.stringify(s)) };
+  renderEditModal();
+}
+
+function editProject(id) {
+  var p = state.projects.find(function(x){return x.id === id}); if (!p) return;
+  editMode = { type: 'project', id: id, data: JSON.parse(JSON.stringify(p)) };
+  renderEditModal();
+}
+
+function addServer() {
+  editMode = { type: 'server', id: null, data: {
+    name: '', provider: '', ip: '', sshPort: 22, sshUser: 'root', sshKey: '',
+    region: '', os: '', cpu: 2, ram: 4, disk: '', tools: [], expiry: '',
+    status: 'online', projects: [], providerHue: 0
+  }};
+  state.modal = { title: t('crud_new_server'), body: '<div style="color:var(--text-tertiary);font-size:13px">' + t('loading') + '</div>' };
+  render();
+  renderEditModal();
+}
+
+function addProject() {
+  editMode = { type: 'project', id: null, data: {
+    name: '', desc: '', server: state.servers[0] ? state.servers[0].id : '',
+    status: 'dev', priority: 'medium', progress: 0, techStack: [],
+    agent: '', remote_path: ''
+  }};
+  state.modal = { title: t('crud_new_project'), body: '<div style="color:var(--text-tertiary);font-size:13px">' + t('loading') + '</div>' };
+  render();
+  renderEditModal();
+}
+
+function cloneServer(id) {
+  var s = getServer(id); if (!s) return;
+  var clone = JSON.parse(JSON.stringify(s));
+  clone.name = s.name + t('clone_suffix');
+  clone.id = '';
+  clone.ip = '';
+  clone.host = '';
+  editMode = { type: 'server', id: null, data: clone };
+  state.modal = { title: t('clone_server_title') + ' - ' + s.name, body: '<div style="color:var(--text-tertiary);font-size:13px">' + t('loading') + '</div>' };
+  render();
+  renderEditModal();
+}
+
+function cloneProject(id) {
+  var p = state.projects.find(function(x){return x.id === id}); if (!p) return;
+  var clone = JSON.parse(JSON.stringify(p));
+  clone.name = p.name + t('clone_suffix');
+  clone.id = '';
+  clone.remote_path = '';
+  clone.progress = 0;
+  clone.status = 'dev';
+  editMode = { type: 'project', id: null, data: clone };
+  state.modal = { title: t('clone_project_title') + ' - ' + p.name, body: '<div style="color:var(--text-tertiary);font-size:13px">' + t('loading') + '</div>' };
+  render();
+  renderEditModal();
+}
+
+// ==================== TODO MANAGEMENT ====================
+function toggleTodo(projId, todoId){
+  const p=state.projects.find(x=>x.id===projId);if(!p)return;
+  const t=p.todos.find(x=>x.id===todoId);if(!t)return;
+  t.done=!t.done;
+  // Recalculate progress based on features + todos
+  openProjectDetail(projId);
+}
+
+function addTodo(projId){
+  const p=state.projects.find(x=>x.id===projId);if(!p)return;
+  const name=prompt(t('todo_prompt'));
+  if(!name||!name.trim())return;
+  if(!p.todos)p.todos=[];
+  p.todos.push({id:++todoIdCounter,name:name.trim(),done:false});
+  openProjectDetail(projId);
+}
+
+function deleteTodo(projId, idx){
+  const p=state.projects.find(x=>x.id===projId);if(!p)return;
+  if(confirm(t('confirm_delete_todo'))){
+    p.todos.splice(idx, 1);
+    openProjectDetail(projId);
+  }
+}
+
+function toggleFeature(projId, idx){
+  const p=state.projects.find(x=>x.id===projId);if(!p)return;
+  if(!p.features)p.features=[];
+  const f=p.features[idx];if(!f)return;
+  f.done=!f.done;
+  openProjectDetail(projId);
+}
+
+function deleteFeature(projId, idx){
+  const p=state.projects.find(x=>x.id===projId);if(!p)return;
+  if(confirm(t('confirm_delete_feature'))){
+    p.features.splice(idx, 1);
+    openProjectDetail(projId);
+  }
+}
+
+// ==================== NAVIGATION ====================
+function navigate(v){state.view=v;state.modal=null;render()}
+
+document.addEventListener('keydown',e=>{
+  if(e.key==='Escape')closeModal();
+  if(e.altKey&&!e.ctrlKey&&!e.metaKey){const m={'1':'dashboard','2':'servers','3':'projects','4':'agents','5':'knowledge'};if(m[e.key]){navigate(m[e.key]);e.preventDefault()}}
+});
+
+// ==================== API INTEGRATION ====================
+const API_BASE = 'http://localhost:8765';
+let apiConnected = false;
+let lastSyncTime = null;
+
+// 从后端加载用户编辑过的配置（启动时优先用 API 数据）
+async function fetchConfig() {
+  try {
+    const res = await fetch(`${API_BASE}/api/config/full`, { signal: AbortSignal.timeout(3000) });
+    if (!res.ok) return;
+    const config = await res.json();
+    if (config.servers && config.servers.length > 0) {
+      apiConnected = true;
+      // 合并服务器：用 API 数据覆盖硬编码，保留前端专有字段
+      config.servers.forEach(apiS => {
+        const localIdx = state.servers.findIndex(s => s.id === apiS.id);
+        if (localIdx >= 0) {
+          const local = state.servers[localIdx];
+          state.servers[localIdx] = Object.assign({}, local, apiS);
+        } else {
+          state.servers.push(apiS);
+        }
+      });
+      // 移除 API 中已不存在的服务器（可能被删除了）
+      const apiServerIds = new Set(config.servers.map(s => s.id));
+      state.servers = state.servers.filter(s => apiServerIds.has(s.id));
+    }
+    if (config.projects && config.projects.length > 0) {
+      config.projects.forEach(apiP => {
+        const localIdx = state.projects.findIndex(p => p.id === apiP.id);
+        if (localIdx >= 0) {
+          const local = state.projects[localIdx];
+          state.projects[localIdx] = Object.assign({}, local, apiP);
+        } else {
+          apiP.features = apiP.features || [];
+          apiP.todos = apiP.todos || [];
+          if (!apiP.lastUpdate) apiP.lastUpdate = new Date().toISOString();
+          state.projects.push(apiP);
+        }
+      });
+      const apiProjectIds = new Set(config.projects.map(p => p.id));
+      state.projects = state.projects.filter(p => apiProjectIds.has(p.id));
+    }
+    render();
+  } catch(e) {
+    // API 不可用，使用硬编码数据
+  }
+}
+
+async function fetchAPIData() {
+  try {
+    const res = await fetch(`${API_BASE}/api/data`, { signal: AbortSignal.timeout(3000) });
+    if (!res.ok) return;
+    const data = await res.json();
+    if (data.projects && data.projects.length > 0) {
+      apiConnected = true;
+      lastSyncTime = data.synced_at;
+      mergeAPIData(data.projects);
+      render();
+    }
+  } catch(e) {
+    apiConnected = false;
+  }
+}
+
+function mergeAPIData(apiProjects) {
+  apiProjects.forEach(apiP => {
+    const local = state.projects.find(p => p.id === apiP.id);
+    if (!local) return;
+    if (apiP.todos && apiP.todos.pending) {
+      local.todos = [
+        ...apiP.todos.pending.map((t, i) => ({ id: i + 1, name: t.name, done: false })),
+        ...apiP.todos.completed.map((t, i) => ({ id: 100 + i, name: t.name, done: true })),
+      ];
+    }
+    if (apiP.progress) {
+      if (apiP.progress.progress > 0) local.progress = apiP.progress.progress;
+      if (apiP.progress.last_update) local.lastUpdate = apiP.progress.last_update;
+    }
+    local.features = (local.features || []).filter(f => !f.name.startsWith('[问题] '));
+    if (apiP.issues && apiP.issues.current.length > 0) {
+      apiP.issues.current.forEach(issue => {
+        local.features.push({ name: '[问题] ' + issue, done: false });
+      });
+    }
+    local._syncedAt = apiP.synced_at;
+    local._syncError = apiP.sync_error;
+    local._llmAnalyzed = apiP.llm_analyzed;
+    local._llmStatus = apiP.llm_status;
+    local._llmSummary = apiP.llm_summary;
+    if (apiP.llm_tech_stack && apiP.llm_tech_stack.length > 0) {
+      local.techStack = apiP.llm_tech_stack;
+    }
+  });
+}
+
+async function triggerSync() {
+  showToast(t('sync_syncing'), 'refresh-cw');
+  try {
+    const res = await fetch(`${API_BASE}/api/sync`, { method: 'POST', signal: AbortSignal.timeout(120000) });
+    const data = await res.json();
+    if (data.success) {
+      showToast(t('sync_done'), 'check-circle');
+      await fetchAPIData();
+    } else {
+      showToast(t('sync_fail_msg') + ': ' + (data.output || t('error_unknown')), 'alert-circle');
+    }
+  } catch(e) {
+    showToast(t('sync_no_api'), 'alert-circle');
+  }
+}
+
+async function syncProject(projectId) {
+  const p = state.projects.find(x => x.id === projectId);
+  const name = p ? p.name : projectId;
+  showToast(t('sync_project_syncing') + ' ' + name + '...', 'refresh-cw');
+  try {
+    const res = await fetch(`${API_BASE}/api/sync/${projectId}`, { method: 'POST', signal: AbortSignal.timeout(60000) });
+    const data = await res.json();
+    if (data.success && data.data) {
+      // 合并同步结果到当前项目
+      const local = state.projects.find(x => x.id === projectId);
+      if (local && data.data) {
+        const d = data.data;
+        if (d.todos && d.todos.pending) {
+          local.todos = [
+            ...d.todos.pending.map((todo, i) => ({ id: i + 1, name: todo.name, done: false })),
+            ...d.todos.completed.map((todo, i) => ({ id: 100 + i, name: todo.name, done: true })),
+          ];
+        }
+        if (d.progress && d.progress.progress > 0) local.progress = d.progress.progress;
+        if (d.progress && d.progress.last_update) local.lastUpdate = d.progress.last_update;
+        local.features = (local.features || []).filter(f => !f.name.startsWith(t('issue_prefix')));
+        if (d.issues && d.issues.current.length > 0) {
+          d.issues.current.forEach(issue => {
+            local.features.push({ name: t('issue_prefix') + issue, done: false });
+          });
+        }
+        local._syncedAt = d.synced_at;
+        local._syncError = d.sync_error;
+        local._llmAnalyzed = d.llm_analyzed;
+        local._llmStatus = d.llm_status;
+        local._llmSummary = d.llm_summary;
+        if (d.llm_tech_stack && d.llm_tech_stack.length > 0) {
+          local.techStack = d.llm_tech_stack;
+        }
+      }
+      render();
+      if (state.modal) openProjectDetail(projectId);
+      const llmStatus = data.data.llm_status || 'disabled';
+      const llmText = llmStatus === 'analyzed' ? t('sync_llm_rewritten') : t('sync_llm_not_run') + llmStatus;
+      showToast(name + ' ' + t('sync_project_done') + llmText, llmStatus === 'analyzed' ? 'check-circle' : 'alert-circle');
+    } else {
+      showToast(t('sync_fail_msg') + ': ' + (data.data ? data.data.error || t('error_unknown') : t('error_unknown')), 'alert-circle');
+    }
+  } catch(e) {
+    showToast(t('sync_no_api'), 'alert-circle');
+  }
+}
+
+async function pickDirectory(projectId) {
+  try {
+    const res = await fetch(`${API_BASE}/api/pick-directory`, { method: 'POST', signal: AbortSignal.timeout(60000) });
+    const data = await res.json();
+    if (data.success && data.path) {
+      const input = document.getElementById('local-path-input');
+      if (input) input.value = data.path;
+      const p = state.projects.find(x => x.id === projectId);
+      if (p) p.localPath = data.path;
+      await saveLocalPath(projectId, data.path);
+    }
+  } catch(e) {
+    showToast('❌ ' + t('pick_dir_fail'), 'alert-circle');
+  }
+}
+
+async function saveLocalPath(projectId, pathOverride) {
+  const localPath = pathOverride || (document.getElementById('local-path-input')?.value || '').trim();
+  const p = state.projects.find(x => x.id === projectId);
+  if (!p) return;
+  p.localPath = localPath;
+  try {
+    const res = await fetch(`${API_BASE}/api/projects/${projectId}`, {
+      method: 'PUT',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify(p)
+    });
+    if (res.ok) showToast('✓ ' + t('local_path_saved'), 'check-circle');
+    else showToast('❌ ' + t('crud_save_fail'), 'alert-circle');
+  } catch(e) {
+    showToast('❌ ' + t('crud_save_fail'), 'alert-circle');
+  }
+  render();
+  if (state.modal) openProjectDetail(projectId);
+}
+
+async function syncDownload(projectId) {
+  const p = state.projects.find(x => x.id === projectId);
+  const name = p ? p.name : projectId;
+  runSyncWithProgress(projectId, 'sync-download', 'download', name);
+}
+
+async function openUploadModal(projectId) {
+  const p = state.projects.find(x => x.id === projectId);
+  const name = p ? p.name : projectId;
+  state.modal = {
+    title: icon('upload') + ' 上传 — ' + name,
+    body: '<div style="text-align:center;padding:20px;color:var(--text-tertiary)">正在扫描本地文件...</div>'
+  };
+  render();
+
+  try {
+    var res = await fetch(API_BASE + '/api/project-files/' + projectId, { signal: AbortSignal.timeout(5000) });
+    if (!res.ok) throw new Error('扫描失败');
+    var data = await res.json();
+    var files = data.files || [];
+    var totalSize = data.total_size || 0;
+
+    var listHTML = files.length === 0
+      ? '<div style="text-align:center;padding:20px;color:var(--text-tertiary)">没有可上传的文件</div>'
+      : '<div style="max-height:300px;overflow-y:auto;border:1px solid var(--border);border-radius:var(--radius-sm);margin-bottom:12px">' +
+        '<table style="width:100%;font-size:12px"><thead><tr style="border-bottom:1px solid var(--border)">' +
+        '<th style="padding:6px 8px;text-align:left"><input type="checkbox" id="upload-select-all" onchange="toggleUploadAll(this.checked)" checked></th>' +
+        '<th style="padding:6px 8px;text-align:left">文件</th>' +
+        '<th style="padding:6px 8px;text-align:right">大小</th>' +
+        '</tr></thead><tbody>' +
+        files.map(function(f) {
+          return '<tr style="border-bottom:1px solid var(--bg-card)"><td style="padding:4px 8px"><input type="checkbox" class="upload-file-cb" value="' + escapeHtml(f.path) + '" checked></td><td style="padding:4px 8px;color:var(--text-secondary)">' + escapeHtml(f.path) + '</td><td style="padding:4px 8px;text-align:right;color:var(--text-tertiary)">' + formatBytes(f.size) + '</td></tr>';
+        }).join('') +
+        '</tbody></table></div>';
+
+    var summaryHTML = '<div style="font-size:12px;color:var(--text-tertiary);margin-bottom:12px">' +
+      '共 <span id="upload-count">' + files.length + '</span> 个文件，' +
+      '总大小 <span id="upload-size">' + formatBytes(totalSize) + '</span></div>';
+
+    var actionsHTML = '<div style="display:flex;gap:8px;justify-content:flex-end">' +
+      '<button class="btn" onclick="closeModal()">取消</button>' +
+      '<button class="btn btn-primary" onclick="doUpload(\'' + projectId + '\', false)">普通上传</button>' +
+      '<button class="btn btn-success" onclick="doUpload(\'' + projectId + '\', true)">强制上传</button>' +
+      '</div>';
+
+    state.modal.body = listHTML + summaryHTML + actionsHTML;
+    render();
+  } catch(e) {
+    state.modal.body = '<div style="text-align:center;padding:20px;color:var(--red)">扫描失败: ' + e.message + '</div><div style="text-align:right;margin-top:12px"><button class="btn" onclick="closeModal()">关闭</button></div>';
+    render();
+  }
+}
+
+function toggleUploadAll(checked) {
+  document.querySelectorAll('.upload-file-cb').forEach(function(cb) { cb.checked = checked; });
+  updateUploadSummary();
+}
+
+function updateUploadSummary() {
+  var cbs = document.querySelectorAll('.upload-file-cb:checked');
+  var count = cbs.length;
+  var countEl = document.getElementById('upload-count');
+  if (countEl) countEl.textContent = count;
+}
+
+function doUpload(projectId, force) {
+  var cbs = document.querySelectorAll('.upload-file-cb:checked');
+  if (cbs.length === 0) {
+    showToast('请选择至少一个文件', 'alert-circle');
+    return;
+  }
+  // 收集选中的文件路径
+  var selectedFiles = [];
+  cbs.forEach(function(cb) { selectedFiles.push(cb.value); });
+  var p = state.projects.find(x => x.id === projectId);
+  var name = p ? p.name : projectId;
+  closeModal();
+  runSyncWithProgress(projectId, 'sync-upload', 'upload', name, force, selectedFiles);
+}
+
+async function syncUpload(projectId, force) {
+  const p = state.projects.find(x => x.id === projectId);
+  const name = p ? p.name : projectId;
+  if (!force && !confirm(t('sync_ul_confirm'))) return;
+  runSyncWithProgress(projectId, 'sync-upload', 'upload', name, force);
+}
+
+function runSyncWithProgress(projectId, endpoint, type, name, force, selectedFiles) {
+  const isUpload = type === 'upload';
+  const resultKey = isUpload ? 'sync_result_uploaded' : 'sync_result_downloaded';
+
+  // 终止之前的同步
+  if (window._syncAbort) window._syncAbort.abort();
+  var abortCtrl = new AbortController();
+  window._syncAbort = abortCtrl;
+
+  // 移除已有的同步浮窗
+  var old = document.getElementById('sync-float');
+  if (old) old.remove();
+
+  // 创建浮窗
+  var floatEl = document.createElement('div');
+  floatEl.id = 'sync-float';
+  floatEl.className = 'sync-float';
+  // 初始位置：右下角
+  floatEl.style.bottom = '20px';
+  floatEl.style.right = '20px';
+  floatEl.innerHTML =
+    '<div class="sync-float-head">' +
+      '<span class="sync-spinner"></span>' +
+      '<span class="title">' + (isUpload ? '↑ ' : '↓ ') + escapeHtml(name) + '</span>' +
+      '<button class="btn-ctrl" onclick="event.stopPropagation();toggleSyncFloat()" title="最小化">—</button>' +
+      '<button class="btn-ctrl" onclick="event.stopPropagation();toggleMaxSync()" title="最大化">□</button>' +
+      '<button class="btn-ctrl" onclick="event.stopPropagation();closeSyncProgress(\'' + projectId + '\')" title="关闭">×</button>' +
+    '</div>' +
+    '<div class="sync-float-body">' +
+      '<div class="sync-phase" id="sp-phase"><span class="sync-spinner"></span>' + t('sync_phase_connecting') + '</div>' +
+      '<div class="sync-bar-wrap"><div class="sync-bar" id="sp-bar"></div></div>' +
+      '<div class="sync-stats" id="sp-stats"></div>' +
+      '<div class="sync-log" id="sp-log" style="display:none"></div>' +
+    '</div>' +
+    '<div class="sync-float-resize sync-resize-n" data-dir="n"></div>' +
+    '<div class="sync-float-resize sync-resize-s" data-dir="s"></div>' +
+    '<div class="sync-float-resize sync-resize-w" data-dir="w"></div>' +
+    '<div class="sync-float-resize sync-resize-e" data-dir="e"></div>' +
+    '<div class="sync-float-resize sync-resize-nw" data-dir="nw"></div>' +
+    '<div class="sync-float-resize sync-resize-ne" data-dir="ne"></div>' +
+    '<div class="sync-float-resize sync-resize-sw" data-dir="sw"></div>' +
+    '<div class="sync-float-resize sync-resize-se" data-dir="se"></div>';
+  document.body.appendChild(floatEl);
+
+  // 拖拽移动
+  var headEl = floatEl.querySelector('.sync-float-head');
+  var isDragging = false, dragStartX, dragStartY, dragStartLeft, dragStartTop;
+  headEl.addEventListener('mousedown', function(e) {
+    if (e.target.closest('.btn-ctrl')) return;
+    if (floatEl.classList.contains('maximized')) return;
+    isDragging = true;
+    var rect = floatEl.getBoundingClientRect();
+    dragStartX = e.clientX; dragStartY = e.clientY;
+    dragStartLeft = rect.left; dragStartTop = rect.top;
+    // 切换到 top/left 定位
+    floatEl.style.top = rect.top + 'px';
+    floatEl.style.left = rect.left + 'px';
+    floatEl.style.bottom = 'auto';
+    floatEl.style.right = 'auto';
+    e.preventDefault();
+  });
+
+  // 拖拽调整大小
+  var isResizing = false, resizeDir = '', resizeStartX, resizeStartY, resizeStartW, resizeStartH, resizeStartLeft, resizeStartTop;
+  floatEl.querySelectorAll('.sync-float-resize').forEach(function(handle) {
+    handle.addEventListener('mousedown', function(e) {
+      if (floatEl.classList.contains('maximized')) return;
+      isResizing = true;
+      resizeDir = handle.dataset.dir;
+      var rect = floatEl.getBoundingClientRect();
+      resizeStartX = e.clientX; resizeStartY = e.clientY;
+      resizeStartW = rect.width; resizeStartH = rect.height;
+      resizeStartLeft = rect.left; resizeStartTop = rect.top;
+      // 切换到 top/left 定位
+      floatEl.style.top = rect.top + 'px';
+      floatEl.style.left = rect.left + 'px';
+      floatEl.style.bottom = 'auto';
+      floatEl.style.right = 'auto';
+      e.preventDefault(); e.stopPropagation();
+    });
+  });
+
+  document.addEventListener('mousemove', function(e) {
+    if (isDragging) {
+      var dx = e.clientX - dragStartX, dy = e.clientY - dragStartY;
+      floatEl.style.left = (dragStartLeft + dx) + 'px';
+      floatEl.style.top = Math.max(0, dragStartTop + dy) + 'px';
+    }
+    if (isResizing) {
+      var dx = e.clientX - resizeStartX, dy = e.clientY - resizeStartY;
+      var newW = resizeStartW, newH = resizeStartH, newL = resizeStartLeft, newT = resizeStartTop;
+      if (resizeDir.indexOf('e') >= 0) newW = Math.max(280, resizeStartW + dx);
+      if (resizeDir.indexOf('w') >= 0) { newW = Math.max(280, resizeStartW - dx); newL = resizeStartLeft + (resizeStartW - newW); }
+      if (resizeDir.indexOf('s') >= 0) newH = Math.max(120, resizeStartH + dy);
+      if (resizeDir.indexOf('n') >= 0) { newH = Math.max(120, resizeStartH - dy); newT = resizeStartTop + (resizeStartH - newH); }
+      floatEl.style.width = newW + 'px';
+      floatEl.style.height = newH + 'px';
+      floatEl.style.left = newL + 'px';
+      floatEl.style.top = Math.max(0, newT) + 'px';
+    }
+  });
+  document.addEventListener('mouseup', function() { isDragging = false; isResizing = false; });
+
+  var startTime = Date.now();
+  var minimized = false;
+  const phaseEl = document.getElementById('sp-phase');
+  const barEl = document.getElementById('sp-bar');
+  const statsEl = document.getElementById('sp-stats');
+  const logEl = document.getElementById('sp-log');
+  const p = state.projects.find(x => x.id === projectId);
+
+  function elapsedStr() {
+    var sec = Math.floor((Date.now() - startTime) / 1000);
+    if (sec < 60) return sec + 's';
+    return Math.floor(sec / 60) + 'm ' + (sec % 60) + 's';
+  }
+  function speedStr(bytes) {
+    var sec = (Date.now() - startTime) / 1000;
+    if (sec < 1) return '';
+    return ' · ' + formatBytes(Math.round(bytes / sec)) + '/s';
+  }
+  function setPhase(html, done) {
+    if (!phaseEl) return;
+    phaseEl.innerHTML = done ? html : '<span class="sync-spinner"></span>' + html;
+    // 更新标题栏状态
+    var titleEl = floatEl.querySelector('.title');
+    if (titleEl && !done) titleEl.textContent = (isUpload ? '↑ ' : '↓ ') + name + ' · ' + elapsedStr();
+  }
+  function setBar(pct) {
+    if (barEl) barEl.style.width = Math.min(100, Math.max(0, pct)) + '%';
+  }
+  function addLog(text) {
+    if (!logEl) return;
+    var d = document.createElement('div');
+    d.className = 'sync-log-entry';
+    d.textContent = text;
+    logEl.appendChild(d);
+    logEl.scrollTop = logEl.scrollHeight;
+  }
+  function setStats(parts) {
+    if (statsEl) statsEl.innerHTML = parts.map(function(s) {
+      return '<div class="sync-stat">' + s + '</div>';
+    }).join('');
+  }
+  function showDone(success, msg) {
+    var body = floatEl.querySelector('.sync-float-body');
+    if (body) body.innerHTML = '<div class="sync-float-done"><span class="msg ' + (success ? 'ok' : 'err') + '">' + msg + '</span><button class="btn-min" onclick="closeSyncProgress(\'' + projectId + '\')" title="关闭">×</button></div>';
+    var spinner = floatEl.querySelector('.sync-spinner');
+    if (spinner) spinner.remove();
+    var titleEl = floatEl.querySelector('.title');
+    if (titleEl) titleEl.textContent = (success ? '✓ ' : '✗ ') + name;
+    // 10秒后自动关闭
+    setTimeout(function() { closeSyncProgress(projectId); }, success ? 10000 : 30000);
+  }
+
+  (async () => {
+    try {
+      var url = API_BASE + '/api/' + endpoint + '/' + projectId;
+      var params = [];
+      if (force && endpoint === 'sync-upload') params.push('force=true');
+      if (selectedFiles && selectedFiles.length > 0) params.push('files=' + encodeURIComponent(JSON.stringify(selectedFiles)));
+      if (params.length > 0) url += '?' + params.join('&');
+      var res = await fetch(url, {
+        method: 'POST', signal: abortCtrl.signal
+      });
+      if (!res.ok) {
+        var errData;
+        try { errData = await res.json(); } catch(e2) { errData = null; }
+        var errMsg = errData && errData.detail ? errData.detail : ('HTTP ' + res.status);
+        setPhase(t('sync_phase_error') + ': ' + errMsg, true);
+        showDone(false, t('sync_phase_error'));
+        return;
+      }
+      var reader = res.body.getReader();
+      var decoder = new TextDecoder();
+      var buf = '';
+
+      while (true) {
+        var chunk = await reader.read();
+        if (chunk.done) break;
+        buf += decoder.decode(chunk.value, {stream: true});
+        var lines = buf.split('\n');
+        buf = lines.pop();
+        for (var li = 0; li < lines.length; li++) {
+          var line = lines[li].trim();
+          if (!line.startsWith('data: ')) continue;
+          try {
+            var event = JSON.parse(line.slice(6));
+            switch (event.phase) {
+              case 'connecting':
+                setPhase(t('sync_phase_connecting'));
+                break;
+              case 'scanning':
+                setPhase(t('sync_phase_scanning'));
+                break;
+              case 'transferring':
+                var toT = event.to_transfer || 0;
+                var sk = event.skipped || 0;
+                setPhase(t('sync_phase_transferring') + ' (0 / ' + toT + ')');
+                setStats([
+                  '<span class="dot" style="background:var(--accent)"></span>' + toT + ' ' + t('sync_files_to_transfer'),
+                  '<span class="dot" style="background:var(--text-tertiary)"></span>' + sk + ' ' + t('sync_files_skipped')
+                ]);
+                if (toT === 0) { setBar(100); setPhase(t('sync_phase_done'), true); showDone(true, t('sync_phase_done')); }
+                break;
+              case 'file':
+                if (logEl) logEl.style.display = '';
+                var cur = event.current || 0;
+                var tot = event.to_transfer || 1;
+                setPhase(t('sync_phase_transferring') + ' (' + cur + ' / ' + tot + ') — ' + elapsedStr());
+                setBar((cur / tot) * 100);
+                addLog((isUpload ? '\u2191 ' : '\u2193 ') + event.file);
+                break;
+              case 'batch':
+                var bytes = event.bytes || 0;
+                var totalB = event.total_bytes || 1;
+                var pct = Math.min(99, (bytes / totalB) * 100);
+                var filesN = event.to_transfer || 0;
+                setPhase(formatBytes(bytes) + ' / ' + formatBytes(totalB) + ' (' + filesN + ' ' + t('sync_files_unit') + ')' + speedStr(bytes) + ' · ' + elapsedStr());
+                setBar(pct);
+                break;
+              case 'done':
+                setBar(100);
+                break;
+              case 'complete':
+                var d = event.data;
+                var success = event.success;
+                var elapsed = elapsedStr();
+                if (p) {
+                  p._syncResult = { type: type,
+                    uploaded: d.uploaded || d.downloaded || 0, skipped: d.skipped,
+                    failed: d.failed, total: d.total, errors: d.errors || [],
+                    time: new Date().toLocaleTimeString('zh-CN') };
+                }
+                setBar(100);
+                var transferred = d.uploaded || d.downloaded || 0;
+                var summaryMsg = t(resultKey) + ' ' + transferred + ' · ' + t('sync_elapsed') + ' ' + elapsed;
+                if (d.failed) summaryMsg += ' · ' + t('sync_result_failed') + ' ' + d.failed;
+                var body = floatEl.querySelector('.sync-float-body');
+                if (body) {
+                  var html = '<div class="sync-summary">';
+                  html += '<div class="sync-summary-row"><span>' + t(resultKey) + '</span><span style="font-weight:600;color:var(--accent)">' + transferred + '</span></div>';
+                  if (d.skipped) html += '<div class="sync-summary-row"><span>' + t('sync_result_skipped') + '</span><span>' + d.skipped + '</span></div>';
+                  if (d.failed) html += '<div class="sync-summary-row error"><span>' + t('sync_result_failed') + '</span><span>' + d.failed + '</span></div>';
+                  html += '<div class="sync-summary-row"><span>⏱ ' + t('sync_elapsed') + '</span><span>' + elapsed + '</span></div>';
+                  html += '</div>';
+                  if (d.errors && d.errors.length > 0) {
+                    html += '<div style="margin-top:6px;font-size:11px;color:var(--red)">' + d.errors.slice(0, 5).map(escapeHtml).join('<br>') + '</div>';
+                  }
+                  html += '<div style="margin-top:8px;text-align:right"><button class="btn btn-sm" onclick="closeSyncProgress(\'' + projectId + '\')">' + t('btn_close') + '</button></div>';
+                  body.innerHTML = html;
+                }
+                var spinner = floatEl.querySelector('.sync-spinner');
+                if (spinner) spinner.remove();
+                var titleEl = floatEl.querySelector('.title');
+                if (titleEl) titleEl.textContent = (success ? '✓ ' : '✗ ') + name + ' · ' + elapsed;
+                render();
+                break;
+              case 'error':
+                setPhase(t('sync_phase_error') + ': ' + (event.error || ''), true);
+                setBar(100);
+                if (barEl) barEl.style.background = 'var(--red)';
+                showDone(false, t('sync_phase_error') + (event.error ? ': ' + event.error : ''));
+                break;
+              case 'retrying':
+                var attempt = event.attempt || 1;
+                setPhase(t('sync_phase_retrying') + ' (' + attempt + ')...');
+                setBar(0);
+                if (barEl) barEl.style.background = 'var(--amber)';
+                break;
+            }
+          } catch (e) { /* skip malformed lines */ }
+        }
+      }
+    } catch (e) {
+      var isAbort = e.name === 'AbortError' || e.name === 'TimeoutError' || (e.message && e.message.includes('abort'));
+      if (isAbort) {
+        setPhase(t('sync_timeout'), true);
+        showDone(false, t('sync_timeout'));
+      } else {
+        setPhase(t('sync_phase_error') + ': ' + e.message, true);
+        showDone(false, e.message);
+      }
+    }
+  })();
+}
+
+function toggleSyncFloat() {
+  var el = document.getElementById('sync-float');
+  if (el) el.classList.toggle('minimized');
+}
+
+function toggleMaxSync() {
+  var el = document.getElementById('sync-float');
+  if (!el) return;
+  if (el.classList.contains('maximized')) {
+    el.classList.remove('maximized');
+    // 恢复之前的位置和大小
+    if (el._prevStyle) {
+      el.style.top = el._prevStyle.top;
+      el.style.left = el._prevStyle.left;
+      el.style.width = el._prevStyle.width;
+      el.style.height = el._prevStyle.height;
+      el.style.bottom = el._prevStyle.bottom;
+      el.style.right = el._prevStyle.right;
+    }
+  } else {
+    // 保存当前位置和大小
+    el._prevStyle = {
+      top: el.style.top, left: el.style.left,
+      width: el.style.width, height: el.style.height,
+      bottom: el.style.bottom, right: el.style.right
+    };
+    el.classList.remove('minimized');
+    el.classList.add('maximized');
+  }
+}
+
+function closeSyncProgress(projectId) {
+  // 终止正在进行的同步
+  if (window._syncAbort) {
+    window._syncAbort.abort();
+    window._syncAbort = null;
+  }
+  var el = document.getElementById('sync-float');
+  if (el) el.remove();
+  if (projectId) {
+    fetchAPIData();
+    render();
+  }
+}
+
+async function analyzeLocal(projectId) {
+  const p = state.projects.find(x => x.id === projectId);
+  const name = p ? p.name : projectId;
+
+  // 弹出进度窗口
+  state.modal = { title: `✨ ${t('analyze_title')} ${name}`, body: `<div id="analyze-log" style="font-family:var(--mono);font-size:12px;line-height:1.8;max-height:400px;overflow-y:auto;color:var(--text-secondary)"><div style="color:var(--text-tertiary)">${t('analyze_connecting')}</div></div>` };
+  render();
+
+  const logEl = document.getElementById('analyze-log');
+  function appendLog(msg, color) {
+    const div = document.createElement('div');
+    div.style.color = color || 'var(--text-secondary)';
+    div.textContent = msg;
+    logEl.appendChild(div);
+    logEl.scrollTop = logEl.scrollHeight;
+  }
+
+  try {
+    const res = await fetch(`${API_BASE}/api/analyze/${projectId}`, { method: 'POST' });
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    let analysisSucceeded = false;
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop();
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue;
+        try {
+          const evt = JSON.parse(line.slice(6));
+          const color = evt.status === 'error' ? 'var(--red)' : evt.status === 'success' ? 'var(--green)' : 'var(--text-secondary)';
+          appendLog(evt.message, color);
+
+          if (evt.status === 'success' && evt.data) {
+            analysisSucceeded = true;
+            const d = evt.data;
+            const local = state.projects.find(x => x.id === projectId);
+            if (local && d) {
+              local._llmAnalyzed = d.llm_analyzed;
+              local._llmStatus = d.llm_status;
+              local._llmSummary = d.llm_summary;
+              if (d.todos && d.todos.pending) {
+                local.todos = [
+                  ...d.todos.pending.map((todo, i) => ({ id: i + 1, name: todo.name, done: false })),
+                  ...d.todos.completed.map((todo, i) => ({ id: 100 + i, name: todo.name, done: true })),
+                ];
+              }
+              local.features = (local.features || []).filter(f => !f.name.startsWith(t('issue_prefix')));
+              if (d.issues && d.issues.current) {
+                d.issues.current.forEach(issue => local.features.push({ name: t('issue_prefix') + issue, done: false }));
+              }
+            }
+          }
+        } catch(e) {}
+      }
+    }
+  } catch(e) {
+    appendLog(t('analyze_connect_fail') + ': ' + e.message, 'var(--red)');
+  }
+
+  if (analysisSucceeded) {
+    fetchAPIData();
+  }
+
+  // 底部加关闭按钮
+  const btnDiv = document.createElement('div');
+  btnDiv.style.cssText = 'margin-top:16px;text-align:right';
+  btnDiv.innerHTML = `<button class="btn btn-primary btn-sm" onclick="closeModal();render()">${t('btn_close')}</button>`;
+  logEl.appendChild(btnDiv);
+}
+
+// ==================== LOG VIEWER ====================
+let logPanelEl = null;
+let logUnsubscribe = null;
+let logAutoScroll = true;
+
+function openLogViewer() {
+  if (logPanelEl) {
+    logPanelEl.classList.toggle('collapsed');
+    return;
+  }
+  const panel = document.createElement('div');
+  panel.className = 'log-panel';
+  panel.innerHTML = `
+    <div class="log-head" onclick="toggleLogPanel()">
+      <div class="log-head-left">${icon('terminal')} <span>${t('log_title')}</span></div>
+      <div class="log-head-actions">
+        <button class="btn btn-sm" onclick="event.stopPropagation();refreshLogs()" title="${t('log_refresh')}">${icon('refresh-cw')} ${t('log_refresh')}</button>
+        <button class="btn btn-sm" onclick="event.stopPropagation();clearLogs()" title="${t('log_clear')}">${icon('trash-2')} ${t('log_clear')}</button>
+        <button class="btn btn-sm" onclick="event.stopPropagation();closeLogViewer()" title="${t('btn_close')}">${icon('x')}</button>
+      </div>
+    </div>
+    <div class="log-body"><div class="log-empty">${t('loading')}</div></div>`;
+  document.body.appendChild(panel);
+  logPanelEl = panel;
+  if (window.lucide) lucide.createIcons();
+  refreshLogs();
+
+  // Subscribe to real-time log updates via Electron IPC
+  if (window.electronAPI && window.electronAPI.onLogLine) {
+    logUnsubscribe = window.electronAPI.onLogLine(line => appendLogLine(line));
+  }
+}
+
+function toggleLogPanel() {
+  if (logPanelEl) logPanelEl.classList.toggle('collapsed');
+}
+
+function closeLogViewer() {
+  if (logUnsubscribe) { logUnsubscribe(); logUnsubscribe = null; }
+  if (logPanelEl) { logPanelEl.remove(); logPanelEl = null; }
+}
+
+async function refreshLogs() {
+  if (!logPanelEl) return;
+  const body = logPanelEl.querySelector('.log-body');
+  if (!body) return;
+  body.innerHTML = `<div class="log-empty">${t('loading')}</div>`;
+  try {
+    let logs = [];
+    if (window.electronAPI && window.electronAPI.getLogs) {
+      logs = await window.electronAPI.getLogs();
+    }
+    if (!logs || logs.length === 0) {
+      body.innerHTML = `<div class="log-empty">${t('log_no_logs')}</div>`;
+      return;
+    }
+    body.innerHTML = '';
+    logs.forEach(line => appendLogLine(line));
+  } catch(e) {
+    body.innerHTML = `<div class="log-empty">${t('log_no_logs')}</div>`;
+  }
+}
+
+async function clearLogs() {
+  try {
+    if (window.electronAPI && window.electronAPI.clearLogs) {
+      await window.electronAPI.clearLogs();
+    }
+  } catch(e) {}
+  if (logPanelEl) {
+    const body = logPanelEl.querySelector('.log-body');
+    if (body) body.innerHTML = `<div class="log-empty">${t('log_no_logs')}</div>`;
+  }
+}
+
+function appendLogLine(line) {
+  if (!logPanelEl) return;
+  const body = logPanelEl.querySelector('.log-body');
+  if (!body) return;
+  // Remove empty placeholder if present
+  const empty = body.querySelector('.log-empty');
+  if (empty) empty.remove();
+
+  const el = document.createElement('div');
+  el.className = 'log-line';
+  const ts = line.ts ? new Date(line.ts).toLocaleTimeString('zh-CN', {hour12:false}) : '';
+  const level = (line.level || 'info').toLowerCase();
+  el.innerHTML = `<span class="log-ts">${ts}</span><span class="log-level ${level}">${level}</span><span class="log-text">${escapeHtml(line.text || '')}</span>`;
+  body.appendChild(el);
+
+  if (logAutoScroll) {
+    body.scrollTop = body.scrollHeight;
+  }
+}
+
+// ==================== INIT ====================
+render();
+// 启动时优先从 API 加载用户编辑过的配置
+fetchConfig().then(() => fetchAPIData());
+// 加载域名和资产数据
+fetchDomains();
+fetchAssets();
+fetchExchangeRates();
+// 加载 LLM 配置
+loadLLMConfig();
+// 每 5 分钟自动刷新
+setInterval(fetchAPIData, 5 * 60 * 1000);
+
+async function fetchDomains(){
+  try{
+    const res=await fetch(API_BASE+'/api/domains',{signal:AbortSignal.timeout(3000)});
+    if(res.ok){const data=await res.json();if(Array.isArray(data))state.domains=data;render();}
+  }catch(e){}
+}
+
+async function fetchAssets(){
+  try{
+    const res=await fetch(API_BASE+'/api/assets',{signal:AbortSignal.timeout(3000)});
+    if(res.ok){const data=await res.json();if(Array.isArray(data))state.assets=data;render();}
+  }catch(e){}
+}
+</script>
+</body>
+</html>

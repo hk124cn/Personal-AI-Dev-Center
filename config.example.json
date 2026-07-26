@@ -1,0 +1,204 @@
+{
+  "servers": [
+    {
+      "id": "server-a",
+      "name": "演示云-华东",
+      "provider": "演示云",
+      "providerHue": 24,
+      "cpu": "2",
+      "ram": 2,
+      "disk": "40G SSD",
+      "host": "YOUR_SERVER_IP",
+      "region": "华东",
+      "os": "Ubuntu 24.04",
+      "tools": ["Claude Code", "OpenClaw"],
+      "expiry": "2027-02-18",
+      "status": "online",
+      "projects": ["demo-blog", "demo-todo-api"],
+      "port": 22,
+      "user": "demo",
+      "key_path": "~/.ssh/id_ed25519",
+      "projects_root": "/home/demo/projects"
+    },
+    {
+      "id": "server-b",
+      "name": "演示云-华北",
+      "provider": "演示云",
+      "providerHue": 200,
+      "cpu": "4",
+      "ram": 4,
+      "disk": "60G SSD",
+      "host": "YOUR_SERVER_IP",
+      "region": "华北",
+      "os": "Debian 12",
+      "tools": ["Claude Code"],
+      "expiry": "2027-05-23",
+      "status": "online",
+      "projects": [],
+      "port": 22,
+      "user": "demo",
+      "key_path": "~/.ssh/id_ed25519",
+      "projects_root": "/home/demo/projects"
+    },
+    {
+      "id": "server-c",
+      "name": "演示云-海外",
+      "provider": "演示云",
+      "providerHue": 120,
+      "cpu": "2",
+      "ram": 8,
+      "disk": "100G",
+      "host": "YOUR_SERVER_IP",
+      "region": "海外",
+      "os": "Ubuntu 24.04",
+      "tools": ["OpenClaw", "Claude Code"],
+      "expiry": "2026-12-31",
+      "status": "online",
+      "projects": [],
+      "port": 22,
+      "user": "demo",
+      "key_path": "~/.ssh/id_ed25519",
+      "projects_root": "/home/demo/projects"
+    }
+  ],
+  "llm": {
+    "enabled": false,
+    "provider": "商汤科技",
+    "api_key": "",
+    "model": "sensenova-6.7-flash-lite",
+    "base_url": "https://token.sensenova.cn/v1"
+  },
+  "projects": [
+    {
+      "id": "demo-blog",
+      "name": "演示博客平台",
+      "desc": "演示项目：一个支持 Markdown 的轻量博客系统，用于展示 Personal AI Dev Center 的项目卡片、进度与 Agent 绑定能力。",
+      "server": "server-a",
+      "status": "dev",
+      "priority": "high",
+      "progress": 70,
+      "tech_stack": ["Vue 3", "FastAPI", "SQLite"],
+      "features": [
+        {"name": "Markdown 编辑与预览", "done": true},
+        {"name": "标签与分类", "done": true},
+        {"name": "RSS 订阅", "done": false},
+        {"name": "全文搜索", "done": false}
+      ],
+      "todos": [
+        {"id": 1, "name": "接入全文搜索", "done": false},
+        {"id": 2, "name": "配置 HTTPS", "done": false}
+      ],
+      "lastUpdate": "2026-06-08T13:40:37.650Z",
+      "agent": "Claude Code",
+      "remote_path": "/home/demo/projects/demo-blog",
+      "url": ""
+    },
+    {
+      "id": "demo-todo-api",
+      "name": "演示待办 API",
+      "desc": "演示项目：RESTful 待办事项后端，展示进度、优先级与 Agent 协作。",
+      "server": "server-a",
+      "status": "dev",
+      "priority": "medium",
+      "progress": 40,
+      "tech_stack": ["FastAPI", "PostgreSQL"],
+      "features": [
+        {"name": "JWT 鉴权", "done": true},
+        {"name": "WebSocket 实时推送", "done": false}
+      ],
+      "todos": [
+        {"id": 1, "name": "编写 OpenAPI 文档", "done": false}
+      ],
+      "lastUpdate": "2026-06-09T14:05:40.054Z",
+      "agent": "Claude Code + OpenClaw",
+      "remote_path": "/home/demo/projects/demo-todo-api",
+      "url": ""
+    },
+    {
+      "id": "demo-dashboard",
+      "name": "演示数据看板",
+      "desc": "演示项目：运营数据可视化看板，展示多图表与定时任务。",
+      "server": "server-b",
+      "status": "paused",
+      "priority": "low",
+      "progress": 20,
+      "tech_stack": ["React", "ECharts", "Docker"],
+      "features": [],
+      "todos": [],
+      "lastUpdate": "2026-06-08T14:11:17.143Z",
+      "agent": "Claude Code + OpenClaw",
+      "remote_path": "/home/demo/projects/demo-dashboard"
+    },
+    {
+      "id": "demo-ai-chat",
+      "name": "演示 AI 客服",
+      "desc": "演示项目：基于大模型的客服问答，展示 Agent 中心与 LLM 配置。",
+      "server": "server-c",
+      "status": "dev",
+      "priority": "medium",
+      "progress": 65,
+      "tech_stack": ["FastAPI", "Vue 3"],
+      "features": [],
+      "todos": [],
+      "lastUpdate": "2026-06-08T15:11:01.709Z",
+      "agent": "Claude Code",
+      "remote_path": "/home/demo/projects/demo-ai-chat",
+      "url": ""
+    },
+    {
+      "id": "demo-sync",
+      "name": "演示文件同步",
+      "desc": "演示项目：跨服务器文件同步工具。",
+      "server": "server-c",
+      "status": "active",
+      "priority": "low",
+      "progress": 100,
+      "tech_stack": ["Python", "rsync"],
+      "features": [],
+      "todos": [],
+      "lastUpdate": "2026-06-08T14:24:02.762Z",
+      "agent": "OpenClaw",
+      "remote_path": "/home/demo/projects/demo-sync"
+    }
+  ],
+  "agents": [
+    {"id": "agent-claude", "name": "Claude Code", "icon": "bot", "color": "#d97757", "bg": "rgba(217,119,87,.12)", "desc": "Anthropic Claude 编程 Agent", "servers": ["server-a", "server-c"], "llm_provider": "", "llm_model": "", "llm_api_key": ""},
+    {"id": "agent-openclaw", "name": "OpenClaw", "icon": "sparkles", "color": "#8b5cf6", "bg": "rgba(139,92,246,.12)", "desc": "通用 Agent 运行时", "servers": ["server-a", "server-c"], "llm_provider": "", "llm_model": "", "llm_api_key": ""},
+    {"id": "agent-qoder", "name": "Qoder", "icon": "terminal", "color": "#0ea5e9", "bg": "rgba(14,165,233,.12)", "desc": "通义编程 Agent", "servers": ["server-b"], "llm_provider": "", "llm_model": "", "llm_api_key": ""},
+    {"id": "agent-minimax", "name": "MiniMax", "icon": "bot", "color": "#f59e0b", "bg": "rgba(245,158,11,.12)", "desc": "MiniMax 大模型 Agent", "servers": ["server-c"], "llm_provider": "", "llm_model": "", "llm_api_key": ""},
+    {"id": "agent-gemini", "name": "Gemini", "icon": "bot", "color": "#10b981", "bg": "rgba(16,185,129,.12)", "desc": "Google Gemini Agent", "servers": ["server-b"], "llm_provider": "", "llm_model": "", "llm_api_key": ""},
+    {"id": "agent-gpt", "name": "GPT", "icon": "bot", "color": "#6366f1", "bg": "rgba(99,102,241,.12)", "desc": "OpenAI GPT Agent", "servers": ["server-a"], "llm_provider": "", "llm_model": "", "llm_api_key": ""},
+    {"id": "agent-deepseek", "name": "DeepSeek", "icon": "bot", "color": "#ef4444", "bg": "rgba(239,68,68,.12)", "desc": "DeepSeek 推理 Agent", "servers": ["server-c"], "llm_provider": "", "llm_model": "", "llm_api_key": ""},
+    {"id": "agent-ollama", "name": "本地Ollama", "icon": "cpu", "color": "#64748b", "bg": "rgba(100,116,139,.12)", "desc": "本地离线 Ollama 模型", "servers": ["server-a"], "llm_provider": "", "llm_model": "", "llm_api_key": ""}
+  ],
+  "assets": [
+    {
+      "id": "asset-sim-1", "category": "sim", "name": "演示SIM卡-北京移动", "provider": "中国移动", "status": "active", "note": "仅用于演示，非真实号码。", "total_fee": 29, "currency": "CNY", "expiry": "2027-01-01",
+      "phone_number": "13800000000", "home_region": "北京", "data_allowance": "30GB", "throttle_speed": "1Mbps", "sms_capable": true, "voice_capable": true, "roaming": false, "roaming_data": "", "contract_months": 12,
+      "prepaid": false, "prepaid_balance": 0,
+      "registrations": [{"name": "演示官网", "url": "https://example.com"}, {"name": "演示社区", "url": "https://community.example.com"}]
+    },
+    {
+      "id": "asset-cc-1", "category": "credit_card", "name": "演示预付卡", "provider": "演示银行", "status": "active", "note": "演示用的预付卡。", "total_fee": 0, "currency": "CNY", "expiry": "2028-01-01",
+      "card_network": "银联", "card_form": "virtual", "last_four": "0000", "issuing_bank": "演示银行", "annual_fee": 0, "credit_limit": 0, "billing_day": 1, "payment_due_day": 10,
+      "prepaid": true, "prepaid_balance": 500,
+      "registrations": []
+    },
+    {
+      "id": "asset-cc-2", "category": "credit_card", "name": "演示信用卡", "provider": "演示银行", "status": "active", "note": "演示用的赊账信用卡。", "total_fee": 0, "currency": "CNY", "expiry": "2029-01-01",
+      "card_network": "Visa", "card_form": "physical", "last_four": "1234", "issuing_bank": "演示银行", "annual_fee": 0, "credit_limit": 50000, "billing_day": 15, "payment_due_day": 5,
+      "prepaid": false, "prepaid_balance": 0,
+      "registrations": []
+    },
+    {
+      "id": "asset-email-1", "category": "email", "name": "演示邮箱", "provider": "示例邮箱", "status": "active", "note": "演示用邮箱。", "total_fee": 0, "currency": "CNY", "expiry": "",
+      "email": "demo@example.com", "register_date": "2025-03-15",
+      "registrations": [{"name": "演示官网", "url": "https://example.com"}, {"name": "演示论坛", "url": "https://forum.example.com"}]
+    },
+    {
+      "id": "asset-member-1", "category": "membership", "name": "演示会员-视频站", "provider": "示例视频", "status": "active", "note": "", "total_fee": 25, "currency": "CNY", "expiry": "",
+      "plan_type": "paid", "trial_expiry": "", "paid_expiry": "2027-01-01", "auto_renew": true,
+      "prepaid": false, "prepaid_balance": 0, "registrations": []
+    }
+  ]
+}
