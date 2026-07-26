@@ -71,6 +71,7 @@ body{font-family:var(--font);background:var(--bg-deep);color:var(--text);height:
 /* ===== BUTTONS ===== */
 .btn{display:inline-flex;align-items:center;gap:6px;padding:7px 14px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--bg-elevated);color:var(--text);font-size:12px;font-weight:500;cursor:pointer;transition:all var(--dur) var(--ease);font-family:var(--font)}
 .btn:hover{border-color:var(--border-hover);background:var(--bg-card-hover)}
+.btn.active{border-color:var(--green);background:var(--green);color:#fff;font-weight:700;box-shadow:0 2px 10px rgba(34,197,94,.35)}
 .btn svg{width:14px;height:14px;stroke-width:1.8}
 .btn-primary{background:var(--accent);border-color:var(--accent);color:#fff}
 .btn-primary:hover{background:var(--accent-hover);border-color:var(--accent-hover)}
@@ -1451,6 +1452,7 @@ function openProjectDetail(id){
 }
 
 var _speedTestTimer = null;
+var _speedTesting = false;
 
 function toggleSpeedTest() {
   if (_speedTestTimer) {
@@ -1458,23 +1460,25 @@ function toggleSpeedTest() {
     clearInterval(_speedTestTimer);
     _speedTestTimer = null;
     showToast('实时测速已关闭', 'zap');
-    // 恢复按钮文字
+    // 恢复按钮文字与样式
     var btn = document.querySelector('[onclick="toggleSpeedTest()"]');
-    if (btn) btn.innerHTML = icon('zap') + ' 实时测速';
+    if (btn) { btn.classList.remove('active'); btn.innerHTML = icon('zap') + ' 实时测速'; }
   } else {
     // 开启实时测速
     runSpeedTest();
     _speedTestTimer = setInterval(runSpeedTest, 5000);
     showToast('实时测速已开启（每5秒刷新）', 'zap');
-    // 更新按钮文字
+    // 更新按钮文字与激活样式
     var btn = document.querySelector('[onclick="toggleSpeedTest()"]');
-    if (btn) btn.innerHTML = icon('x') + ' 停止测速';
+    if (btn) { btn.classList.add('active'); btn.innerHTML = icon('x') + ' 停止测速'; }
   }
 }
 
 async function runSpeedTest() {
+  if (_speedTesting) return;
+  _speedTesting = true;
   try {
-    var res = await fetch(API_BASE + '/api/speed-test', { signal: AbortSignal.timeout(30000) });
+    var res = await fetch(API_BASE + '/api/speed-test', { signal: AbortSignal.timeout(12000) });
     if (!res.ok) throw new Error('测速失败');
     var results = await res.json();
     for (var id in results) {
@@ -1491,14 +1495,20 @@ async function runSpeedTest() {
         el.style.background = 'var(--bg-card)';
         el.style.color = 'var(--text-tertiary)';
         el.textContent = '跳过';
-      } else {
+      } else if (r.status === 'timeout') {
         el.style.background = 'var(--red)';
         el.style.color = '#fff';
         el.textContent = '超时';
+      } else {
+        el.style.background = 'var(--red)';
+        el.style.color = '#fff';
+        el.textContent = '不可达';
       }
     }
   } catch(e) {
     // 静默失败，不打扰用户
+  } finally {
+    _speedTesting = false;
   }
 }
 
@@ -1511,7 +1521,7 @@ async function testServerSpeed(id) {
     el.textContent = '测速中...';
   }
   try {
-    var res = await fetch(API_BASE + '/api/speed-test', { signal: AbortSignal.timeout(30000) });
+    var res = await fetch(API_BASE + '/api/speed-test', { signal: AbortSignal.timeout(12000) });
     if (!res.ok) throw new Error('测速失败');
     var results = await res.json();
     var r = results[id];
@@ -1523,10 +1533,14 @@ async function testServerSpeed(id) {
         el.textContent = r.latency + 'ms';
       } else if (r.status === 'skip') {
         el.textContent = '跳过';
-      } else {
+      } else if (r.status === 'timeout') {
         el.style.background = 'var(--red)';
         el.style.color = '#fff';
         el.textContent = '超时';
+      } else {
+        el.style.background = 'var(--red)';
+        el.style.color = '#fff';
+        el.textContent = '不可达';
       }
     }
   } catch(e) {

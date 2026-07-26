@@ -20,9 +20,10 @@ Dev Center 现在支持使用大语言模型（LLM）对项目 MD 文档进行�
 {
   "llm": {
     "enabled": true,
-    "provider": "anthropic",
-    "api_key": "sk-ant-api03-YOUR_API_KEY_HERE",
-    "model": "claude-3-5-sonnet-20241022"
+    "provider": "商汤科技",
+    "api_key": "sk-xxxx",
+    "model": "sensenova-6.7-flash-lite",
+    "base_url": "https://token.sensenova.cn/v1"
   },
   ...
 }
@@ -30,7 +31,19 @@ Dev Center 现在支持使用大语言模型（LLM）对项目 MD 文档进行�
 
 ### 2. 支持的 LLM 提供商
 
-#### Anthropic Claude（推荐）
+> 当前项目默认配置为 **商汤 SenseNova**（走 OpenAI 兼容接口）。后端按 `provider` 分流：`anthropic` → Anthropic 原生接口；`qwen` → 通义千问；其它值（含 `商汤科技`）→ OpenAI 兼容接口（需填 `base_url`）。
+
+#### 商汤 SenseNova（当前默认配置）
+```json
+{
+  "provider": "商汤科技",
+  "api_key": "sk-...",
+  "model": "sensenova-6.7-flash-lite",
+  "base_url": "https://token.sensenova.cn/v1"
+}
+```
+
+#### Anthropic Claude（备选）
 ```json
 {
   "provider": "anthropic",
@@ -73,6 +86,9 @@ Dev Center 现在支持使用大语言模型（LLM）对项目 MD 文档进行�
 - `qwen-turbo`
 
 ### 3. 获取 API Key
+
+#### 商汤 SenseNova
+访问 https://console.sensenova.cn/ 或 https://token.sensenova.cn/ 注册并获取 API key（别忘了在 config 里填 `base_url`）
 
 #### Anthropic
 访问 https://console.anthropic.com/ 注册并获取 API key
@@ -156,7 +172,7 @@ Dev Center 现在支持使用大语言模型（LLM）对项目 MD 文档进行�
 - 首次全量同步可能需要额外 30-60 秒
 - 可以只同步特定项目来减少等待时间：
   ```bash
-  python backend/sync.py --project ecommerce-platform
+  python -c "from backend.sync import sync_single; sync_single('ecommerce-platform')"
   ```
 
 ### 隐私安全

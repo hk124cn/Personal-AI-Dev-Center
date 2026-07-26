@@ -24,15 +24,17 @@ python backend/sync.py
 {
   "llm": {
     "enabled": true,
-    "provider": "anthropic",
-    "api_key": "sk-ant-api03-YOUR_API_KEY_HERE",
-    "model": "claude-3-5-sonnet-20241022"
+    "provider": "商汤科技",
+    "api_key": "sk-xxxx",
+    "model": "sensenova-6.7-flash-lite",
+    "base_url": "https://token.sensenova.cn/v1"
   },
   ...
 }
 ```
 
 **获取 API Key:**
+- 商汤 SenseNova: https://console.sensenova.cn/（当前默认）
 - Anthropic Claude: https://console.anthropic.com/
 - OpenAI: https://platform.openai.com/api-keys
 - 通义千问: https://dashscope.aliyun.com/
@@ -128,7 +130,7 @@ python -c "from backend.sync import sync_single; sync_single('ecommerce-platform
 **A:** 
 1. 降低同步频率（每天 1 次而非每小时）
 2. 只对重点项目启用 LLM 分析
-3. 使用更便宜的模型（如 Claude Haiku）
+3. 使用更便宜的模型（如 sensenova-6.7-flash-lite）
 4. 缓存分析结果，避免重复调用
 
 ### Q3: 如何查看某个项目的详细分析结果？
@@ -240,7 +242,7 @@ Personal AI Dev Center/
 ### v2.1 (2026-06-14)
 - ✅ 修复路径拼接错误（`remote_path` 直接使用绝对路径）
 - ✅ 新增 LLM 智能分析功能
-- ✅ 支持 Anthropic、OpenAI、通义千问
+- ✅ 支持 Anthropic、OpenAI、通义千问、商汤 SenseNova（当前默认）
 - ✅ 自动提取功能、架构、路由、摘要
 - ✅ 添加测试脚本和文档
 
