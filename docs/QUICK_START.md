@@ -13,9 +13,9 @@
 ![Step 2](https://via.placeholder.com/600x300?text=Enter+API+Key)
 
 1. ✅ 勾选 **"启用 LLM 智能分析"**
-2. 🔧 选择提供商（推荐 **Anthropic Claude**）
-3. 🔑 粘贴你的 API key
-4. 🤖 选择模型（推荐 **Claude 3.5 Sonnet**）
+2. 🔧 选择提供商（推荐 **商汤 SenseNova**，当前默认配置）
+3. 🔑 粘贴你的 API key（商汤：https://console.sensenova.cn/）
+4. 🤖 选择模型（推荐 **sensenova-6.7-flash-lite**）
 
 ### 步骤 3: 保存并同步
 
@@ -33,7 +33,13 @@
 
 ## 获取 API Key
 
-### Anthropic Claude（推荐）
+### 商汤 SenseNova（当前默认配置）
+1. 访问 https://console.sensenova.cn/ 或 https://token.sensenova.cn/
+2. 注册/登录账户
+3. 创建新的 API key
+4. 复制 key 到设置框（注意在 config 中填 `base_url`）
+
+### Anthropic Claude（备选）
 1. 访问 https://console.anthropic.com/
 2. 注册/登录账户
 3. 创建新的 API key

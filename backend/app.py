@@ -9,6 +9,7 @@ import shutil
 import subprocess
 import sys
 import time
+import socket
 from datetime import datetime
 from pathlib import Path
 
@@ -678,45 +679,46 @@ def pick_directory():
 
 @app.get("/api/speed-test")
 def speed_test():
-    """测试所有服务器的连接延迟"""
-    import subprocess
-    import platform
+    """测试所有服务器的连接延迟（TCP 端口探测，绕过 ICMP 被防火墙拦截的情况）"""
+    from concurrent.futures import ThreadPoolExecutor, as_completed
     config = load_json(CONFIG_PATH) or {"servers": []}
     results = {}
-    for server in config.get("servers", []):
+
+    def probe(server):
+        sid = server.get("id")
         host = server.get("host") or server.get("ip")
         if not host or host in ("localhost", "待购"):
-            results[server["id"]] = {"status": "skip", "reason": "无有效地址"}
-            continue
+            return sid, {"status": "skip", "reason": "无有效地址"}
         try:
-            # Windows 用 ping -n 2，Linux/Mac 用 ping -c 2
-            if platform.system() == "Windows":
-                cmd = ["ping", "-n", "2", "-w", "2000", host]
-            else:
-                cmd = ["ping", "-c", "2", "-W", "2", host]
-            output = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
-            text = output.stdout
-            # 解析平均延迟
-            avg = None
-            if platform.system() == "Windows":
-                # 找 "平均 = 123ms" 或 "Average = 123ms"
-                import re
-                m = re.search(r'(?:平均|Average)\s*=\s*(\d+)ms', text)
-                if m:
-                    avg = int(m.group(1))
-            else:
-                import re
-                m = re.search(r'avg\s*=\s*[\d.]+/([\d.]+)/', text)
-                if m:
-                    avg = round(float(m.group(1)))
-            if avg is not None:
-                results[server["id"]] = {"status": "ok", "latency": avg}
-            else:
-                results[server["id"]] = {"status": "error", "reason": "无法解析延迟"}
-        except subprocess.TimeoutExpired:
-            results[server["id"]] = {"status": "timeout", "reason": "超时"}
+            port = int(server.get("port") or server.get("sshPort") or 22)
+        except (TypeError, ValueError):
+            port = 22
+        try:
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.settimeout(3)
+            start = time.perf_counter()
+            rc = sock.connect_ex((host, port))
+            elapsed = (time.perf_counter() - start) * 1000
+            sock.close()
+            if rc == 0:
+                return sid, {"status": "ok", "latency": round(elapsed)}
+            return sid, {"status": "error", "reason": f"端口 {port} 不可达"}
+        except socket.timeout:
+            return sid, {"status": "timeout", "reason": f"{port} 端口连接超时"}
         except Exception as e:
-            results[server["id"]] = {"status": "error", "reason": str(e)}
+            return sid, {"status": "error", "reason": str(e)}
+
+    servers = config.get("servers", [])
+    if not servers:
+        return results
+    with ThreadPoolExecutor(max_workers=min(8, len(servers))) as ex:
+        futures = [ex.submit(probe, s) for s in servers]
+        for f in as_completed(futures):
+            try:
+                sid, res = f.result()
+                results[sid] = res
+            except Exception:
+                pass
     return results
 
 
