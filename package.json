@@ -1,6 +1,6 @@
 {
   "name": "personal-ai-dev-center",
-  "version": "1.4.12",
+  "version": "1.4.13",
   "description": "Personal AI Dev Center - 多服务器管理与项目开发面板",
   "main": "electron/main.js",
   "scripts": {

@@ -292,6 +292,19 @@ body{font-family:var(--font);background:var(--bg-deep);color:var(--text);height:
 .agent-card .agent-sub{font-size:11px;color:var(--text-tertiary)}
 .agent-card .agent-desc{font-size:12px;color:var(--text-secondary);margin-bottom:14px;line-height:1.6}
 .agent-card .server-tags{display:flex;flex-wrap:wrap;gap:4px}
+.agent-card .agent-llm{display:flex;align-items:center;gap:8px;margin-bottom:12px;font-size:12px}
+.agent-card .llm-label{color:var(--text-tertiary);display:flex;align-items:center;gap:4px}
+.agent-card .llm-val{color:var(--text-secondary);font-weight:600}
+.agent-card .llm-val.muted,.agent-model-badge.muted{color:var(--text-quaternary)}
+.agent-card-actions{margin-top:12px;display:flex;gap:8px}
+.agent-model-badge{display:inline-block;margin-left:6px;padding:2px 8px;border-radius:999px;background:rgba(59,130,246,.12);color:var(--text-secondary);font-size:11px;font-weight:600}
+.agents-toolbar{display:flex;align-items:center;gap:12px;margin-bottom:14px;flex-wrap:wrap}
+.agents-hint{font-size:12px;color:var(--text-tertiary)}
+.collision-panel{border:1px solid var(--red);background:rgba(239,68,68,.08);border-radius:var(--radius);padding:14px 16px;margin-bottom:18px}
+.collision-head{color:var(--red);font-weight:600;font-size:13px;display:flex;align-items:center;gap:6px;margin-bottom:8px}
+.collision-row{display:flex;align-items:center;gap:10px;padding:6px 0;font-size:12px;border-top:1px solid rgba(239,68,68,.2)}
+.collision-model{font-weight:600;color:var(--red)}
+.collision-agents{color:var(--text-secondary)}
 
 /* ===== MATRIX TABLE ===== */
 .matrix{width:100%;border-collapse:collapse;font-size:13px}
@@ -485,7 +498,7 @@ select.form-input{cursor:pointer;appearance:none;background-image:url("data:imag
 <div id="app" class="app"></div>
 
 <script>
-const APP_VERSION = '1.4.12';
+const APP_VERSION = '1.4.13';
 // ==================== THEMES ====================
 const themes = {
   violet: {
@@ -1352,9 +1365,146 @@ async function deleteAsset(id){
 }
 
 // ==================== AGENTS ====================
+// Agent 为受管实体；每个 agent 单独填写使用的大模型（厂商+模型+key）
+// 撞车 = 多个 agent 的 (厂商,模型,key) 完全相同
+function getAgent(nameOrId){
+  if(!nameOrId||nameOrId==='-')return null;
+  return state.agents.find(a=>a.id===nameOrId||a.name===nameOrId)||null;
+}
+
+function agentModelBadge(name){
+  const a=getAgent(name); if(!a)return'';
+  const p=a.llm_provider||'', m=a.llm_model||'';
+  if(!p&&!m)return'<span class="agent-model-badge muted">未配置模型</span>';
+  return'<span class="agent-model-badge">'+escapeHtml(p)+(p&&m?' / ':'')+escapeHtml(m)+'</span>';
+}
+
+function agentCollisions(){
+  const g={};
+  state.agents.forEach(a=>{
+    const p=(a.llm_provider||'').trim(), m=(a.llm_model||'').trim(), k=(a.llm_api_key||'').trim();
+    if(!p&&!m)return;
+    const key=JSON.stringify([p,m,k]);
+    (g[key]=g[key]||[]).push(a);
+  });
+  return Object.values(g).filter(x=>x.length>1);
+}
+
 function viewAgents(){
-  return`<div class="agent-grid">${state.agents.map(a=>`<div class="agent-card"><div class="agent-head"><div class="agent-icon" style="background:${a.bg};color:${a.color}">${icon(a.icon)}</div><div><h4>${a.name}</h4><div class="agent-sub">${t('ag_deployed')} ${a.servers.length} ${t('ag_servers_unit')}</div></div></div><div class="agent-desc">${a.desc}</div><div class="server-tags">${a.servers.map(sid=>{const s=getServer(sid);return s?`<span class="tag tag-accent">${s.name}</span>`:''}).join('')}</div></div>`).join('')}</div>
-  <div class="panel"><div class="panel-head"><h3>${icon('grid-3x3')} ${t('ag_matrix')}</h3></div><div class="panel-body" style="overflow-x:auto"><table class="matrix"><thead><tr><th>${t('ag_server_col')}</th>${state.agents.map(a=>`<th>${a.name}</th>`).join('')}</tr></thead><tbody>${state.servers.filter(s=>s.id!=='future').map(s=>`<tr><td>${s.name}</td>${state.agents.map(a=>`<td><span class="${a.servers.includes(s.id)?'dot-yes':'dot-no'}">${a.servers.includes(s.id)?icon('check-circle'):icon('circle')}</span></td>`).join('')}</tr>`).join('')}</tbody></table></div></div>`}
+  const collisions=agentCollisions();
+  const collisionHTML = collisions.length? `
+  <div class="collision-panel">
+    <div class="collision-head">${icon('alert-triangle')} 检测到 ${collisions.length} 组「大模型撞车」（同厂商 + 同模型 + 同 Key）</div>
+    ${collisions.map(g=>`
+      <div class="collision-row">
+        <span class="collision-model">${escapeHtml(g[0].llm_provider||'?')} / ${escapeHtml(g[0].llm_model||'?')}${g[0].llm_api_key?' (共用 Key)':''}</span>
+        <span class="collision-agents">${g.map(a=>escapeHtml(a.name)).join('、')}</span>
+      </div>`).join('')}
+  </div>`:'';
+
+  const cards = state.agents.map(a=>`
+    <div class="agent-card">
+      <div class="agent-head">
+        <div class="agent-icon" style="background:${a.bg||'rgba(59,130,246,.1)'};color:${a.color||'#3b82f6'}">${icon(a.icon||'bot')}</div>
+        <div><h4>${escapeHtml(a.name)}</h4><div class="agent-sub">部署 ${(a.servers||[]).length} 台服务器</div></div>
+      </div>
+      <div class="agent-desc">${escapeHtml(a.desc||'')}</div>
+      <div class="agent-llm">
+        <span class="llm-label">${icon('cpu')} 大模型</span>
+        ${a.llm_provider||a.llm_model?`<span class="llm-val">${escapeHtml(a.llm_provider||'未填厂商')}${a.llm_model?' / '+escapeHtml(a.llm_model):''}</span>`:'<span class="llm-val muted">未配置</span>'}
+      </div>
+      <div class="server-tags">${(a.servers||[]).map(sid=>{const s=getServer(sid);return s?`<span class="tag tag-accent">${escapeHtml(s.name)}</span>`:''}).join('')}</div>
+      <div class="agent-card-actions">
+        <button class="btn btn-sm" onclick="openAgentEditor('${a.id}')">${icon('edit')} 编辑</button>
+      </div>
+    </div>`).join('');
+
+  const matrix = `
+  <div class="panel"><div class="panel-head"><h3>${icon('grid-3x3')} Agent × 服务器 矩阵</h3></div><div class="panel-body" style="overflow-x:auto">
+    <table class="matrix"><thead><tr><th>服务器</th>${state.agents.map(a=>`<th>${escapeHtml(a.name)}</th>`).join('')}</tr></thead>
+    <tbody>${state.servers.filter(s=>s.id!=='future').map(s=>`<tr><td>${escapeHtml(s.name)}</td>${state.agents.map(a=>`<td><span class="${(a.servers||[]).includes(s.id)?'dot-yes':'dot-no'}">${(a.servers||[]).includes(s.id)?icon('check-circle'):icon('circle')}</span></td>`).join('')}</tr>`).join('')}</tbody></table>
+  </div></div>`;
+
+  return `
+  <div class="agents-toolbar">
+    <button class="btn btn-primary btn-sm" onclick="openAgentEditor()">${icon('plus')} 新建 Agent</button>
+    <span class="agents-hint">每个 Agent 单独填写使用的大模型；同厂商 + 同模型 + 同 Key 会被标记为「撞车」</span>
+  </div>
+  ${collisionHTML}
+  <div class="agent-grid">${cards||'<div class="kb-empty">暂无 Agent，点上方「新建 Agent」添加</div>'}</div>
+  ${matrix}`;
+}
+
+function openAgentEditor(id, prefillName){
+  const a=id?state.agents.find(x=>x.id===id):null;
+  const initName=a?a.name:(prefillName||'');
+  const srvOpts=state.servers.filter(s=>s.id!=='future').map(s=>`<label class="chk"><input type="checkbox" name="ag_servers" value="${s.id}" ${a&&(a.servers||[]).includes(s.id)?'checked':''}> ${escapeHtml(s.name)}</label>`).join('');
+  state.modal={title:(a?'编辑':'新建')+' Agent',body:`
+    <div class="form-grid">
+      <div class="form-field"><label>名称</label><input class="form-input" id="ag_name" value="${escapeHtml(initName)}"></div>
+      <div class="form-field"><label>图标(lucide)</label><input class="form-input" id="ag_icon" value="${a?escapeHtml(a.icon||'bot'):'bot'}"></div>
+      <div class="form-field"><label>主色</label><input class="form-input" id="ag_color" value="${a?escapeHtml(a.color||'#3b82f6'):'#3b82f6'}" type="color"></div>
+      <div class="form-field"><label>描述</label><input class="form-input" id="ag_desc" value="${a?escapeHtml(a.desc||''):''}"></div>
+    </div>
+    <div class="form-field" style="margin:10px 0"><label>部署服务器</label><div class="chk-group">${srvOpts}</div></div>
+    <hr style="border:none;border-top:1px solid var(--border);margin:14px 0">
+    <h4 style="margin:0 0 10px">${icon('cpu')} 使用的大模型</h4>
+    <div class="form-grid">
+      <div class="form-field"><label>厂商</label><input class="form-input" id="ag_lp" placeholder="如 Anthropic / 商汤 / OpenAI" value="${a?escapeHtml(a.llm_provider||''):''}"></div>
+      <div class="form-field"><label>模型</label><input class="form-input" id="ag_lm" placeholder="如 claude-opus-4" value="${a?escapeHtml(a.llm_model||''):''}"></div>
+    </div>
+    <div class="form-field" style="margin:10px 0"><label>API Key（可选，留空表示无 / 共用）</label><input class="form-input" id="ag_lk" type="password" value="${a?escapeHtml(a.llm_api_key||''):''}"></div>
+    <div class="modal-actions" style="margin-top:16px;justify-content:space-between">
+      ${a?`<button class="btn btn-danger" onclick="deleteAgent('${a.id}')">${icon('trash-2')} 删除</button>`:'<span></span>'}
+      <div style="display:flex;gap:8px">
+        <button class="btn" onclick="closeModal()">取消</button>
+        <button class="btn btn-primary" onclick="saveAgent('${a?a.id:''}')">${icon('save')} 保存</button>
+      </div>
+    </div>`};
+  render();
+}
+
+async function saveAgent(id){
+  const name=document.getElementById('ag_name').value.trim();
+  if(!name){showToast('请填写名称','alert-circle');return;}
+  const servers=[...document.querySelectorAll('input[name=ag_servers]:checked')].map(c=>c.value);
+  const payload={
+    id: id || (name.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'')||('agent-'+Date.now())),
+    name: name,
+    icon: document.getElementById('ag_icon').value.trim()||'bot',
+    color: document.getElementById('ag_color').value.trim()||'#3b82f6',
+    desc: document.getElementById('ag_desc').value.trim(),
+    servers: servers,
+    llm_provider: document.getElementById('ag_lp').value.trim(),
+    llm_model: document.getElementById('ag_lm').value.trim(),
+    llm_api_key: document.getElementById('ag_lk').value
+  };
+  const url=API_BASE+'/api/agents'+(id?'/'+encodeURIComponent(id):'');
+  try{
+    const res=await fetch(url,{method:id?'PUT':'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+    const d=await res.json();
+    if(d.success){closeModal();await fetchConfig();showToast('已保存','check-circle');}
+    else showToast('保存失败','alert-circle');
+  }catch(e){showToast('保存失败: '+e.message,'alert-circle');}
+}
+
+async function deleteAgent(id){
+  if(!confirm('确认删除该 Agent？此操作不可撤销。'))return;
+  try{
+    const res=await fetch(API_BASE+'/api/agents/'+encodeURIComponent(id),{method:'DELETE'});
+    const d=await res.json();
+    if(d.success){closeModal();await fetchConfig();showToast('已删除','check-circle');}
+    else showToast('删除失败','alert-circle');
+  }catch(e){showToast('删除失败: '+e.message,'alert-circle');}
+}
+
+function openAgentFromProject(pid){
+  const p=state.projects.find(x=>x.id===pid);
+  if(!p)return;
+  const a=getAgent(p.agent);
+  if(a) openAgentEditor(a.id);
+  else openAgentEditor(null, p.agent);
+}
 
 // ==================== KNOWLEDGE ====================
 // 本地知识库：手动输入为主，AI agent 亦可经 /api/kb/doc 写入（author=ai）
@@ -1555,7 +1705,7 @@ function openProjectDetail(id){
   const doneTodos=todos.filter(t=>t&&t.done).length;
 
   state.modal={title:p.name,body:`
-    <div class="modal-actions">${srv&&srv.sshUser?`<button class="btn btn-sm" onclick="sshLogin('${srv.ip}',${srv.sshPort},'${srv.sshUser}','${srv.sshKey}')">${icon('terminal')} ${t('pd_ssh_login')}</button>`:''}<button class="btn btn-sm">${icon('bot')} ${t('pd_agent_task')}</button>${p.url?`<button class="btn btn-sm" onclick="window.open('${p.url}','_blank')">${icon('globe')} ${t('visit_web')}</button>`:''}</div>
+    <div class="modal-actions">${srv&&srv.sshUser?`<button class="btn btn-sm" onclick="sshLogin('${srv.ip}',${srv.sshPort},'${srv.sshUser}','${srv.sshKey}')">${icon('terminal')} ${t('pd_ssh_login')}</button>`:''}<button class="btn btn-sm" onclick="openAgentFromProject('${p.id}')">${icon('bot')} ${t('pd_agent_task')}</button>${p.url?`<button class="btn btn-sm" onclick="window.open('${p.url}','_blank')">${icon('globe')} ${t('visit_web')}</button>`:''}</div>
 
     ${syncResultHTML(p)}
 
@@ -1564,7 +1714,7 @@ function openProjectDetail(id){
       <div class="info-divider"></div>
       <div class="info-item">${icon('server')} <strong>${srv?escapeHtml(srv.name):'-'}</strong></div>
       <div class="info-divider"></div>
-      <div class="info-item">${icon('bot')} <strong>${escapeHtml(p.agent)}</strong></div>
+      <div class="info-item">${icon('bot')} <strong>${escapeHtml(p.agent)}</strong>${agentModelBadge(p.agent)}</div>
       <div class="info-divider"></div>
       <div class="info-item">${icon('trending-up')} <strong>${p.progress}%</strong></div>
       <div class="info-divider"></div>
@@ -2387,6 +2537,10 @@ async function fetchConfig() {
       });
       const apiProjectIds = new Set(config.projects.map(p => p.id));
       state.projects = state.projects.filter(p => apiProjectIds.has(p.id));
+    }
+    // agents：受管实体，含每个 agent 使用的大模型（厂商/模型/key）
+    if (config.agents && Array.isArray(config.agents)) {
+      state.agents = config.agents.map(a => Object.assign({}, a));
     }
     render();
   } catch(e) {
