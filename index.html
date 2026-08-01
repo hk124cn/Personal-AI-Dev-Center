@@ -71,6 +71,44 @@ body{font-family:var(--font);background:var(--bg-deep);color:var(--text);height:
 /* ===== BUTTONS ===== */
 .btn{display:inline-flex;align-items:center;gap:6px;padding:7px 14px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--bg-elevated);color:var(--text);font-size:12px;font-weight:500;cursor:pointer;transition:all var(--dur) var(--ease);font-family:var(--font)}
 .btn:hover{border-color:var(--border-hover);background:var(--bg-card-hover)}
+.kb-wrap{display:flex;gap:16px;height:calc(100vh - 210px);min-height:420px}
+.kb-side{width:220px;flex:0 0 220px;background:var(--bg-card);border:1px solid var(--border);border-radius:12px;padding:12px;display:flex;flex-direction:column}
+.kb-side-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
+.kb-side-head strong{font-size:14px}
+.kb-cats{display:flex;flex-direction:column;gap:2px;overflow-y:auto;flex:1;margin:0 -4px;padding:0 4px}
+.kb-cat{display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:8px;cursor:pointer;font-size:13px;color:var(--text-secondary)}
+.kb-cat:hover{background:var(--bg-card-hover)}
+.kb-cat.active{background:rgba(var(--accent-rgb),.14);color:var(--accent)}
+.kb-cat-count{margin-left:auto;font-size:11px;color:var(--text-tertiary);background:var(--bg-card-hover);padding:1px 7px;border-radius:10px}
+.kb-side-actions{display:flex;gap:6px;margin-top:10px}
+.kb-main{flex:1;display:flex;flex-direction:column;min-width:0}
+.kb-toolbar{display:flex;align-items:center;gap:12px;margin-bottom:12px}
+.kb-search{flex:1;display:flex;align-items:center;gap:8px;background:var(--bg-card);border:1px solid var(--border);border-radius:10px;padding:8px 12px;color:var(--text-tertiary)}
+.kb-search input{border:none;background:none;outline:none;flex:1;color:var(--text);font-size:14px}
+.kb-count{font-size:12px;color:var(--text-tertiary);white-space:nowrap}
+.kb-list{display:flex;flex-direction:column;gap:10px;overflow-y:auto;flex:1;padding-right:4px}
+.kb-doc{background:var(--bg-card);border:1px solid var(--border);border-radius:12px;padding:14px;cursor:pointer;transition:.15s}
+.kb-doc:hover{border-color:var(--border-hover);transform:translateY(-1px)}
+.kb-doc-title{display:flex;align-items:center;gap:8px;font-weight:600;font-size:14px;color:var(--text)}
+.kb-doc-meta{font-size:12px;color:var(--text-tertiary);margin:4px 0}
+.kb-doc-tags{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px}
+.kb-tag{font-size:11px;color:var(--accent);background:rgba(var(--accent-rgb),.14);padding:1px 8px;border-radius:10px}
+.kb-doc-excerpt{font-size:12px;color:var(--text-secondary);line-height:1.5;max-height:48px;overflow:hidden}
+.kb-empty{padding:48px 20px;text-align:center;color:var(--text-tertiary);font-size:13px}
+.kb-editor{display:flex;flex-direction:column;gap:12px}
+.kb-field{display:flex;flex-direction:column;gap:4px}
+.kb-field label{font-size:12px;color:var(--text-tertiary)}
+.kb-row{display:flex;gap:12px}.kb-row .kb-field{flex:1}
+.kb-input{background:var(--bg-input);border:1px solid var(--border);border-radius:8px;padding:8px 10px;color:var(--text);font-size:13px;outline:none}
+.kb-input:focus{border-color:var(--accent)}
+.kb-edit-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;height:340px}
+.kb-textarea{background:var(--bg-input);border:1px solid var(--border);border-radius:8px;padding:10px;color:var(--text);font-size:13px;font-family:monospace;resize:none;outline:none;line-height:1.6}
+.kb-preview{background:var(--bg-input);border:1px solid var(--border);border-radius:8px;padding:10px;overflow-y:auto;font-size:13px;line-height:1.7}
+.kb-preview pre{background:var(--bg-deep);padding:10px;border-radius:6px;overflow-x:auto;color:var(--text)}
+.kb-preview code{font-family:monospace}
+.kb-preview h1,.kb-preview h2,.kb-preview h3{margin:10px 0 6px}
+.kb-preview a{color:var(--accent)}
+.kb-editor-actions{display:flex;gap:8px;align-items:center}
 .btn.active{border-color:var(--green);background:var(--green);color:#fff;font-weight:700;box-shadow:0 2px 10px rgba(34,197,94,.35)}
 .btn svg{width:14px;height:14px;stroke-width:1.8}
 .btn-primary{background:var(--accent);border-color:var(--accent);color:#fff}
@@ -1319,10 +1357,166 @@ function viewAgents(){
   <div class="panel"><div class="panel-head"><h3>${icon('grid-3x3')} ${t('ag_matrix')}</h3></div><div class="panel-body" style="overflow-x:auto"><table class="matrix"><thead><tr><th>${t('ag_server_col')}</th>${state.agents.map(a=>`<th>${a.name}</th>`).join('')}</tr></thead><tbody>${state.servers.filter(s=>s.id!=='future').map(s=>`<tr><td>${s.name}</td>${state.agents.map(a=>`<td><span class="${a.servers.includes(s.id)?'dot-yes':'dot-no'}">${a.servers.includes(s.id)?icon('check-circle'):icon('circle')}</span></td>`).join('')}</tr>`).join('')}</tbody></table></div></div>`}
 
 // ==================== KNOWLEDGE ====================
+// 本地知识库：手动输入为主，AI agent 亦可经 /api/kb/doc 写入（author=ai）
+let kbCache = {docs:[], cats:[], cat:null, q:'', loaded:false};
+
 function viewKnowledge(){
-  const cats=[{icon:'blocks',name:t('kb_arch'),desc:t('kb_arch_desc'),count:t('kb_todo'),hue:252},{icon:'file-text',name:t('kb_dev'),desc:t('kb_dev_desc'),count:state.projects.length+' '+t('kb_projects'),hue:217},{icon:'wrench',name:t('kb_ops'),desc:t('kb_ops_desc'),count:state.servers.length+' '+t('kb_servers'),hue:160},{icon:'sparkles',name:t('kb_ai'),desc:t('kb_ai_desc'),count:state.agents.length+' '+t('kb_tools'),hue:32},{icon:'copy',name:t('kb_template'),desc:t('kb_template_desc'),count:t('kb_building'),hue:188},{icon:'lightbulb',name:t('kb_inspiration'),desc:t('kb_inspiration_desc'),count:t('kb_building'),hue:347}];
-  return`<div class="kb-grid">${cats.map(c=>`<div class="kb-card"><div class="kb-icon" style="background:hsl(${c.hue},60%,50%,.1);color:hsl(${c.hue},60%,65%)">${icon(c.icon)}</div><h4>${c.name}</h4><p>${c.desc}</p><div class="count" style="color:hsl(${c.hue},60%,65%)">${c.count}</div></div>`).join('')}</div>
-  <div class="panel" style="margin-top:16px"><div class="panel-head"><h3>${icon('info')} ${t('kb_about')}</h3></div><div class="panel-body" style="color:var(--text-secondary);font-size:13px;line-height:1.8">${t('kb_about_text')}</div></div>`}
+  if(!kbCache.loaded){ kbCache.loaded=true; setTimeout(kbLoad,0); }
+  return `
+  <div class="kb-wrap">
+    <div class="kb-side">
+      <div class="kb-side-head"><strong>知识库</strong><button class="btn btn-sm btn-primary" onclick="openKbEditor()">${icon('plus')} 新建</button></div>
+      <div class="kb-cats" id="kb-cats">${kbCatsHTML()}</div>
+      <div class="kb-side-actions">
+        <button class="btn btn-sm" onclick="kbExport()">${icon('download')} 导出</button>
+        <button class="btn btn-sm" onclick="kbImportClick()">${icon('upload')} 导入</button>
+        <input type="file" id="kb-import-file" accept="application/json" style="display:none" onchange="kbImport(this)">
+      </div>
+    </div>
+    <div class="kb-main">
+      <div class="kb-toolbar">
+        <div class="kb-search">${icon('search')}<input type="text" placeholder="搜索标题 / 标签 / 正文..." value="${escapeHtml(kbCache.q)}" oninput="kbSearch(this.value)"></div>
+        <span class="kb-count">${kbFiltered().length} 篇</span>
+      </div>
+      <div class="kb-list" id="kb-list">${kbListHTML()}</div>
+    </div>
+  </div>`;
+}
+
+function kbFiltered(){
+  let docs = kbCache.docs;
+  if(kbCache.cat) docs = docs.filter(d=>d.category===kbCache.cat);
+  if(kbCache.q){ const q=kbCache.q.toLowerCase(); docs = docs.filter(d=>(d.title||'').toLowerCase().includes(q)||(d.tags||[]).join(' ').toLowerCase().includes(q)||(d.excerpt||'').toLowerCase().includes(q)); }
+  return docs;
+}
+
+function kbCatsHTML(){
+  const all = `<div class="kb-cat ${!kbCache.cat?'active':''}" onclick="kbSelectCat(null)">${icon('layers')} 全部 <span class="kb-cat-count">${kbCache.docs.length}</span></div>`;
+  const list = kbCache.cats.map(c=>`<div class="kb-cat ${kbCache.cat===c.name?'active':''}" onclick="kbSelectCat(${JSON.stringify(c.name)})">${icon('folder')} ${escapeHtml(c.name)} <span class="kb-cat-count">${c.count}</span></div>`).join('');
+  return all + list;
+}
+
+function kbListHTML(){
+  const docs = kbFiltered();
+  if(kbCache.docs.length===0) return '<div class="kb-empty">还没有笔记，点「新建」写第一篇吧</div>';
+  if(docs.length===0) return '<div class="kb-empty">没有匹配的笔记</div>';
+  return docs.map(d=>`<div class="kb-doc" onclick="openKbEditor('${encodeURIComponent(d.id)}')">
+    <div class="kb-doc-title">${icon('file-text')} ${escapeHtml(d.title)}</div>
+    <div class="kb-doc-meta">${escapeHtml(d.category)} · ${d.author==='ai'?'AI':escapeHtml(d.author||'我')} · ${d.updated?relativeTime(d.updated):''}</div>
+    <div class="kb-doc-tags">${d.tags.map(t=>`<span class="kb-tag">#${escapeHtml(t)}</span>`).join('')}</div>
+    <div class="kb-doc-excerpt">${escapeHtml(d.excerpt||'')}</div>
+  </div>`).join('');
+}
+
+async function kbLoad(){
+  try{
+    const r1 = await fetch(API_BASE+'/api/kb/docs?cat='+encodeURIComponent(kbCache.cat||'')+'&q='+encodeURIComponent(kbCache.q||''));
+    kbCache.docs = await r1.json();
+    const r2 = await fetch(API_BASE+'/api/kb/categories');
+    kbCache.cats = await r2.json();
+    const list = document.getElementById('kb-list');
+    const cats = document.getElementById('kb-cats');
+    if(list) list.innerHTML = kbListHTML();
+    if(cats) cats.innerHTML = kbCatsHTML();
+    if(window.lucide) lucide.createIcons();
+  }catch(e){}
+}
+
+function kbSelectCat(cat){ kbCache.cat = cat; kbLoad(); }
+function kbSearch(q){ kbCache.q = q; kbLoad(); }
+
+async function openKbEditor(id){
+  let doc = {category: kbCache.cat || (kbCache.cats[0]&&kbCache.cats[0].name) || '运维笔记', title:'', tags:[], body:'', author:'human'};
+  if(id){
+    id = decodeURIComponent(id);
+    try{
+      const r = await fetch(API_BASE+'/api/kb/doc/'+encodeURIComponent(id));
+      if(r.ok) doc = await r.json();
+    }catch(e){}
+  }
+  const catOpts = kbCache.cats.map(c=>`<option value="${escapeHtml(c.name)}" ${c.name===doc.category?'selected':''}>${escapeHtml(c.name)}</option>`).join('') + '<option value="__new__">+ 新建分类</option>';
+  state.modal = {title: id?'编辑笔记':'新建笔记', body:`
+    <div class="kb-editor">
+      <div class="kb-field"><label>标题</label><input id="kb-title" class="kb-input" value="${escapeHtml(doc.title||'')}" placeholder="笔记标题"></div>
+      <div class="kb-row">
+        <div class="kb-field"><label>分类</label><select id="kb-cat" class="kb-input">${catOpts}</select></div>
+        <div class="kb-field"><label>标签（逗号分隔）</label><input id="kb-tags" class="kb-input" value="${escapeHtml((doc.tags||[]).join(', '))}" placeholder="aliyun, 网络"></div>
+      </div>
+      <div class="kb-field"><label>正文（Markdown）</label>
+        <div class="kb-edit-grid">
+          <textarea id="kb-body" class="kb-textarea" oninput="kbPreview()">${escapeHtml(doc.body||'')}</textarea>
+          <div class="kb-preview" id="kb-preview"></div>
+        </div>
+      </div>
+      <div class="kb-editor-actions">
+        ${id?`<button class="btn btn-sm btn-danger" onclick="deleteKbDoc('${encodeURIComponent(id)}')">${icon('trash-2')} 删除</button>`:''}
+        <span style="flex:1"></span>
+        <button class="btn btn-sm" onclick="closeModal()">${icon('x')} 取消</button>
+        <button class="btn btn-sm btn-primary" onclick="saveKbDoc('${id?encodeURIComponent(id):''}')">${icon('save')} 保存</button>
+      </div>
+    </div>`};
+  render(); if(window.lucide) lucide.createIcons(); kbPreview();
+}
+
+async function kbPreview(){
+  const ta = document.getElementById('kb-body'); if(!ta) return;
+  try{
+    const r = await fetch(API_BASE+'/api/kb/render', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({body: ta.value})});
+    const j = await r.json();
+    const pv = document.getElementById('kb-preview'); if(pv) pv.innerHTML = j.html;
+  }catch(e){}
+}
+
+async function saveKbDoc(id){
+  const title = document.getElementById('kb-title').value.trim();
+  let cat = document.getElementById('kb-cat').value;
+  if(cat==='__new__'){ cat = prompt('新分类名称') || '未分类'; }
+  const tags = document.getElementById('kb-tags').value.split(',').map(s=>s.trim()).filter(Boolean);
+  const body = document.getElementById('kb-body').value;
+  if(!title){ showToast('请填写标题','alert-circle'); return; }
+  const payload = {category: cat, title, tags, body, author:'human'};
+  if(id) payload.id = decodeURIComponent(id);
+  try{
+    const r = await fetch(API_BASE+'/api/kb/doc', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload)});
+    if(!r.ok) throw new Error('save failed');
+    closeModal(); kbCache.loaded=false; kbLoad(); showToast('已保存','check-circle');
+  }catch(e){ showToast('保存失败: '+e.message,'alert-circle'); }
+}
+
+async function deleteKbDoc(id){
+  id = decodeURIComponent(id);
+  if(!confirm('确定删除这篇笔记？')) return;
+  try{
+    const r = await fetch(API_BASE+'/api/kb/doc/'+encodeURIComponent(id), {method:'DELETE'});
+    if(!r.ok) throw new Error('delete failed');
+    closeModal(); kbCache.loaded=false; kbLoad(); showToast('已删除','check-circle');
+  }catch(e){ showToast('删除失败','alert-circle'); }
+}
+
+async function kbExport(){
+  try{
+    const r = await fetch(API_BASE+'/api/kb/export');
+    const j = await r.json();
+    const blob = new Blob([JSON.stringify(j,null,2)], {type:'application/json'});
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+    a.download = 'knowledge-backup-'+new Date().toISOString().slice(0,10)+'.json';
+    a.click();
+    showToast('已导出','check-circle');
+  }catch(e){ showToast('导出失败','alert-circle'); }
+}
+
+function kbImportClick(){ const el=document.getElementById('kb-import-file'); if(el) el.click(); }
+async function kbImport(input){
+  const f = input.files[0]; if(!f) return;
+  try{
+    const data = JSON.parse(await f.text());
+    const r = await fetch(API_BASE+'/api/kb/import', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({docs: data.docs||[]})});
+    const j = await r.json();
+    kbCache.loaded=false; kbLoad(); showToast('已导入 '+j.imported+' 篇','check-circle');
+  }catch(e){ showToast('导入失败: '+e.message,'alert-circle'); }
+  input.value='';
+}
+
 
 // ==================== SSH LOGIN ====================
 async function sshLogin(ip, port, user, keyPath) {
