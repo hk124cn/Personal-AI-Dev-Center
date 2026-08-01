@@ -123,6 +123,20 @@ class ProjectModel(BaseModel):
     url: str = ""
 
 
+class AgentModel(BaseModel):
+    id: str
+    name: str
+    icon: str = "bot"
+    color: str = "#3b82f6"
+    bg: str = "rgba(59,130,246,.1)"
+    desc: str = ""
+    servers: List[str] = []
+    # 该 agent 使用的大模型（单独填写，不绑定 llm_configs）
+    llm_provider: str = ""
+    llm_model: str = ""
+    llm_api_key: str = ""
+
+
 class DomainModel(BaseModel):
     id: str
     name: str  # 主域名，如 example.com
@@ -770,7 +784,8 @@ def get_full_config():
             "localPath": p.get("local_path", ""),
             "url": p.get("url", ""),
         })
-    result = {"servers": servers, "projects": projects}
+    result = {"servers": servers, "projects": projects,
+              "agents": config.get("agents", [])}
     if "llm" in config:
         result["llm"] = config["llm"]
     if "llm_configs" in config:
@@ -879,6 +894,61 @@ def delete_project(project_id: str):
     if not config:
         raise HTTPException(404, "Config not found")
     config["projects"] = [p for p in config["projects"] if p["id"] != project_id]
+    save_config(config)
+    return {"success": True}
+
+
+# ==================== Agents CRUD ====================
+# agent 为受管实体：每个 agent 单独填大模型厂商+模型（llm_provider/llm_model/llm_api_key）
+# 撞车判定由前端按 (llm_provider, llm_model, llm_api_key) 分组标红
+
+@app.get("/api/agents")
+def list_agents():
+    config = load_json(CONFIG_PATH) or {"agents": []}
+    return {"agents": config.get("agents", [])}
+
+
+@app.post("/api/agents")
+def add_agent(agent: AgentModel):
+    config = load_json(CONFIG_PATH) or {"servers": [], "projects": [], "agents": []}
+    config.setdefault("agents", [])
+    new_a = {
+        "id": agent.id, "name": agent.name, "icon": agent.icon,
+        "color": agent.color, "bg": agent.bg, "desc": agent.desc,
+        "servers": agent.servers,
+        "llm_provider": agent.llm_provider, "llm_model": agent.llm_model,
+        "llm_api_key": agent.llm_api_key,
+    }
+    config["agents"].append(new_a)
+    save_config(config)
+    return {"success": True, "id": agent.id}
+
+
+@app.put("/api/agents/{agent_id}")
+def update_agent(agent_id: str, agent: AgentModel):
+    config = load_json(CONFIG_PATH)
+    if not config:
+        raise HTTPException(404, "Config not found")
+    for i, a in enumerate(config.get("agents", [])):
+        if a["id"] == agent_id:
+            config["agents"][i] = {
+                "id": agent.id, "name": agent.name, "icon": agent.icon,
+                "color": agent.color, "bg": agent.bg, "desc": agent.desc,
+                "servers": agent.servers,
+                "llm_provider": agent.llm_provider, "llm_model": agent.llm_model,
+                "llm_api_key": agent.llm_api_key,
+            }
+            save_config(config)
+            return {"success": True}
+    raise HTTPException(404, "Agent not found")
+
+
+@app.delete("/api/agents/{agent_id}")
+def delete_agent(agent_id: str):
+    config = load_json(CONFIG_PATH)
+    if not config:
+        raise HTTPException(404, "Config not found")
+    config["agents"] = [a for a in config.get("agents", []) if a["id"] != agent_id]
     save_config(config)
     return {"success": True}
 
@@ -1086,7 +1156,7 @@ def launch_ssh(req: SSHLaunchRequest):
 # frontmatter: title / category / tags / author / created / updated
 # author 用于区分来源：human=手动输入, ai=AI agent 维护（绝不自动灌，需显式调用）
 
-KB_DIR = DATA_DIR / "knowledge"
+KB_DIR = USER_DATA_DIR / "knowledge"
 DEFAULT_KB_CATEGORIES = ["架构设计", "开发文档", "运维笔记", "AI工具指南", "项目模板", "灵感收集"]
 
 
