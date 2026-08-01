@@ -10,13 +10,15 @@ import subprocess
 import sys
 import time
 import socket
+import re
+import markdown
 from datetime import datetime
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
 from typing import Optional, List
 
@@ -1077,6 +1079,224 @@ def launch_ssh(req: SSHLaunchRequest):
         return {"success": True, "command": ssh_display}
     except Exception as e:
         return {"success": False, "error": str(e), "command": ssh_display}
+
+
+# ==================== Knowledge Base ====================
+# 本地知识库：backend/data/knowledge/<分类>/<id>.md
+# frontmatter: title / category / tags / author / created / updated
+# author 用于区分来源：human=手动输入, ai=AI agent 维护（绝不自动灌，需显式调用）
+
+KB_DIR = DATA_DIR / "knowledge"
+DEFAULT_KB_CATEGORIES = ["架构设计", "开发文档", "运维笔记", "AI工具指南", "项目模板", "灵感收集"]
+
+
+def _kb_slug(title: str) -> str:
+    s = (title or "untitled").strip()
+    s = re.sub(r'[^\w一-龥]+', '-', s, flags=re.UNICODE)
+    s = s.strip('-').lower()
+    return s or "untitled"
+
+
+def _kb_safe_cat(cat: str) -> str:
+    cat = (cat or "未分类").strip()
+    return cat.replace('\\', '_').replace('/', '_') or "未分类"
+
+
+def _kb_parse_frontmatter(text: str):
+    meta, body = {}, text
+    if text.startswith('---'):
+        end = text.find('\n---', 3)
+        if end != -1:
+            fm = text[3:end]
+            body = text[end + 4:].lstrip('\n')
+            for line in fm.splitlines():
+                if ':' not in line:
+                    continue
+                k, v = line.split(':', 1)
+                k, v = k.strip(), v.strip()
+                if k == 'tags' and v.startswith('['):
+                    try:
+                        meta[k] = json.loads(v)
+                        continue
+                    except Exception:
+                        pass
+                meta[k] = v
+    return meta, body
+
+
+def _kb_build_md(meta: dict, body: str) -> str:
+    lines = ["---",
+             f"title: {meta.get('title', '')}",
+             f"category: {meta.get('category', '未分类')}",
+             f"tags: {json.dumps(meta.get('tags', []), ensure_ascii=False)}",
+             f"author: {meta.get('author', 'human')}",
+             f"created: {meta.get('created', '')}",
+             f"updated: {meta.get('updated', '')}",
+             "---", "", body]
+    return "\n".join(lines)
+
+
+def _kb_scan_docs():
+    docs = []
+    if not KB_DIR.exists():
+        return docs
+    for f in KB_DIR.rglob("*.md"):
+        try:
+            text = f.read_text(encoding="utf-8")
+        except Exception:
+            continue
+        meta, body = _kb_parse_frontmatter(text)
+        rel = f.relative_to(KB_DIR)
+        category = meta.get("category") or (rel.parts[0] if len(rel.parts) > 1 else "未分类")
+        docs.append({
+            "id": f.stem,
+            "category": category,
+            "title": meta.get("title", f.stem),
+            "tags": meta.get("tags", []),
+            "author": meta.get("author", "human"),
+            "created": meta.get("created", ""),
+            "updated": meta.get("updated", ""),
+            "excerpt": body[:120].replace("\n", " "),
+        })
+    return docs
+
+
+@app.get("/api/kb/categories")
+def kb_categories():
+    docs = _kb_scan_docs()
+    counts = {}
+    for d in docs:
+        counts[d["category"]] = counts.get(d["category"], 0) + 1
+    cats = list(DEFAULT_KB_CATEGORIES)
+    for c in counts:
+        if c not in cats:
+            cats.append(c)
+    return [{"name": c, "count": counts.get(c, 0)} for c in cats]
+
+
+@app.get("/api/kb/docs")
+def kb_docs(cat: str = None, q: str = None):
+    docs = _kb_scan_docs()
+    if cat:
+        docs = [d for d in docs if d["category"] == cat]
+    if q:
+        ql = q.lower()
+        docs = [d for d in docs
+                if ql in (d["title"] or "").lower()
+                or ql in " ".join(d.get("tags", [])).lower()
+                or ql in (d.get("excerpt", "") or "").lower()]
+    docs.sort(key=lambda d: d.get("updated") or d.get("created") or "", reverse=True)
+    return docs
+
+
+@app.get("/api/kb/doc/{doc_id}")
+def kb_get_doc(doc_id: str):
+    if not KB_DIR.exists():
+        raise HTTPException(status_code=404, detail="not found")
+    for f in KB_DIR.rglob(f"{doc_id}.md"):
+        text = f.read_text(encoding="utf-8")
+        meta, body = _kb_parse_frontmatter(text)
+        return {"id": doc_id, **meta, "body": body}
+    raise HTTPException(status_code=404, detail="not found")
+
+
+@app.post("/api/kb/doc")
+def kb_save_doc(payload: dict):
+    cat = _kb_safe_cat(payload.get("category") or "未分类")
+    title = (payload.get("title") or "").strip() or "未标题"
+    tags = payload.get("tags") or []
+    if isinstance(tags, str):
+        tags = [t.strip() for t in tags.split(",") if t.strip()]
+    author = payload.get("author") or "human"
+    body = payload.get("body") or ""
+    now = datetime.now().isoformat(timespec="seconds")
+    doc_id = payload.get("id")
+    existing = None
+    if doc_id and KB_DIR.exists():
+        for f in KB_DIR.rglob(f"{doc_id}.md"):
+            existing = f
+            break
+    created = now
+    if existing:
+        old_meta, _ = _kb_parse_frontmatter(existing.read_text(encoding="utf-8"))
+        created = old_meta.get("created") or now
+        if (old_meta.get("category") or existing.parent.name) != cat:
+            existing.unlink()
+            existing = None
+    if not doc_id or existing is None:
+        doc_id = _kb_slug(title)
+        cat_dir = KB_DIR / cat
+        cat_dir.mkdir(parents=True, exist_ok=True)
+        target = cat_dir / f"{doc_id}.md"
+        if target.exists() and not payload.get("id"):
+            doc_id = f"{doc_id}-{int(time.time())}"
+            target = cat_dir / f"{doc_id}.md"
+    else:
+        target = existing
+    meta = {"title": title, "category": cat, "tags": tags, "author": author,
+            "created": created, "updated": now}
+    target.write_text(_kb_build_md(meta, body), encoding="utf-8")
+    return {"id": doc_id, **meta}
+
+
+@app.delete("/api/kb/doc/{doc_id}")
+def kb_delete_doc(doc_id: str):
+    if KB_DIR.exists():
+        for f in KB_DIR.rglob(f"{doc_id}.md"):
+            f.unlink()
+            return {"success": True}
+    raise HTTPException(status_code=404, detail="not found")
+
+
+@app.post("/api/kb/render")
+def kb_render(payload: dict):
+    body = payload.get("body", "")
+    try:
+        html = markdown.markdown(body, extensions=["fenced_code", "tables", "nl2br"])
+    except Exception:
+        html = "<pre>" + body.replace("&", "&amp;").replace("<", "&lt;") + "</pre>"
+    return {"html": html}
+
+
+@app.get("/api/kb/export")
+def kb_export():
+    docs = _kb_scan_docs()
+    full = []
+    for d in docs:
+        body = ""
+        if KB_DIR.exists():
+            for f in KB_DIR.rglob(f"{d['id']}.md"):
+                _, body = _kb_parse_frontmatter(f.read_text(encoding="utf-8"))
+                break
+        full.append({**d, "body": body})
+    return JSONResponse(
+        content={"version": 1, "exported_at": datetime.now().isoformat(timespec="seconds"), "docs": full},
+        headers={"Content-Disposition": "attachment; filename=knowledge-backup.json"},
+    )
+
+
+@app.post("/api/kb/import")
+def kb_import(payload: dict):
+    docs = payload.get("docs", [])
+    n = 0
+    for d in docs:
+        cat = _kb_safe_cat(d.get("category") or "未分类")
+        title = d.get("title") or "未标题"
+        tags = d.get("tags") or []
+        body = d.get("body") or ""
+        doc_id = d.get("id") or _kb_slug(title)
+        created = d.get("created") or datetime.now().isoformat(timespec="seconds")
+        updated = d.get("updated") or created
+        author = d.get("author") or "human"
+        cat_dir = KB_DIR / cat
+        cat_dir.mkdir(parents=True, exist_ok=True)
+        target = cat_dir / f"{doc_id}.md"
+        if not target.exists():
+            meta = {"title": title, "category": cat, "tags": tags, "author": author,
+                    "created": created, "updated": updated}
+            target.write_text(_kb_build_md(meta, body), encoding="utf-8")
+            n += 1
+    return {"imported": n}
 
 
 # ==================== Static Files ====================
