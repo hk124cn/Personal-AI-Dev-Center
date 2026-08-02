@@ -186,7 +186,10 @@ class AssetModel(BaseModel):
     # --- 预付卡 / 注册网站 ---
     prepaid: bool = False  # 是否预付卡（信用卡）：预付卡看余额，信用赊账卡看额度
     prepaid_balance: float = 0  # 预付卡内余额
-    registrations: List[dict] = []  # SIM 注册网站 [{name, url}]
+    registrations: List[dict] = []  # 注册/申请的网站 [{name, url}]（SIM 卡 / 邮箱通用）
+    # --- 邮箱专属 ---
+    email: str = ""  # 邮箱地址（邮箱名）
+    register_date: str = ""  # 邮箱注册时间
 
 
 def save_config(config):

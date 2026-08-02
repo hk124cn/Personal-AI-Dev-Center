@@ -511,7 +511,7 @@ select.form-input{cursor:pointer;appearance:none;background-image:url("data:imag
 <div id="app" class="app"></div>
 
 <script>
-const APP_VERSION = '1.4.14';
+const APP_VERSION = '1.4.15';
 // ==================== THEMES ====================
 const themes = {
   violet: {
@@ -843,6 +843,7 @@ const I18N = {
   asset_cat_sim:{zh:'SIM 卡',en:'SIM Card'},
   asset_cat_card:{zh:'信用卡',en:'Credit Card'},
   asset_cat_member:{zh:'会员订阅',en:'Membership'},
+  asset_cat_email:{zh:'邮箱',en:'Email'},
   asset_name:{zh:'名称',en:'Name'},
   asset_detail:{zh:'详情',en:'Detail'},
   asset_provider:{zh:'提供商',en:'Provider'},
@@ -860,6 +861,8 @@ const I18N = {
   asset_sim_total:{zh:'SIM 卡总费用',en:'SIM Total Cost'},
   asset_card_limit_total:{zh:'信用卡总授信',en:'Cards Total Limit'},
   asset_prepaid_total:{zh:'预付卡总余额',en:'Prepaid Total Balance'},
+  asset_email:{zh:'邮箱地址',en:'Email Address'},
+  asset_register_date:{zh:'注册时间',en:'Register Date'},
   // Priority tags
   pri_high:{zh:'高优先',en:'High'},
   pri_medium:{zh:'中优先',en:'Medium'},
@@ -1256,7 +1259,7 @@ function calcMonthlyFee(a){
 function currencySymbol(c){return{CNY:'¥',USD:'$',JPY:'¥',GBP:'£',EUR:'€',KRW:'₩',HKD:'HK$',TWD:'NT$'}[c]||c}
 
 function viewAssets(){
-  const cats=[{id:'sim',label:t('asset_cat_sim'),icon:'smartphone'},{id:'credit_card',label:t('asset_cat_card'),icon:'credit-card'},{id:'membership',label:t('asset_cat_member'),icon:'star'}];
+  const cats=[{id:'sim',label:t('asset_cat_sim'),icon:'smartphone'},{id:'credit_card',label:t('asset_cat_card'),icon:'credit-card'},{id:'email',label:t('asset_cat_email'),icon:'mail'},{id:'membership',label:t('asset_cat_member'),icon:'star'}];
   return`<div class="sec-head"><h3>${icon('credit-card')} ${t('nav_assets')}</h3><button class="btn btn-sm btn-primary" onclick="addAsset()">${icon('plus')} ${t('asset_add')}</button></div>
   ${assetSummaryHTML()}
   ${cats.map(c=>{const items=state.assets.filter(a=>a.category===c.id);return`<div class="panel" style="margin-bottom:16px"><div class="panel-head"><h3>${icon(c.icon)} ${c.label} (${items.length})</h3></div><div class="panel-body">${items.length===0?`<div style="color:var(--text-tertiary);font-size:13px;padding:12px">${t('asset_no_data')}</div>`:items.map(a=>assetRowHTML(a)).join('')}</div></div>`}).join('')}`}
@@ -1264,6 +1267,7 @@ function viewAssets(){
 function assetSummaryHTML(){
   const sims=state.assets.filter(a=>a.category==='sim');
   const cards=state.assets.filter(a=>a.category==='credit_card');
+  const emails=state.assets.filter(a=>a.category==='email');
   const members=state.assets.filter(a=>a.category==='membership');
   const simTotal=sims.reduce((s,a)=>s+toCNY(a.total_fee||0,a.currency||'CNY'),0);
   const cardLimit=cards.reduce((s,a)=>s+toCNY(a.credit_limit||0,a.currency||'CNY'),0);
@@ -1273,6 +1277,7 @@ function assetSummaryHTML(){
     ${summaryCard(t('asset_cat_sim'),sims.length,t('asset_sim_total'),'¥'+fmtMoney(simTotal))}
     ${summaryCard(t('asset_cat_card'),cards.length,t('asset_card_limit_total'),'¥'+fmtMoney(cardLimit))}
     ${prepaidCards.length?summaryCard(t('asset_prepaid'),prepaidCards.length,t('asset_prepaid_total'),'¥'+fmtMoney(prepaidTotal)):''}
+    ${summaryCard(t('asset_cat_email'),emails.length,'—','—')}
     ${summaryCard(t('asset_cat_member'),members.length,'—','—')}
   </div>`;
 }
@@ -1288,25 +1293,29 @@ function assetRowHTML(a){
     sub=`${a.home_region||''} ${a.phone_number?'· ****'+a.phone_number.slice(-4):''} ${a.data_allowance?'· '+a.data_allowance:''}`;
   }else if(a.category==='credit_card'){
     sub=`${a.card_network||''} ${a.last_four?'· ****'+a.last_four:''} ${a.card_form==='virtual'?'· 虚拟卡':'· 实体卡'} ${a.annual_fee&&!a.prepaid?'· 年费'+currencySymbol(a.currency)+a.annual_fee:''}`;
+  }else if(a.category==='email'){
+    sub=`${a.email||''} ${a.register_date?'· 注册于 '+a.register_date:''}`;
   }else{
     const planLabel=a.plan_type==='trial'?'试用中':'付费';
     sub=`${planLabel} ${a.total_fee?'· '+currencySymbol(a.currency)+a.total_fee:''} ${a.currency!=='CNY'&&a.total_fee?'(≈¥'+toCNY(a.total_fee,a.currency)+')':''}`;
   }
   const monthly=calcMonthlyFee(a);
   let feeInfo=a.category==='credit_card'&&!a.prepaid?(a.annual_fee?`年费 ${currencySymbol(a.currency)}${a.annual_fee}`:''):(monthly?`${currencySymbol(a.currency)}${monthly}/月`:'');
+  if(a.category==='email')feeInfo='';
   // 右侧补充信息
   let rightExtra='';
   if(a.category==='credit_card'&&a.prepaid){
     feeInfo='';
     rightExtra=`<div style="font-size:12px;font-weight:600;color:var(--green)">余额 ${currencySymbol(a.currency)}${fmtMoney(a.prepaid_balance||0)}</div>`;
   }
-  // 备注 + 注册网站
+  // 备注 + 注册/申请网站
   let noteLine='';
   if(a.note){ noteLine+=`<div class="li-note">${icon('sticky-note')} <span>${escapeHtml(a.note)}</span></div>`; }
-  if(a.category==='sim'&&Array.isArray(a.registrations)&&a.registrations.length){
+  if((a.category==='sim'||a.category==='email')&&Array.isArray(a.registrations)&&a.registrations.length){
     noteLine+=`<div class="li-regs">${a.registrations.map(r=>`<a class="reg-chip" href="javascript:void(0)" onclick="event.stopPropagation();openReg('${encodeURIComponent(r.url||'')}')" title="${escapeHtml(r.url||'')}">${icon('external-link')} ${escapeHtml(r.name||r.url||'链接')}</a>`).join('')}</div>`;
   }
-  return`<div class="li" style="cursor:pointer" onclick="editAsset('${a.id}')"><div class="li-icon" style="background:${a.status==='active'?'var(--green-muted)':a.status==='expired'?'var(--red-muted)':'var(--amber-muted)'}"><div class="dot ${a.status==='active'?'dot-green':a.status==='expired'?'dot-red':'dot-amber'}"></div></div><div class="li-body"><div class="li-title">${escapeHtml(a.name)}${a.provider?` <span style="font-weight:400;color:var(--text-tertiary);font-size:12px">${escapeHtml(a.provider)}</span>`:''}</div><div class="li-sub">${escapeHtml(sub)}</div>${noteLine}</div><div style="text-align:right">${rightExtra||`<div style="font-size:12px;font-weight:600;color:var(--accent)">${feeInfo}</div>`}<div style="font-size:11px;color:${days!==null&&days<30?'var(--red)':'var(--text-tertiary)'}">${days!==null?days+'天后到期':(a.expiry||'-')}</div></div></div>`}
+  const rightCol=a.category==='email'?'':`<div style="text-align:right">${rightExtra||`<div style="font-size:12px;font-weight:600;color:var(--accent)">${feeInfo}</div>`}<div style="font-size:11px;color:${days!==null&&days<30?'var(--red)':'var(--text-tertiary)'}">${days!==null?days+'天后到期':(a.expiry||'-')}</div></div>`;
+  return`<div class="li" style="cursor:pointer" onclick="editAsset('${a.id}')"><div class="li-icon" style="background:${a.status==='active'?'var(--green-muted)':a.status==='expired'?'var(--red-muted)':'var(--amber-muted)'}"><div class="dot ${a.status==='active'?'dot-green':a.status==='expired'?'dot-red':'dot-amber'}"></div></div><div class="li-body"><div class="li-title">${escapeHtml(a.name)}${a.provider?` <span style="font-weight:400;color:var(--text-tertiary);font-size:12px">${escapeHtml(a.provider)}</span>`:''}</div><div class="li-sub">${escapeHtml(sub)}</div>${noteLine}</div>${rightCol}</div>`}
 
 function openReg(urlEnc){
   const url=decodeURIComponent(urlEnc);
@@ -1315,14 +1324,14 @@ function openReg(urlEnc){
 }
 
 function addAsset(){
-  editMode={type:'asset',id:null,data:{category:'sim',name:'',provider:'',status:'active',note:'',total_fee:0,currency:'CNY',expiry:'',phone_number:'',home_region:'',data_allowance:'',throttle_speed:'',sms_capable:true,voice_capable:false,roaming:false,roaming_data:'',contract_months:0,card_network:'',card_form:'physical',last_four:'',issuing_bank:'',annual_fee:0,credit_limit:0,billing_day:0,payment_due_day:0,plan_type:'paid',trial_expiry:'',paid_expiry:'',auto_renew:false,prepaid:false,prepaid_balance:0,registrations:[]}};
+  editMode={type:'asset',id:null,data:{category:'sim',name:'',provider:'',status:'active',note:'',total_fee:0,currency:'CNY',expiry:'',phone_number:'',home_region:'',data_allowance:'',throttle_speed:'',sms_capable:true,voice_capable:false,roaming:false,roaming_data:'',contract_months:0,card_network:'',card_form:'physical',last_four:'',issuing_bank:'',annual_fee:0,credit_limit:0,billing_day:0,payment_due_day:0,plan_type:'paid',trial_expiry:'',paid_expiry:'',auto_renew:false,prepaid:false,prepaid_balance:0,registrations:[],email:'',register_date:''}};
   state.modal={title:t('asset_add'),body:'<div style="color:var(--text-tertiary);font-size:13px">'+t('loading')+'</div>'};
   render();renderAssetEditModal();
 }
 
 function editAsset(id){
   const a=state.assets.find(x=>x.id===id);if(!a)return;
-  editMode={type:'asset',id:id,data:Object.assign({category:'sim',name:'',provider:'',status:'active',note:'',total_fee:0,currency:'CNY',expiry:'',phone_number:'',home_region:'',data_allowance:'',throttle_speed:'',sms_capable:true,voice_capable:false,roaming:false,roaming_data:'',contract_months:0,card_network:'',card_form:'physical',last_four:'',issuing_bank:'',annual_fee:0,credit_limit:0,billing_day:0,payment_due_day:0,plan_type:'paid',trial_expiry:'',paid_expiry:'',auto_renew:false,prepaid:false,prepaid_balance:0,registrations:[]},JSON.parse(JSON.stringify(a)))};
+  editMode={type:'asset',id:id,data:Object.assign({category:'sim',name:'',provider:'',status:'active',note:'',total_fee:0,currency:'CNY',expiry:'',phone_number:'',home_region:'',data_allowance:'',throttle_speed:'',sms_capable:true,voice_capable:false,roaming:false,roaming_data:'',contract_months:0,card_network:'',card_form:'physical',last_four:'',issuing_bank:'',annual_fee:0,credit_limit:0,billing_day:0,payment_due_day:0,plan_type:'paid',trial_expiry:'',paid_expiry:'',auto_renew:false,prepaid:false,prepaid_balance:0,registrations:[],email:'',register_date:''},JSON.parse(JSON.stringify(a)))};
   state.modal={title:t('asset_edit')+' - '+a.name,body:'<div style="color:var(--text-tertiary);font-size:13px">'+t('loading')+'</div>'};
   render();renderAssetEditModal();
 }
@@ -1350,6 +1359,12 @@ function renderAssetEditModal(){
     <div class="form-row">${renderFormField('年费','asset_annual_fee',a.annual_fee,'number')}${renderFormField('信用额度','asset_limit',a.credit_limit,'number')}</div>
     <div class="form-row">${renderFormField('账单日(每月几号)','asset_billing',a.billing_day,'number')}${renderFormField('还款日(每月几号)','asset_payment_due',a.payment_due_day,'number')}</div>
     <div class="form-row">${renderFormField('卡片有效期','asset_expiry',a.expiry,'date')}<div class="form-group"></div></div>`;
+  }else if(a.category==='email'){
+    catFields=`
+    <div class="form-row">${renderFormField(t('asset_email'),'asset_email',a.email,'text')}${renderFormField(t('asset_register_date'),'asset_register_date',a.register_date,'date')}</div>
+    <div class="form-row"><div class="form-group" style="width:100%"><label class="form-label">${t('asset_registrations')}</label></div></div>
+    <div id="regList"></div>
+    <div class="form-row"><button class="btn btn-sm" type="button" onclick="addRegRow()">${icon('plus')} ${t('asset_add_reg')}</button></div>`;
   }else{
     catFields=`
     <div class="form-row"><div class="form-group"><label class="form-label">订阅类型</label><select class="form-input" name="asset_plan_type"><option value="trial" ${a.plan_type==='trial'?'selected':''}>免费试用</option><option value="paid" ${a.plan_type==='paid'?'selected':''}>正式付费</option></select></div><div class="form-group"><label class="form-label">自动续费</label><select class="form-input" name="asset_auto_renew"><option value="true" ${a.auto_renew?'selected':''}>是</option><option value="false" ${!a.auto_renew?'selected':''}>否</option></select></div></div>
@@ -1357,9 +1372,9 @@ function renderAssetEditModal(){
     <div class="form-row">${renderFormField('到期时间','asset_expiry',a.expiry||a.paid_expiry,'date')}<div class="form-group"></div></div>`;
   }
   const formHTML=`
-    <div class="form-row"><div class="form-group"><label class="form-label">${t('asset_category')}</label><select class="form-input" name="asset_category" onchange="editMode.data.category=this.value;renderAssetEditModal()"><option value="sim" ${a.category==='sim'?'selected':''}>${t('asset_cat_sim')}</option><option value="credit_card" ${a.category==='credit_card'?'selected':''}>${t('asset_cat_card')}</option><option value="membership" ${a.category==='membership'?'selected':''}>${t('asset_cat_member')}</option></select></div>${renderFormField(t('asset_name'),'asset_name',a.name,'text')}</div>
+    <div class="form-row"><div class="form-group"><label class="form-label">${t('asset_category')}</label><select class="form-input" name="asset_category" onchange="editMode.data.category=this.value;renderAssetEditModal()"><option value="sim" ${a.category==='sim'?'selected':''}>${t('asset_cat_sim')}</option><option value="credit_card" ${a.category==='credit_card'?'selected':''}>${t('asset_cat_card')}</option><option value="email" ${a.category==='email'?'selected':''}>${t('asset_cat_email')}</option><option value="membership" ${a.category==='membership'?'selected':''}>${t('asset_cat_member')}</option></select></div>${renderFormField(t('asset_name'),'asset_name',a.name,'text')}</div>
     <div class="form-row">${renderFormField(t('asset_provider'),'asset_provider',a.provider,'text')}<div class="form-group"><label class="form-label">货币</label><select class="form-input" name="asset_currency">${curOpts.map(c=>`<option value="${c.value}" ${a.currency===c.value?'selected':''}>${c.label}</option>`).join('')}</select></div></div>
-    ${a.category!=='credit_card'?`<div class="form-row">${renderFormField('总费用','asset_total_fee',a.total_fee,'number')}<div class="form-group"><label class="form-label">≈ 月费(自动计算)</label><input class="form-input" value="${calcMonthlyFee(a)?currencySymbol(a.currency)+calcMonthlyFee(a)+'/月':'—'}" disabled style="opacity:.6"></div></div>`:''}
+    ${a.category!=='credit_card'&&a.category!=='email'?`<div class="form-row">${renderFormField('总费用','asset_total_fee',a.total_fee,'number')}<div class="form-group"><label class="form-label">≈ 月费(自动计算)</label><input class="form-input" value="${calcMonthlyFee(a)?currencySymbol(a.currency)+calcMonthlyFee(a)+'/月':'—'}" disabled style="opacity:.6"></div></div>`:''}
     ${catFields}
     <div class="form-row">${renderFormField(t('asset_status'),'asset_status',a.status,'select',[{value:'active',label:'正常'},{value:'suspended',label:'暂停'},{value:'expired',label:'已过期'},{value:'pending',label:'待激活'}])}<div class="form-group"></div></div>
     ${renderFormField(t('asset_note'),'asset_note',a.note,'textarea')}
@@ -1429,7 +1444,9 @@ async function saveAsset(){
     auto_renew:v('asset_auto_renew')==='true',
     prepaid:v('asset_prepaid')==='true',
     prepaid_balance:parseFloat(v('asset_balance'))||0,
-    registrations:collectAssetRegs()
+    registrations:collectAssetRegs(),
+    email:v('asset_email'),
+    register_date:v('asset_register_date')
   };
   try{
     const url=API_BASE+'/api/assets'+(editMode.id?'/'+editMode.id:'');
