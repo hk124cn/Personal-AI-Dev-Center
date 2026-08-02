@@ -183,6 +183,10 @@ class AssetModel(BaseModel):
     trial_expiry: str = ""  # 试用到期日
     paid_expiry: str = ""  # 正式付费到期日
     auto_renew: bool = False  # 自动续费
+    # --- 预付卡 / 注册网站 ---
+    prepaid: bool = False  # 是否预付卡（信用卡）：预付卡看余额，信用赊账卡看额度
+    prepaid_balance: float = 0  # 预付卡内余额
+    registrations: List[dict] = []  # SIM 注册网站 [{name, url}]
 
 
 def save_config(config):
