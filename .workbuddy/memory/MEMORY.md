@@ -21,7 +21,7 @@
 
 ## 已知风险 / 待修（状态）
 - ✅ **密钥随 exe 分发（原安全债）已解决**：发布包改用 `config.example.json`（脱敏），`package.json` extraResources 打它；`app.py` 兜底（本地有 config.json 用本地，无则示例）。真实 config.json 不进包、不入库。
-- ✅ **版本号漂移已解决**：当前 `1.4.13`，`app.py`(FastAPI+health)、`electron/main.js`(关于)、`index.html`(APP_VERSION) 三处统一读 `package.json`。版本 bump 只改 `package.json` + `index.html` 两处即可。
+- ✅ **版本号漂移已解决**：当前 `1.4.14`，`app.py`(FastAPI+health)、`electron/main.js`(关于)、`index.html`(APP_VERSION) 三处统一读 `package.json`。版本 bump 只改 `package.json` + `index.html` 两处即可。
 - ⏸ **latest.json（07-20）比 config 多 3 个项目**：用户选择手动同步（因项目同步方向各异：云端开发→下载、本地开发→上传），暂不自动处理。
 - ✅ **docs 与现状不符已解决**：3 份 docs + `config.llm.example.json` 已对齐商汤，并修正不存在的 `sync.py --project` 命令。
 
@@ -40,6 +40,14 @@
 - 项目详情弹窗 `bot` 按钮改为 `openAgentFromProject(pid)`：打开该项目绑定 agent 的编辑器；卡片显示 `agentModelBadge`（agent 用的模型）。
 - 派生逻辑：首次从各项目 `agent` 文本值生成 agent 种子（"Claude Code"/"qoder"/"mimo"/"openclaw" 等），llm 字段留空由用户填。注意 `Openclaw`/`openclaw` 大小写不一致，需用户在 UI 里合并。
 - 实时配置（%APPDATA%）已注入 8 个 agents 种子；打包 exe 读的是 appdata config（非项目目录 config.json）。
+
+## 资产模块（2026-08-02，v1.4.14）
+- 「个人资产」是内置模块（导航 `assets`），三类：SIM卡(sim) / 信用卡(credit_card) / 会员订阅(membership)。数据存 `%APPDATA%/Personal AI Dev Center/config.json` 的 `assets` 数组，后端 `/api/assets`(GET/POST/PUT/DELETE)，前端 `state.assets` 由 `fetchAssets()` 加载。
+- `AssetModel` 字段（含本次新增）：通用(name/provider/status/note/total_fee/currency/expiry)；SIM(phone_number/home_region/data_allowance/throttle_speed/sms_capable/voice_capable/roaming/roaming_data/contract_months/**registrations**[{name,url}]）；信用卡(card_network/card_form/last_four/issuing_bank/annual_fee/credit_limit/billing_day/payment_due_day/**prepaid**[bool]/**prepaid_balance**[float])；会员(plan_type/trial_expiry/paid_expiry/auto_renew)。
+- 一览(`viewAssets`)顶部有统计卡 `assetSummaryHTML()`：SIM 总费用合计、信用卡总授信额度合计、预付卡总余额合计（均按汇率折算 ¥）。
+- SIM 一览显示可点击注册网站 chip（`openReg`→`window.open`）；预付卡右侧显示余额；SIM/信用卡均显示备注第一行（li-note）。
+- 编辑弹窗：SIM 注册网站动态增删（`data-reg-name`/`data-reg-url`，`collectAssetRegs()` 读取）；信用卡「是否预付卡」开关 +「卡内余额」；备注为独立多行文本框。
+- **汇率**：`exchangeRates` 硬编码默认值，`/api/exchange-rate` 可覆盖；`toCNY(amount,currency)` 折算。
 
 ## 构建注意事项（重要）
 - 实时测速 `speed-test` 已改为 **TCP 端口(22)探测 + 并行**（绕过阿里云/腾讯云 ICMP 拦截，原 ICMP ping 误报"超时"）。
