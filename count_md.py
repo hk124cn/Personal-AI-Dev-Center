@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 import os
+import sys
 
-path = r"D:\path\to\your\project"
+# 用法: python count_md.py <项目目录>
+path = sys.argv[1] if len(sys.argv) > 1 else r"D:\path\to\your\project"
 
 target_files = {"README.md", "readme.md", "TODO.md", "todo.md", "PROGRESS.md", "progress.md", "ISSUES.md", "issues.md", "CLAUDE.md", "claude.md"}
 max_file_size = 100 * 1024
