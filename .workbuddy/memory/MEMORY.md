@@ -21,7 +21,7 @@
 
 ## 已知风险 / 待修（状态）
 - ✅ **密钥随 exe 分发（原安全债）已解决**：发布包改用 `config.example.json`（脱敏），`package.json` extraResources 打它；`app.py` 兜底（本地有 config.json 用本地，无则示例）。真实 config.json 不进包、不入库。
-- ✅ **版本号漂移已解决**：当前 `1.4.14`，`app.py`(FastAPI+health)、`electron/main.js`(关于)、`index.html`(APP_VERSION) 三处统一读 `package.json`。版本 bump 只改 `package.json` + `index.html` 两处即可。
+- ✅ **版本号漂移已解决**：当前 `1.4.16`，`app.py`(FastAPI+health)、`electron/main.js`(关于)、`index.html`(APP_VERSION) 三处统一读 `package.json`。版本 bump 只改 `package.json` + `index.html` 两处即可。
 - ⏸ **latest.json（07-20）比 config 多 3 个项目**：用户选择手动同步（因项目同步方向各异：云端开发→下载、本地开发→上传），暂不自动处理。
 - ✅ **docs 与现状不符已解决**：3 份 docs + `config.llm.example.json` 已对齐商汤，并修正不存在的 `sync.py --project` 命令。
 
@@ -42,12 +42,21 @@
 - 实时配置（%APPDATA%）已注入 8 个 agents 种子；打包 exe 读的是 appdata config（非项目目录 config.json）。
 
 ## 资产模块（2026-08-02，v1.4.14）
-- 「个人资产」是内置模块（导航 `assets`），三类：SIM卡(sim) / 信用卡(credit_card) / 会员订阅(membership)。数据存 `%APPDATA%/Personal AI Dev Center/config.json` 的 `assets` 数组，后端 `/api/assets`(GET/POST/PUT/DELETE)，前端 `state.assets` 由 `fetchAssets()` 加载。
+- 「个人资产」是内置模块（导航 `assets`），四类：SIM卡(sim) / 信用卡(credit_card) / 邮箱(email) / 会员订阅(membership)。数据存 `%APPDATA%/Personal AI Dev Center/config.json` 的 `assets` 数组，后端 `/api/assets`(GET/POST/PUT/DELETE)，前端 `state.assets` 由 `fetchAssets()` 加载。
 - `AssetModel` 字段（含本次新增）：通用(name/provider/status/note/total_fee/currency/expiry)；SIM(phone_number/home_region/data_allowance/throttle_speed/sms_capable/voice_capable/roaming/roaming_data/contract_months/**registrations**[{name,url}]）；信用卡(card_network/card_form/last_four/issuing_bank/annual_fee/credit_limit/billing_day/payment_due_day/**prepaid**[bool]/**prepaid_balance**[float])；会员(plan_type/trial_expiry/paid_expiry/auto_renew)。
 - 一览(`viewAssets`)顶部有统计卡 `assetSummaryHTML()`：SIM 总费用合计、信用卡总授信额度合计、预付卡总余额合计（均按汇率折算 ¥）。
 - SIM 一览显示可点击注册网站 chip（`openReg`→`window.open`）；预付卡右侧显示余额；SIM/信用卡均显示备注第一行（li-note）。
 - 编辑弹窗：SIM 注册网站动态增删（`data-reg-name`/`data-reg-url`，`collectAssetRegs()` 读取）；信用卡「是否预付卡」开关 +「卡内余额」；备注为独立多行文本框。
 - **汇率**：`exchangeRates` 硬编码默认值，`/api/exchange-rate` 可覆盖；`toCNY(amount,currency)` 折算。
+- **邮箱类别**（v1.4.15）：第四类 `email`（email/register_date + registrations 申请网站可点击 chip）。
+- **跨类别关联**（v1.4.16，主键-外键式）：`linked_phone_id`（email/credit_card/membership → SIM id）、`linked_email_id`（membership → email id）。真源只在引用方；SIM 侧派生（simLinkedEmails/Cards/Members）。下拉选项由 state.assets 派生 → 增删自动更新；deleteAsset 自动清悬空引用；显示端对失效 id 视为未设置。SIM 编辑页有「该号码注册的邮箱」勾选列表，保存时 reconcile 双向同步邮箱的 linked_phone_id。
+- **详情卡片**（v1.4.16）：点击资产行 → `viewAsset(id)` 详情卡（modal-sm 560px），编辑按钮才进 `editAsset`；空字段不渲染；关联 chips 可互跳。
+
+## 下载引擎（v1.4.16 重写 sync_download）
+- 扫描：`_remote_stat_tree_fast`（远程一条 `find -printf '%T@\t%s\t%p\0'`，只读；失败回退 SFTP 递归 `_sftp_stat_tree`）。
+- 传输：`tar --null -cf - -C <path> -T -`，文件清单走 **stdin**（无 ARG_MAX、服务器零写入）；`tarfile mode='r|'` 流式解盘（不占内存）；stderr 后台线程排空（防通道死锁——多文件卡死主因）；逐文件 `phase='file'` 进度；路径穿越防护。
+- 取消：`_DOWNLOAD_CANCEL` 注册表 + `POST /api/sync-download-cancel/{id}`；前端 `closeSyncProgress` 对 download 先 POST 取消。
+- **GitHub 脱敏**（2026-08-09 完成）：全 git 历史已 filter-branch 重写，真实 IP/用户名/域名/密钥/项目名/本地路径 0 残留（含 docs、test_llm.py、count_md.py）；config.example.json=演示模拟数据、config.llm.example.json=纯 llm 示例。push 前可直接推 master。
 
 ## 构建注意事项（重要）
 - 实时测速 `speed-test` 已改为 **TCP 端口(22)探测 + 并行**（绕过阿里云/腾讯云 ICMP 拦截，原 ICMP ping 误报"超时"）。

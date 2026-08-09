@@ -8,8 +8,10 @@ import json
 import re
 import os
 import io
+import shlex
 import stat
 import sys
+import threading
 import time
 import tarfile
 import tempfile
@@ -681,6 +683,47 @@ def _sftp_stat_tree(sftp, remote_dir: str, remote_root: str = "") -> dict:
     return result
 
 
+def _remote_stat_tree_fast(client, remote_path: str):
+    """
+    用一条远程 find 命令快速获取文件树 {完整路径: (mtime, size)}。
+    只读操作，不在服务器上写任何文件。失败（非 GNU find 等）返回 None，调用方回退 SFTP 递归。
+    """
+    try:
+        prune = " -o ".join(f"-name {shlex.quote(d)}" for d in sorted(DEFAULT_SYNC_IGNORE))
+        cmd = (
+            f"cd {shlex.quote(remote_path)} && "
+            f"find . \\( {prune} \\) -prune -o -type f -printf '%T@\\t%s\\t%p\\0'"
+        )
+        stdin, stdout, stderr = client.exec_command(cmd, timeout=180)
+        data = stdout.read()
+        status = stdout.channel.recv_exit_status()
+        if status != 0 or not data:
+            return None
+        out = {}
+        base = remote_path.rstrip("/")
+        for rec in data.split(b"\0"):
+            if not rec:
+                continue
+            parts = rec.split(b"\t", 2)
+            if len(parts) != 3:
+                continue
+            try:
+                mtime = float(parts[0])
+                size = int(parts[1])
+            except ValueError:
+                continue
+            rel = parts[2].decode("utf-8", "surrogateescape")
+            if rel.startswith("./"):
+                rel = rel[2:]
+            if not rel or _should_ignore(rel):
+                continue
+            out[f"{base}/{rel}"] = (mtime, size)
+        return out
+    except Exception as e:
+        print(f"[sync-download] 快速扫描失败，回退 SFTP 递归: {e}")
+        return None
+
+
 def _local_stat_tree(local_dir: str) -> dict:
     """获取本地目录下所有文件的 (mtime, size)，返回 {相对路径: (mtime, size)}"""
     result = {}
@@ -701,10 +744,11 @@ def _local_stat_tree(local_dir: str) -> dict:
     return result
 
 
-def sync_download(server: dict, project: dict, local_path: str, progress_cb=None) -> dict:
+def sync_download(server: dict, project: dict, local_path: str, progress_cb=None, cancel_event=None) -> dict:
     """
     从远程服务器增量下载到本地目录。
-    使用 tar-over-SSH 批量传输，比逐文件 SFTP 快 10-50 倍。
+    tar-over-SSH 批量传输；文件清单经 stdin 传给 tar（无命令行长度上限、不在服务器写任何文件），
+    tar 流式解包（不缓存整个包到内存），逐文件上报进度，支持取消。
     """
     remote_path = project["remote_path"]
     result = {"downloaded": 0, "skipped": 0, "failed": 0, "errors": [], "total": 0}
@@ -713,6 +757,9 @@ def sync_download(server: dict, project: dict, local_path: str, progress_cb=None
         if progress_cb:
             try: progress_cb(kw)
             except Exception: pass
+
+    def _cancelled():
+        return cancel_event is not None and cancel_event.is_set()
 
     _report(phase='connecting')
 
@@ -726,7 +773,12 @@ def sync_download(server: dict, project: dict, local_path: str, progress_cb=None
     try:
         print(f"[sync-download] 扫描远程 {remote_path} ...")
         _report(phase='scanning')
-        remote_files = _sftp_stat_tree(sftp, remote_path)
+        # 优先一条 find 命令快速扫描（只读），失败回退 SFTP 递归
+        remote_files = None if _cancelled() else _remote_stat_tree_fast(client, remote_path)
+        if remote_files is None and not _cancelled():
+            remote_files = _sftp_stat_tree(sftp, remote_path)
+        if remote_files is None:
+            remote_files = {}
         print(f"[sync-download] 远程文件数: {len(remote_files)}")
         local_files = _local_stat_tree(local_path) if os.path.isdir(local_path) else {}
         print(f"[sync-download] 本地文件数: {len(local_files)}")
@@ -745,6 +797,12 @@ def sync_download(server: dict, project: dict, local_path: str, progress_cb=None
         total_to_transfer = len(to_download)
         total_bytes = sum(remote_files[rp][1] for rp, _ in to_download)
         print(f"[sync-download] 需下载 {total_to_transfer} 个文件 ({total_bytes / 1024 / 1024:.1f}MB)，跳过 {result['skipped']} 个")
+
+        if _cancelled():
+            result["errors"].append("已取消")
+            _report(phase='cancelled')
+            return result
+
         _report(phase='transferring', total=result["total"], to_transfer=total_to_transfer,
                 skipped=result["skipped"], current=0, total_bytes=total_bytes)
 
@@ -752,72 +810,107 @@ def sync_download(server: dict, project: dict, local_path: str, progress_cb=None
             _report(phase='done', **{k: result[k] for k in ('downloaded', 'skipped', 'failed', 'total', 'errors')})
             return result
 
-        # --- tar-over-SSH 批量传输 ---
-        escaped_files = " ".join(f"'{rp}'" for rp, _ in to_download)
-        cmd = f"tar cf - {escaped_files}"
-        print(f"[sync-download] 执行: {cmd[:120]}...")
+        # --- tar-over-SSH：文件清单经 stdin 传入（--null -T -），不受命令行长度限制 ---
+        # 相对路径 + -C remote_path，解包时 member.name 即为相对路径；服务器端零写入。
+        cmd = f"tar --null -cf - -C {shlex.quote(remote_path)} -T -"
+        print(f"[sync-download] 执行: {cmd}（{total_to_transfer} 个文件经 stdin 传入）")
 
         try:
-            stdin, stdout, stderr = client.exec_command(cmd, bufsize=65536)
+            stdin, stdout, stderr = client.exec_command(cmd, bufsize=262144)
+
+            # 后台线程持续排空 stderr，防止 tar 告警塞满通道窗口导致死锁
+            err_chunks = []
+            def _drain_err():
+                try:
+                    while True:
+                        b = stderr.read(65536)
+                        if not b:
+                            break
+                        err_chunks.append(b)
+                except Exception:
+                    pass
+            err_thread = threading.Thread(target=_drain_err, daemon=True)
+            err_thread.start()
+
+            # 写入 null 分隔的相对路径清单，然后关闭写端让 tar 开始打包
+            payload = b"".join(rel.encode("utf-8", "surrogateescape") + b"\0" for _, rel in to_download)
+            stdin.write(payload)
+            stdin.flush()
+            stdin.channel.shutdown_write()
 
             os.makedirs(local_path, exist_ok=True)
             transferred = 0
-            chunk_size = 65536
-            raw = io.BytesIO()
+            current = 0
+            last_report = 0.0
 
-            while True:
-                chunk = stdout.read(chunk_size)
-                if not chunk:
-                    break
-                raw.write(chunk)
-                transferred += len(chunk)
-                _report(phase='batch', bytes=transferred, total_bytes=total_bytes,
-                        to_transfer=total_to_transfer)
-
-            err_output = stderr.read().decode("utf-8", errors="replace").strip()
-            exit_status = stdout.channel.recv_exit_status()
-
-            if exit_status != 0 and err_output:
-                print(f"[sync-download] tar stderr: {err_output}")
-
-            # 解包 tar 流到本地
-            raw.seek(0)
-            try:
-                with tarfile.open(fileobj=raw, mode='r:') as tar:
-                    for member in tar.getmembers():
-                        # 将远程绝对路径转为相对路径
-                        rel = member.name[len(remote_path):].lstrip("/")
-                        if not rel or member.isdir():
-                            continue
-                        target = os.path.join(local_path, rel)
-                        os.makedirs(os.path.dirname(target), exist_ok=True)
-                        # 提取文件内容（空文件也需要创建）
-                        f = tar.extractfile(member)
+            # 流式解包：边下边写盘，不占内存，逐文件报进度
+            with tarfile.open(fileobj=stdout, mode='r|') as tar:
+                for member in tar:
+                    if _cancelled():
+                        raise _DownloadCancelled()
+                    if not member.isreg():
+                        continue
+                    rel = member.name
+                    # 防路径穿越
+                    if rel.startswith("/") or ".." in rel.split("/"):
+                        continue
+                    target = os.path.join(local_path, rel)
+                    os.makedirs(os.path.dirname(target) or local_path, exist_ok=True)
+                    f = tar.extractfile(member)
+                    with open(target, 'wb') as out:
                         if f:
-                            with open(target, 'wb') as out:
-                                out.write(f.read())
-                        elif member.isreg():
-                            # 0 字节空文件：extractfile 可能返回 None，仍需创建
-                            with open(target, 'wb') as out:
-                                pass
-                        else:
-                            continue
-                        # 保留 mtime
-                        os.utime(target, (member.mtime, member.mtime))
-                        result["downloaded"] += 1
-            except Exception as e:
-                result["errors"].append(f"解包失败: {e}")
-                result["failed"] = total_to_transfer
-                print(f"[sync-download] 解包错误: {e}")
+                            while True:
+                                buf = f.read(262144)
+                                if not buf:
+                                    break
+                                if _cancelled():
+                                    out.close()
+                                    raise _DownloadCancelled()
+                                out.write(buf)
+                                transferred += len(buf)
+                    os.utime(target, (member.mtime, member.mtime))
+                    result["downloaded"] += 1
+                    current += 1
+                    now = time.time()
+                    if now - last_report > 0.15 or current == total_to_transfer:
+                        last_report = now
+                        _report(phase='file', current=current, to_transfer=total_to_transfer,
+                                file=rel, bytes=transferred, total_bytes=total_bytes)
+
+            err_thread.join(timeout=3)
+            err_output = b"".join(err_chunks).decode("utf-8", errors="replace").strip()
+            exit_status = stdout.channel.recv_exit_status()
+            if exit_status != 0 and err_output:
+                print(f"[sync-download] tar stderr: {err_output[:500]}")
+                result["errors"].append(f"tar 警告: {err_output[:200]}")
+        except _DownloadCancelled:
+            result["errors"].append("已取消")
+            print("[sync-download] 用户取消")
+            try:
+                client.close()
+            except Exception:
+                pass
+            _report(phase='cancelled', **{k: result[k] for k in ('downloaded', 'skipped', 'failed', 'total')})
+            return result
         except (IOError, OSError, EOFError) as e:
-            result["failed"] = total_to_transfer
+            result["failed"] = total_to_transfer - result["downloaded"]
             err_msg = f"网络传输中断: {type(e).__name__}: {e}"
             result["errors"].append(err_msg)
             print(f"[sync-download] {err_msg}")
+        except tarfile.TarError as e:
+            result["failed"] = total_to_transfer - result["downloaded"]
+            result["errors"].append(f"解包失败: {e}")
+            print(f"[sync-download] 解包错误: {e}")
 
     finally:
-        sftp.close()
-        client.close()
+        try:
+            sftp.close()
+        except Exception:
+            pass
+        try:
+            client.close()
+        except Exception:
+            pass
 
     print(f"[sync-download] 完成: 下载 {result['downloaded']}, 跳过 {result['skipped']}, 失败 {result['failed']}")
     if result["errors"]:
@@ -826,6 +919,11 @@ def sync_download(server: dict, project: dict, local_path: str, progress_cb=None
             print(f"  - {err}")
     _report(phase='done', **{k: result[k] for k in ('downloaded', 'skipped', 'failed', 'total', 'errors')})
     return result
+
+
+class _DownloadCancelled(Exception):
+    """下载被用户取消"""
+    pass
 
 
 def _sftp_makedirs(sftp, remote_dir: str, base_dir: str = ""):

@@ -190,6 +190,9 @@ class AssetModel(BaseModel):
     # --- 邮箱专属 ---
     email: str = ""  # 邮箱地址（邮箱名）
     register_date: str = ""  # 邮箱注册时间
+    # --- 跨资产关联（主键-外键式，存被引用资产的 id）---
+    linked_phone_id: str = ""  # 注册/预留手机号 → SIM 卡资产 id（邮箱/信用卡/会员订阅用）
+    linked_email_id: str = ""  # 绑定邮箱 → 邮箱资产 id（会员订阅用）
 
 
 def save_config(config):
@@ -377,9 +380,23 @@ def _get_project_and_server(project_id: str):
     return project, server
 
 
+# 下载取消令牌：project_id -> threading.Event
+_DOWNLOAD_CANCEL = {}
+
+
+@app.post("/api/sync-download-cancel/{project_id}")
+def sync_download_cancel(project_id: str):
+    """取消正在进行的下载（只影响本地写入，不触碰服务器）"""
+    ev = _DOWNLOAD_CANCEL.get(project_id)
+    if ev:
+        ev.set()
+        return {"success": True}
+    return {"success": False, "detail": "没有正在进行的下载"}
+
+
 @app.post("/api/sync-download/{project_id}")
 def sync_download_project(project_id: str):
-    """从远程服务器增量下载到本地目录（SSE 流式进度）"""
+    """从远程服务器增量下载到本地目录（SSE 流式进度，可取消）"""
     from fastapi.responses import StreamingResponse
     try:
         from backend.sync import sync_download
@@ -395,30 +412,41 @@ def sync_download_project(project_id: str):
     local_path = os.path.expanduser(local_path)
     import queue, threading
     q = queue.Queue()
+    cancel_event = threading.Event()
+    _DOWNLOAD_CANCEL[project_id] = cancel_event
 
     def progress_cb(data):
         q.put(data)
 
     def run():
         max_retries = 1
-        for attempt in range(max_retries + 1):
-            try:
-                result = sync_download(server, project, local_path, progress_cb=progress_cb)
-                # 检查是否有网络传输中断错误
-                network_err = any("网络传输中断" in e or "连接失败" in e for e in result.get("errors", []))
-                if network_err and attempt < max_retries:
-                    q.put({"phase": "retrying", "attempt": attempt + 1, "error": result["errors"][-1]})
-                    time.sleep(2)
-                    continue
-                q.put({"phase": "complete", "success": not result["errors"], "data": result})
-                break
-            except Exception as e:
-                err_msg = str(e)
-                if attempt < max_retries:
-                    q.put({"phase": "retrying", "attempt": attempt + 1, "error": err_msg})
-                    time.sleep(2)
-                else:
-                    q.put({"phase": "error", "error": err_msg})
+        try:
+            for attempt in range(max_retries + 1):
+                try:
+                    result = sync_download(server, project, local_path, progress_cb=progress_cb,
+                                           cancel_event=cancel_event)
+                    errors = result.get("errors", [])
+                    if cancel_event.is_set() or any("已取消" in e for e in errors):
+                        q.put({"phase": "complete", "success": False,
+                               "data": {**result, "cancelled": True}})
+                        break
+                    # 检查是否有网络传输中断错误
+                    network_err = any("网络传输中断" in e or "连接失败" in e for e in errors)
+                    if network_err and attempt < max_retries:
+                        q.put({"phase": "retrying", "attempt": attempt + 1, "error": errors[-1]})
+                        time.sleep(2)
+                        continue
+                    q.put({"phase": "complete", "success": not errors, "data": result})
+                    break
+                except Exception as e:
+                    err_msg = str(e)
+                    if attempt < max_retries and not cancel_event.is_set():
+                        q.put({"phase": "retrying", "attempt": attempt + 1, "error": err_msg})
+                        time.sleep(2)
+                    else:
+                        q.put({"phase": "error", "error": err_msg})
+        finally:
+            _DOWNLOAD_CANCEL.pop(project_id, None)
         q.put(None)
 
     threading.Thread(target=run, daemon=True).start()
