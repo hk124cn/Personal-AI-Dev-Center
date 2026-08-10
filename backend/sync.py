@@ -657,8 +657,8 @@ def _sftp_connect(server: dict):
     return client, sftp
 
 
-def _sftp_stat_tree(sftp, remote_dir: str, remote_root: str = "") -> dict:
-    """递归获取远程目录下所有文件的 (mtime, size)，返回 {完整路径: (mtime, size)}"""
+def _sftp_stat_tree(sftp, remote_dir: str, remote_root: str = "", sync_all: bool = False) -> dict:
+    """递归获取远程目录下所有文件的 (mtime, size)，返回 {完整路径: (mtime, size)}。sync_all=True 时不做任何过滤"""
     if not remote_root:
         remote_root = remote_dir
     result = {}
@@ -673,27 +673,31 @@ def _sftp_stat_tree(sftp, remote_dir: str, remote_root: str = "") -> dict:
         rel = full[len(remote_root):].lstrip("/")
         if stat.S_ISDIR(entry.st_mode):
             # 跳过忽略目录，不递归进去
-            if entry.filename in DEFAULT_SYNC_IGNORE:
+            if not sync_all and entry.filename in DEFAULT_SYNC_IGNORE:
                 continue
-            result.update(_sftp_stat_tree(sftp, full, remote_root))
+            result.update(_sftp_stat_tree(sftp, full, remote_root, sync_all))
         elif stat.S_ISREG(entry.st_mode):
-            if Path(rel).suffix.lower() in DEFAULT_SYNC_IGNORE_EXT:
+            if not sync_all and Path(rel).suffix.lower() in DEFAULT_SYNC_IGNORE_EXT:
                 continue
             result[full] = (entry.st_mtime or 0, entry.st_size or 0)
     return result
 
 
-def _remote_stat_tree_fast(client, remote_path: str):
+def _remote_stat_tree_fast(client, remote_path: str, sync_all: bool = False):
     """
     用一条远程 find 命令快速获取文件树 {完整路径: (mtime, size)}。
     只读操作，不在服务器上写任何文件。失败（非 GNU find 等）返回 None，调用方回退 SFTP 递归。
+    sync_all=True 时不过滤任何目录/文件。
     """
     try:
-        prune = " -o ".join(f"-name {shlex.quote(d)}" for d in sorted(DEFAULT_SYNC_IGNORE))
-        cmd = (
-            f"cd {shlex.quote(remote_path)} && "
-            f"find . \\( {prune} \\) -prune -o -type f -printf '%T@\\t%s\\t%p\\0'"
-        )
+        if sync_all:
+            cmd = f"cd {shlex.quote(remote_path)} && find . -type f -printf '%T@\\t%s\\t%p\\0'"
+        else:
+            prune = " -o ".join(f"-name {shlex.quote(d)}" for d in sorted(DEFAULT_SYNC_IGNORE))
+            cmd = (
+                f"cd {shlex.quote(remote_path)} && "
+                f"find . \\( {prune} \\) -prune -o -type f -printf '%T@\\t%s\\t%p\\0'"
+            )
         stdin, stdout, stderr = client.exec_command(cmd, timeout=180)
         data = stdout.read()
         status = stdout.channel.recv_exit_status()
@@ -715,7 +719,7 @@ def _remote_stat_tree_fast(client, remote_path: str):
             rel = parts[2].decode("utf-8", "surrogateescape")
             if rel.startswith("./"):
                 rel = rel[2:]
-            if not rel or _should_ignore(rel):
+            if not rel or (not sync_all and _should_ignore(rel)):
                 continue
             out[f"{base}/{rel}"] = (mtime, size)
         return out
@@ -724,15 +728,16 @@ def _remote_stat_tree_fast(client, remote_path: str):
         return None
 
 
-def _local_stat_tree(local_dir: str) -> dict:
-    """获取本地目录下所有文件的 (mtime, size)，返回 {相对路径: (mtime, size)}"""
+def _local_stat_tree(local_dir: str, sync_all: bool = False) -> dict:
+    """获取本地目录下所有文件的 (mtime, size)，返回 {相对路径: (mtime, size)}。sync_all=True 时不过滤"""
     result = {}
     local_dir = os.path.normpath(local_dir)
     for root, dirs, files in os.walk(local_dir):
         # 跳过忽略目录（不屏蔽点文件）
-        dirs[:] = [d for d in dirs if d not in DEFAULT_SYNC_IGNORE]
+        if not sync_all:
+            dirs[:] = [d for d in dirs if d not in DEFAULT_SYNC_IGNORE]
         for f in files:
-            if Path(f).suffix.lower() in DEFAULT_SYNC_IGNORE_EXT:
+            if not sync_all and Path(f).suffix.lower() in DEFAULT_SYNC_IGNORE_EXT:
                 continue
             full = os.path.join(root, f)
             rel = os.path.relpath(full, local_dir).replace("\\", "/")
@@ -744,7 +749,7 @@ def _local_stat_tree(local_dir: str) -> dict:
     return result
 
 
-def sync_download(server: dict, project: dict, local_path: str, progress_cb=None, cancel_event=None) -> dict:
+def sync_download(server: dict, project: dict, local_path: str, progress_cb=None, cancel_event=None, sync_all: bool = False) -> dict:
     """
     从远程服务器增量下载到本地目录。
     tar-over-SSH 批量传输；文件清单经 stdin 传给 tar（无命令行长度上限、不在服务器写任何文件），
@@ -774,13 +779,13 @@ def sync_download(server: dict, project: dict, local_path: str, progress_cb=None
         print(f"[sync-download] 扫描远程 {remote_path} ...")
         _report(phase='scanning')
         # 优先一条 find 命令快速扫描（只读），失败回退 SFTP 递归
-        remote_files = None if _cancelled() else _remote_stat_tree_fast(client, remote_path)
+        remote_files = None if _cancelled() else _remote_stat_tree_fast(client, remote_path, sync_all=sync_all)
         if remote_files is None and not _cancelled():
-            remote_files = _sftp_stat_tree(sftp, remote_path)
+            remote_files = _sftp_stat_tree(sftp, remote_path, sync_all=sync_all)
         if remote_files is None:
             remote_files = {}
-        print(f"[sync-download] 远程文件数: {len(remote_files)}")
-        local_files = _local_stat_tree(local_path) if os.path.isdir(local_path) else {}
+        print(f"[sync-download] 远程文件数: {len(remote_files)}（sync_all={sync_all}）")
+        local_files = _local_stat_tree(local_path, sync_all=sync_all) if os.path.isdir(local_path) else {}
         print(f"[sync-download] 本地文件数: {len(local_files)}")
 
         to_download = []  # list of (remote_full_path, relative_path)
@@ -964,12 +969,13 @@ def _sftp_makedirs(sftp, remote_dir: str, base_dir: str = ""):
                     raise IOError(f"无法创建目录 {current}: {e}")
 
 
-def sync_upload(server: dict, project: dict, local_path: str, progress_cb=None, force: bool = False, selected_files: list = None) -> dict:
+def sync_upload(server: dict, project: dict, local_path: str, progress_cb=None, force: bool = False, selected_files: list = None, sync_all: bool = False) -> dict:
     """
     从本地目录增量上传到远程服务器。
     使用 tar-over-SSH 批量传输，比逐文件 SFTP 快 10-50 倍。
     force=True 时跳过比较，强制上传所有文件。
     selected_files 非空时只上传列表中的文件。
+    sync_all=True 时不过滤目录/扩展名（默认过滤 .git/node_modules/csv/zip 等）。
     """
     remote_path = project["remote_path"]
     result = {"uploaded": 0, "skipped": 0, "failed": 0, "errors": [], "total": 0}
@@ -1004,13 +1010,13 @@ def sync_upload(server: dict, project: dict, local_path: str, progress_cb=None, 
 
         print(f"[sync-upload] 扫描本地 {local_path} ...")
         _report(phase='scanning')
-        local_files = _local_stat_tree(local_path)
-        remote_files = _sftp_stat_tree(sftp, remote_path)
+        local_files = _local_stat_tree(local_path, sync_all=sync_all)
+        remote_files = _sftp_stat_tree(sftp, remote_path, sync_all=sync_all)
 
         to_upload = []  # list of (relative_path, local_full_path)
         selected_set = set(selected_files) if selected_files else None
         for rel, (l_mtime, l_size) in local_files.items():
-            if _should_ignore(rel):
+            if not sync_all and _should_ignore(rel):
                 result["skipped"] += 1
                 continue
             # 只上传选中的文件

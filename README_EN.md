@@ -117,4 +117,4 @@ npm run build:setup  # NSIS installer
 - **Incremental**: mtime+size comparison, only changed files are transferred
 - **Download**: one-shot remote `find` scan (read-only) → `tar --null -cf - -T -` (file list via stdin — no ARG_MAX limit, zero writes on the server) → local streaming extraction with per-file progress and cancellation
 - **Upload**: local tar streamed up, extracted remotely (file-list preview before upload)
-- **Ignore rules**: skips `.git` / `node_modules` / `__pycache__` and binary extensions automatically
+- **Ignore rules**: smart filtering by default (skips `.git` / `node_modules` / `__pycache__` dirs and csv/log/zip/exe extensions); each download/upload lets you pick "Smart Filter" or "All Files" on the spot
