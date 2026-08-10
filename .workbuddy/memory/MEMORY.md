@@ -8,6 +8,7 @@
 - 前任维护者：**Qorder**。2026-07-26 起由我（WorkBuddy）接手，owner=千问老大(qw_20)。
 
 ## 开发与发布流程
+- **⚠️ 推送规则（2026-08-10 用户明确要求）**：**不主动推 GitHub，只有用户明确说推送才推**。本地 commit 照常做，完成后告知用户即可；项目目前主要本地使用。远程：`git@github.com:hk124cn/Personal-AI-Dev-Center.git`（public，本地 main ↔ origin/main）。
 - **已初始化本地 git 仓库**（2026-07-26）：`.gitignore` 忽略 `config.json`(真实密钥)/`dist`/`dist_new`/`node_modules`/`backend/data`/`*.exe`。源码、`index.html`、`config.example.json` 入库。
 - 本地运行：`pip install -r backend/requirements.txt` → `python backend/app.py`。Electron 启动时会 spawn 该 python。
 - 发布：`npm run build`（portable exe，dist/）→ 或 `npm run build:setup`（NSIS）。产物约 75MB，会把 config.json/index.html/backend 一起打进 exe。
