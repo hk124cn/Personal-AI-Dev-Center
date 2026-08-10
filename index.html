@@ -202,6 +202,11 @@ body{font-family:var(--font);background:var(--bg-deep);color:var(--text);height:
 .ad-link-checks{display:flex;flex-direction:column;gap:6px;max-height:160px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;padding:8px 10px;background:var(--bg-elevated)}
 .ad-link-check{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text-primary);cursor:pointer}
 .ad-link-check input{accent-color:var(--accent)}
+.scope-opt{display:flex;gap:10px;align-items:flex-start;border:1px solid var(--border);border-radius:10px;padding:10px 12px;cursor:pointer;transition:border-color .15s,background .15s}
+.scope-opt:has(input:checked){border-color:var(--accent);background:var(--accent-muted)}
+.scope-opt input{margin-top:3px;accent-color:var(--accent);flex-shrink:0}
+.scope-name{font-size:13px;font-weight:600;color:var(--text-primary)}
+.scope-desc{font-size:11px;color:var(--text-tertiary);margin-top:2px;line-height:1.5}
 
 /* ===== STATUS DOT ===== */
 .dot{width:7px;height:7px;border-radius:50%;flex-shrink:0}
@@ -549,7 +554,7 @@ select.form-input{cursor:pointer;appearance:none;background-image:url("data:imag
 <div id="app" class="app"></div>
 
 <script>
-const APP_VERSION = '1.4.16';
+const APP_VERSION = '1.4.17';
 // ==================== THEMES ====================
 const themes = {
   violet: {
@@ -1052,6 +1057,11 @@ const I18N = {
   sync_phase_error:{zh:'同步出错',en:'Sync Error'},
   sync_phase_retrying:{zh:'网络中断，正在重试',en:'Network interrupted, retrying'},
   sync_phase_cancelled:{zh:'已取消',en:'Cancelled'},
+  sync_scope_title:{zh:'选择同步范围',en:'Sync Scope'},
+  sync_scope_filtered:{zh:'智能过滤（推荐）',en:'Smart Filter (Recommended)'},
+  sync_scope_filtered_desc:{zh:'跳过 .git / node_modules / venv 等目录，及 csv / log / zip / exe 等文件',en:'Skips .git / node_modules / venv dirs and csv / log / zip / exe files'},
+  sync_scope_all:{zh:'全部文件',en:'All Files'},
+  sync_scope_all_desc:{zh:'完整镜像，不过滤任何文件（文件多、耗时长）',en:'Full mirror, no filtering (more files, slower)'},
   sync_files_to_transfer:{zh:'需要传输',en:'to transfer'},
   sync_files_skipped:{zh:'已跳过',en:'skipped'},
   sync_result_downloaded:{zh:'已下载',en:'Downloaded'},
@@ -3031,12 +3041,32 @@ async function saveLocalPath(projectId, pathOverride) {
 async function syncDownload(projectId) {
   const p = state.projects.find(x => x.id === projectId);
   const name = p ? p.name : projectId;
-  runSyncWithProgress(projectId, 'sync-download', 'download', name);
+  state.modal = {
+    title: icon('download') + ' 下载 — ' + name,
+    size: 'modal-sm',
+    body: `<div style="display:flex;flex-direction:column;gap:10px">
+      <div style="font-size:13px;color:var(--text-secondary);font-weight:600">${t('sync_scope_title')}</div>
+      <label class="scope-opt"><input type="radio" name="sync_scope" value="filtered" checked><div><div class="scope-name">${t('sync_scope_filtered')}</div><div class="scope-desc">${t('sync_scope_filtered_desc')}</div></div></label>
+      <label class="scope-opt"><input type="radio" name="sync_scope" value="all"><div><div class="scope-name">${t('sync_scope_all')}</div><div class="scope-desc">${t('sync_scope_all_desc')}</div></div></label>
+      <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:6px"><button class="btn" onclick="closeModal()">${t('crud_cancel')}</button><button class="btn btn-primary" onclick="startDownloadWithScope('${projectId}')">${icon('download')} ${t('download_sync')}</button></div>
+    </div>`
+  };
+  render();
+}
+
+function startDownloadWithScope(projectId) {
+  const sel = document.querySelector('[name="sync_scope"]:checked');
+  const syncAll = sel && sel.value === 'all';
+  const p = state.projects.find(x => x.id === projectId);
+  const name = p ? p.name : projectId;
+  closeModal();
+  runSyncWithProgress(projectId, 'sync-download', 'download', name, false, null, syncAll);
 }
 
 async function openUploadModal(projectId) {
   const p = state.projects.find(x => x.id === projectId);
   const name = p ? p.name : projectId;
+  const scope = window._uploadScope || 'filtered';
   state.modal = {
     title: icon('upload') + ' 上传 — ' + name,
     body: '<div style="text-align:center;padding:20px;color:var(--text-tertiary)">正在扫描本地文件...</div>'
@@ -3044,7 +3074,7 @@ async function openUploadModal(projectId) {
   render();
 
   try {
-    var res = await fetch(API_BASE + '/api/project-files/' + projectId, { signal: AbortSignal.timeout(5000) });
+    var res = await fetch(API_BASE + '/api/project-files/' + projectId + (scope === 'all' ? '?all=true' : ''), { signal: AbortSignal.timeout(8000) });
     if (!res.ok) throw new Error('扫描失败');
     var data = await res.json();
     var files = data.files || [];
@@ -3063,9 +3093,15 @@ async function openUploadModal(projectId) {
         }).join('') +
         '</tbody></table></div>';
 
+    var scopeHTML = '<div style="display:flex;gap:10px;margin-bottom:12px">' +
+      '<label class="scope-opt" style="flex:1"><input type="radio" name="upload_scope" value="filtered" ' + (scope === 'filtered' ? 'checked' : '') + ' onchange="setUploadScope(\'' + projectId + '\',this.value)"><div><div class="scope-name">' + t('sync_scope_filtered') + '</div><div class="scope-desc">' + t('sync_scope_filtered_desc') + '</div></div></label>' +
+      '<label class="scope-opt" style="flex:1"><input type="radio" name="upload_scope" value="all" ' + (scope === 'all' ? 'checked' : '') + ' onchange="setUploadScope(\'' + projectId + '\',this.value)"><div><div class="scope-name">' + t('sync_scope_all') + '</div><div class="scope-desc">' + t('sync_scope_all_desc') + '</div></div></label>' +
+      '</div>';
+
     var summaryHTML = '<div style="font-size:12px;color:var(--text-tertiary);margin-bottom:12px">' +
       '共 <span id="upload-count">' + files.length + '</span> 个文件，' +
-      '总大小 <span id="upload-size">' + formatBytes(totalSize) + '</span></div>';
+      '总大小 <span id="upload-size">' + formatBytes(totalSize) + '</span>' +
+      (scope === 'all' ? ' <span style="color:var(--amber)">（全部文件模式）</span>' : '') + '</div>';
 
     var actionsHTML = '<div style="display:flex;gap:8px;justify-content:flex-end">' +
       '<button class="btn" onclick="closeModal()">取消</button>' +
@@ -3073,7 +3109,7 @@ async function openUploadModal(projectId) {
       '<button class="btn btn-success" onclick="doUpload(\'' + projectId + '\', true)">强制上传</button>' +
       '</div>';
 
-    state.modal.body = listHTML + summaryHTML + actionsHTML;
+    state.modal.body = scopeHTML + listHTML + summaryHTML + actionsHTML;
     render();
   } catch(e) {
     state.modal.body = '<div style="text-align:center;padding:20px;color:var(--red)">扫描失败: ' + e.message + '</div><div style="text-align:right;margin-top:12px"><button class="btn" onclick="closeModal()">关闭</button></div>';
@@ -3093,6 +3129,11 @@ function updateUploadSummary() {
   if (countEl) countEl.textContent = count;
 }
 
+function setUploadScope(projectId, val) {
+  window._uploadScope = val;
+  openUploadModal(projectId);
+}
+
 function doUpload(projectId, force) {
   var cbs = document.querySelectorAll('.upload-file-cb:checked');
   if (cbs.length === 0) {
@@ -3104,8 +3145,9 @@ function doUpload(projectId, force) {
   cbs.forEach(function(cb) { selectedFiles.push(cb.value); });
   var p = state.projects.find(x => x.id === projectId);
   var name = p ? p.name : projectId;
+  var syncAll = (window._uploadScope === 'all');
   closeModal();
-  runSyncWithProgress(projectId, 'sync-upload', 'upload', name, force, selectedFiles);
+  runSyncWithProgress(projectId, 'sync-upload', 'upload', name, force, selectedFiles, syncAll);
 }
 
 async function syncUpload(projectId, force) {
@@ -3115,7 +3157,7 @@ async function syncUpload(projectId, force) {
   runSyncWithProgress(projectId, 'sync-upload', 'upload', name, force);
 }
 
-function runSyncWithProgress(projectId, endpoint, type, name, force, selectedFiles) {
+function runSyncWithProgress(projectId, endpoint, type, name, force, selectedFiles, syncAll) {
   const isUpload = type === 'upload';
   const resultKey = isUpload ? 'sync_result_uploaded' : 'sync_result_downloaded';
 
@@ -3278,6 +3320,7 @@ function runSyncWithProgress(projectId, endpoint, type, name, force, selectedFil
       var params = [];
       if (force && endpoint === 'sync-upload') params.push('force=true');
       if (selectedFiles && selectedFiles.length > 0) params.push('files=' + encodeURIComponent(JSON.stringify(selectedFiles)));
+      if (syncAll) params.push('all=true');
       if (params.length > 0) url += '?' + params.join('&');
       var res = await fetch(url, {
         method: 'POST', signal: abortCtrl.signal

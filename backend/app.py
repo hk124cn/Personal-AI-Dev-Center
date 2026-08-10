@@ -395,8 +395,8 @@ def sync_download_cancel(project_id: str):
 
 
 @app.post("/api/sync-download/{project_id}")
-def sync_download_project(project_id: str):
-    """从远程服务器增量下载到本地目录（SSE 流式进度，可取消）"""
+def sync_download_project(project_id: str, all: str = ""):
+    """从远程服务器增量下载到本地目录（SSE 流式进度，可取消）。all=true 时不过滤目录/扩展名"""
     from fastapi.responses import StreamingResponse
     try:
         from backend.sync import sync_download
@@ -424,7 +424,7 @@ def sync_download_project(project_id: str):
             for attempt in range(max_retries + 1):
                 try:
                     result = sync_download(server, project, local_path, progress_cb=progress_cb,
-                                           cancel_event=cancel_event)
+                                           cancel_event=cancel_event, sync_all=(all == "true"))
                     errors = result.get("errors", [])
                     if cancel_event.is_set() or any("已取消" in e for e in errors):
                         q.put({"phase": "complete", "success": False,
@@ -467,8 +467,9 @@ def sync_download_project(project_id: str):
 
 
 @app.get("/api/project-files/{project_id}")
-def list_project_files(project_id: str):
-    """列出项目本地目录下的文件（用于上传前预览）"""
+def list_project_files(project_id: str, all: str = ""):
+    """列出项目本地目录下的文件（用于上传前预览）。all=true 时不过滤"""
+    sync_all = (all == "true")
     project, server = _get_project_and_server(project_id)
     local_path = project.get("local_path", "")
     if not local_path:
@@ -479,10 +480,11 @@ def list_project_files(project_id: str):
     files = []
     for root, dirs, filenames in os.walk(local_path):
         # 跳过忽略的目录（不屏蔽点文件）
-        dirs[:] = [d for d in dirs if d not in {'.git', '__pycache__', 'node_modules', '.venv', 'venv', '.idea', '.vscode'}]
+        if not sync_all:
+            dirs[:] = [d for d in dirs if d not in {'.git', '__pycache__', 'node_modules', '.venv', 'venv', '.idea', '.vscode'}]
         for f in filenames:
             ext = os.path.splitext(f)[1].lower()
-            if ext in {'.csv', '.log', '.pyc', '.pyo', '.class', '.o', '.so', '.zip', '.tar', '.gz', '.rar', '.7z', '.exe', '.dll', '.whl'}:
+            if not sync_all and ext in {'.csv', '.log', '.pyc', '.pyo', '.class', '.o', '.so', '.zip', '.tar', '.gz', '.rar', '.7z', '.exe', '.dll', '.whl'}:
                 continue
             full = os.path.join(root, f)
             rel = os.path.relpath(full, local_path).replace('\\', '/')
@@ -494,8 +496,8 @@ def list_project_files(project_id: str):
 
 
 @app.post("/api/sync-upload/{project_id}")
-def sync_upload_project(project_id: str, force: bool = False, files: str = ""):
-    """从本地目录增量上传到远程服务器（SSE 流式进度）。force=True 时强制上传所有文件。files=JSON 文件列表时只上传选中文件"""
+def sync_upload_project(project_id: str, force: bool = False, files: str = "", all: str = ""):
+    """从本地目录增量上传到远程服务器（SSE 流式进度）。force=True 时强制上传所有文件。files=JSON 文件列表时只上传选中文件。all=true 时不过滤目录/扩展名"""
     from fastapi.responses import StreamingResponse
     import json as _json
     try:
@@ -528,7 +530,7 @@ def sync_upload_project(project_id: str, force: bool = False, files: str = ""):
         max_retries = 1
         for attempt in range(max_retries + 1):
             try:
-                result = sync_upload(server, project, local_path, progress_cb=progress_cb, force=force, selected_files=selected_files)
+                result = sync_upload(server, project, local_path, progress_cb=progress_cb, force=force, selected_files=selected_files, sync_all=(all == "true"))
                 # 检查是否有网络传输中断错误
                 network_err = any("网络传输中断" in e or "连接失败" in e for e in result.get("errors", []))
                 if network_err and attempt < max_retries:
