@@ -65,10 +65,16 @@ LATEST_JSON = DATA_DIR / "latest.json"
 
 app = FastAPI(title="Personal AI Dev Center API", version=APP_VERSION)
 
-# CORS - 允许前端 HTML 文件直接调用
+# CORS - 仅允许本机前端（同源 localhost / Electron app:// / 本地文件）调用，不再对全网开放
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[
+        "http://localhost:8765",
+        "http://127.0.0.1:8765",
+        "app://.",
+        "file://",
+        "null",
+    ],
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -383,6 +389,9 @@ def _get_project_and_server(project_id: str):
 # 下载取消令牌：project_id -> threading.Event
 _DOWNLOAD_CANCEL = {}
 
+# 上传取消令牌：project_id -> threading.Event
+_UPLOAD_CANCEL = {}
+
 
 @app.post("/api/sync-download-cancel/{project_id}")
 def sync_download_cancel(project_id: str):
@@ -392,6 +401,16 @@ def sync_download_cancel(project_id: str):
         ev.set()
         return {"success": True}
     return {"success": False, "detail": "没有正在进行的下载"}
+
+
+@app.post("/api/sync-upload-cancel/{project_id}")
+def sync_upload_cancel(project_id: str):
+    """取消正在进行的上传（只停止本地读取与发送，不动服务器已写入部分）"""
+    ev = _UPLOAD_CANCEL.get(project_id)
+    if ev:
+        ev.set()
+        return {"success": True}
+    return {"success": False, "detail": "没有正在进行的上传"}
 
 
 @app.post("/api/sync-download/{project_id}")
@@ -514,6 +533,8 @@ def sync_upload_project(project_id: str, force: bool = False, files: str = "", a
     local_path = os.path.expanduser(local_path)
     import queue, threading
     q = queue.Queue()
+    cancel_event = threading.Event()
+    _UPLOAD_CANCEL[project_id] = cancel_event
 
     def progress_cb(data):
         q.put(data)
@@ -528,24 +549,32 @@ def sync_upload_project(project_id: str, force: bool = False, files: str = "", a
 
     def run():
         max_retries = 1
-        for attempt in range(max_retries + 1):
-            try:
-                result = sync_upload(server, project, local_path, progress_cb=progress_cb, force=force, selected_files=selected_files, sync_all=(all == "true"))
-                # 检查是否有网络传输中断错误
-                network_err = any("网络传输中断" in e or "连接失败" in e for e in result.get("errors", []))
-                if network_err and attempt < max_retries:
-                    q.put({"phase": "retrying", "attempt": attempt + 1, "error": result["errors"][-1]})
-                    time.sleep(2)
-                    continue
-                q.put({"phase": "complete", "success": not result["errors"], "data": result})
-                break
-            except Exception as e:
-                err_msg = str(e)
-                if attempt < max_retries:
-                    q.put({"phase": "retrying", "attempt": attempt + 1, "error": err_msg})
-                    time.sleep(2)
-                else:
-                    q.put({"phase": "error", "error": err_msg})
+        try:
+            for attempt in range(max_retries + 1):
+                try:
+                    result = sync_upload(server, project, local_path, progress_cb=progress_cb, force=force, selected_files=selected_files, sync_all=(all == "true"), cancel_event=cancel_event)
+                    errors = result.get("errors", [])
+                    if cancel_event.is_set() or any("已取消" in e for e in errors):
+                        q.put({"phase": "complete", "success": False,
+                               "data": {**result, "cancelled": True}})
+                        break
+                    # 检查是否有网络传输中断错误
+                    network_err = any("网络传输中断" in e or "连接失败" in e for e in errors)
+                    if network_err and attempt < max_retries:
+                        q.put({"phase": "retrying", "attempt": attempt + 1, "error": errors[-1]})
+                        time.sleep(2)
+                        continue
+                    q.put({"phase": "complete", "success": not errors, "data": result})
+                    break
+                except Exception as e:
+                    err_msg = str(e)
+                    if attempt < max_retries and not cancel_event.is_set():
+                        q.put({"phase": "retrying", "attempt": attempt + 1, "error": err_msg})
+                        time.sleep(2)
+                    else:
+                        q.put({"phase": "error", "error": err_msg})
+        finally:
+            _UPLOAD_CANCEL.pop(project_id, None)
         q.put(None)
 
     threading.Thread(target=run, daemon=True).start()
@@ -1426,4 +1455,5 @@ if __name__ == "__main__":
     print("  Personal AI Dev Center API")
     print("  http://localhost:8765")
     print("=" * 50)
-    uvicorn.run(app, host="0.0.0.0", port=8765)
+    # 仅绑定本机回环地址，避免暴露到局域网/公网（同 WiFi 用户无法访问 8765）
+    uvicorn.run(app, host="127.0.0.1", port=8765)
