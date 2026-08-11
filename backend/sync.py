@@ -969,7 +969,7 @@ def _sftp_makedirs(sftp, remote_dir: str, base_dir: str = ""):
                     raise IOError(f"无法创建目录 {current}: {e}")
 
 
-def sync_upload(server: dict, project: dict, local_path: str, progress_cb=None, force: bool = False, selected_files: list = None, sync_all: bool = False) -> dict:
+def sync_upload(server: dict, project: dict, local_path: str, progress_cb=None, force: bool = False, selected_files: list = None, sync_all: bool = False, cancel_event=None) -> dict:
     """
     从本地目录增量上传到远程服务器。
     使用 tar-over-SSH 批量传输，比逐文件 SFTP 快 10-50 倍。
@@ -984,6 +984,9 @@ def sync_upload(server: dict, project: dict, local_path: str, progress_cb=None, 
         if progress_cb:
             try: progress_cb(kw)
             except Exception: pass
+
+    def _cancelled():
+        return cancel_event is not None and cancel_event.is_set()
 
     if not os.path.isdir(local_path):
         err = f"本地目录不存在: {local_path}"
@@ -1040,51 +1043,102 @@ def sync_upload(server: dict, project: dict, local_path: str, progress_cb=None, 
         _report(phase='transferring', total=result["total"], to_transfer=total_to_transfer,
                 skipped=result["skipped"], current=0, total_bytes=total_bytes)
 
+        if _cancelled():
+            result["errors"].append("已取消")
+            _report(phase='cancelled', **{k: result[k] for k in ('uploaded', 'skipped', 'failed', 'total')})
+            return result
+
         if total_to_transfer == 0:
             _report(phase='done', **{k: result[k] for k in ('uploaded', 'skipped', 'failed', 'total', 'errors')})
             return result
 
-        # --- 本地打包 tar ---
-        tar_buf = io.BytesIO()
-        with tarfile.open(fileobj=tar_buf, mode='w:') as tar:
-            for rel, full_path in to_upload:
-                # tar 中使用相对路径（相对 local_path）
-                tar.add(full_path, arcname=rel)
-        tar_data = tar_buf.getvalue()
-        print(f"[sync-upload] tar 包大小: {len(tar_data) / 1024 / 1024:.1f}MB")
+        # --- tar-over-SSH 流式上传 ---
+        # 旧实现：先 io.BytesIO() 把整个目录打包进内存再一次性发出，大项目（数万文件/数十 GB）必爆内存。
+        # 新实现：本地逐文件打包，经 SSH stdin 流式写入远程 tar 解包，内存只保留单文件。
+        # remote_path 经 shlex.quote 处理，杜绝命令注入（旧实现仅套单引号）。
+        cmd = f"tar xf - -C {shlex.quote(remote_path)}"
+        print(f"[sync-upload] 执行: {cmd}（流式上传 {total_to_transfer} 个文件）")
 
-        # --- tar-over-SSH 批量上传 ---
-        cmd = f"tar xf - -C '{remote_path}'"
-        print(f"[sync-upload] 执行: {cmd}")
         try:
             stdin, stdout, stderr = client.exec_command(cmd, bufsize=65536)
 
-            # 分块写入 stdin 并报告进度
+            # 后台线程持续排空 stderr，防止 tar 告警塞满通道窗口导致死锁（与下载对称）
+            err_chunks = []
+            def _drain_err():
+                try:
+                    while True:
+                        b = stderr.read(65536)
+                        if not b:
+                            break
+                        err_chunks.append(b)
+                except Exception:
+                    pass
+            err_thread = threading.Thread(target=_drain_err, daemon=True)
+            err_thread.start()
+
+            cancelled = False
+            tar = None
             transferred = 0
-            chunk_size = 65536
-            offset = 0
-            while offset < len(tar_data):
-                end = min(offset + chunk_size, len(tar_data))
-                stdin.write(tar_data[offset:end])
-                offset = end
-                transferred = offset
-                _report(phase='batch', bytes=transferred, total_bytes=len(tar_data),
-                        to_transfer=total_to_transfer)
-
-            stdin.close()
-            exit_status = stdout.channel.recv_exit_status()
-            err_output = stderr.read().decode("utf-8", errors="replace").strip()
-
-            if exit_status == 0:
-                result["uploaded"] = total_to_transfer
-                print(f"[sync-upload] 批量上传成功: {total_to_transfer} 个文件")
-            else:
-                result["failed"] = total_to_transfer
-                err_msg = f"远程解包失败 (exit {exit_status}): {err_output}"
+            last_report = 0.0
+            try:
+                tar = tarfile.open(fileobj=stdin, mode='w|')
+                for rel, full_path in to_upload:
+                    if _cancelled():
+                        cancelled = True
+                        break
+                    if os.path.isfile(full_path):
+                        fsize = os.path.getsize(full_path)
+                        tar.add(full_path, arcname=rel)
+                        transferred += fsize
+                        result["uploaded"] += 1
+                    else:
+                        # 符号链接/特殊文件：跳过（to_upload 理论只含常规文件）
+                        result["skipped"] += 1
+                    now = time.time()
+                    if now - last_report > 0.15 or result["uploaded"] == total_to_transfer:
+                        last_report = now
+                        _report(phase='file', current=result["uploaded"], to_transfer=total_to_transfer,
+                                file=rel, bytes=transferred, total_bytes=total_bytes)
+                if not cancelled:
+                    tar.close()  # 写入结束块
+            except (IOError, OSError, EOFError) as e:
+                if cancelled or _cancelled():
+                    result["errors"].append("已取消")
+                    print("[sync-upload] 用户取消")
+                    try: stdin.close()
+                    except Exception: pass
+                    _report(phase='cancelled', **{k: result[k] for k in ('uploaded', 'skipped', 'failed', 'total')})
+                    return result
+                result["failed"] = total_to_transfer - result["uploaded"]
+                err_msg = f"网络传输中断: {type(e).__name__}: {e}"
                 result["errors"].append(err_msg)
                 print(f"[sync-upload] {err_msg}")
+                return result
+
+            if cancelled:
+                try: stdin.close()
+                except Exception: pass
+                result["errors"].append("已取消")
+                print("[sync-upload] 用户取消")
+                _report(phase='cancelled', **{k: result[k] for k in ('uploaded', 'skipped', 'failed', 'total')})
+                return result
+
+            try:
+                stdin.close()
+            except Exception:
+                pass
+            err_thread.join(timeout=3)
+            err_output = b"".join(err_chunks).decode("utf-8", errors="replace").strip()
+            exit_status = stdout.channel.recv_exit_status()
+            if exit_status != 0:
+                result["failed"] = total_to_transfer - result["uploaded"]
+                err_msg = f"远程解包失败 (exit {exit_status}): {err_output[:200]}"
+                result["errors"].append(err_msg)
+                print(f"[sync-upload] {err_msg}")
+            else:
+                print(f"[sync-upload] 批量上传成功: {total_to_transfer} 个文件")
         except (IOError, OSError, EOFError) as e:
-            result["failed"] = total_to_transfer
+            result["failed"] = total_to_transfer - result["uploaded"]
             err_msg = f"网络传输中断: {type(e).__name__}: {e}"
             result["errors"].append(err_msg)
             print(f"[sync-upload] {err_msg}")
