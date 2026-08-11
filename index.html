@@ -3499,6 +3499,12 @@ function closeSyncProgress(projectId) {
     window._syncType = null;
     window._syncProjectId = null;
   }
+  // 上传任务：通知后端取消（停止本地读取与发送；不触碰服务器已写入部分）
+  else if (window._syncType === 'upload' && window._syncProjectId) {
+    try { fetch(API_BASE + '/api/sync-upload-cancel/' + window._syncProjectId, {method: 'POST'}).catch(function(){}); } catch (e) {}
+    window._syncType = null;
+    window._syncProjectId = null;
+  }
   var el = document.getElementById('sync-float');
   if (el) el.remove();
   if (projectId) {
