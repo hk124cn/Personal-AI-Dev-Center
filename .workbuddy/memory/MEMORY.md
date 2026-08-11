@@ -25,6 +25,12 @@
 - ✅ **版本号漂移已解决**：当前 `1.4.16`，`app.py`(FastAPI+health)、`electron/main.js`(关于)、`index.html`(APP_VERSION) 三处统一读 `package.json`。版本 bump 只改 `package.json` + `index.html` 两处即可。
 - ⏸ **latest.json（07-20）比 config 多 3 个项目**：用户选择手动同步（因项目同步方向各异：云端开发→下载、本地开发→上传），暂不自动处理。
 - ✅ **docs 与现状不符已解决**：3 份 docs + `config.llm.example.json` 已对齐商汤，并修正不存在的 `sync.py --project` 命令。
+- ✅ **安全/健壮四项已修（2026-08-11，v1.4.17 补丁，commit ede8d8a）**：
+  - **R1 后端暴露**：`uvicorn` 由 `0.0.0.0` 改为 `127.0.0.1`（仅本机回环）；CORS `allow_origins` 由 `*` 收紧为 `http://localhost:8765 / http://127.0.0.1:8765 / app://. / file:// / null`。前端用 `loadURL('http://localhost:8765')` 同源加载，不受限。
+  - **R2 上传爆内存**：`sync_upload` 由 `io.BytesIO` 整包进内存改为 `tarfile mode='w|'` 流式写 SSH stdin（与下载对称），大项目不再爆内存。
+  - **R3 上传命令注入**：`tar xf - -C {remote_path}` 由单引号改为 `shlex.quote(remote_path)`。
+  - **R4 上传无法取消**：新增 `_UPLOAD_CANCEL` 注册表 + `POST /api/sync-upload-cancel/{id}` + 前端 `closeSyncProgress` 对 upload 对称触发；`sync_upload` 加 `cancel_event` 与 `phase='cancelled'`。
+  - ⚠️ **生效前提**：用户正在运行的 live app 是从 `%TEMP%` 解包旧 exe（绑 `0.0.0.0`），须**重建 exe 并重启 app** 才能吃到 R1；源码改动已本地提交未推送。
 
 ## 知识库（2026-07-31 MVP）
 - 本地知识库 **`%APPDATA%/Personal AI Dev Center/knowledge/<分类>/<id>.md`**（即 `USER_DATA_DIR/knowledge`，2026-08-01 从 `backend/data` 迁出，保证打包 exe 也能读写且不被更新包清除）。frontmatter: title/category/tags/author/created/updated。
@@ -58,6 +64,12 @@
 - 传输：`tar --null -cf - -C <path> -T -`，文件清单走 **stdin**（无 ARG_MAX、服务器零写入）；`tarfile mode='r|'` 流式解盘（不占内存）；stderr 后台线程排空（防通道死锁——多文件卡死主因）；逐文件 `phase='file'` 进度；路径穿越防护。
 - 取消：`_DOWNLOAD_CANCEL` 注册表 + `POST /api/sync-download-cancel/{id}`；前端 `closeSyncProgress` 对 download 先 POST 取消。
 - **GitHub 脱敏**（2026-08-09 完成）：全 git 历史已 filter-branch 重写，真实 IP/用户名/域名/密钥/项目名/本地路径 0 残留（含 docs、test_llm.py、count_md.py）；config.example.json=演示模拟数据、config.llm.example.json=纯 llm 示例。push 前可直接推 master。
+
+## 上传引擎（2026-08-11 重写 sync_upload 对齐下载）
+- `sync_upload(server, project, local_path, progress_cb, force, selected_files, sync_all, cancel_event)`：扫描本地 `_local_stat_tree` + 远程 `_sftp_stat_tree` 比对（mtime/size，force 跳过），`to_upload` 列表。
+- 流式传输：`client.exec_command(f"tar xf - -C {shlex.quote(remote_path)}")` → `tarfile.open(fileobj=stdin, mode='w|')` 逐文件 `tar.add` 增量写入 SSH 通道（内存只留单文件）；后台线程排空 stderr 防死锁（与下载对称）。
+- 进度/取消：`phase='file'` 逐文件上报（与下载同名，前端复用）；`_cancelled()` 检查 `cancel_event.is_set()`（传输前 + 每个文件），命中则 `phase='cancelled'` 早退；`_UPLOAD_CANCEL[project_id]` 由 `/api/sync-upload-cancel/{id}` 置位，前端 `closeSyncProgress` 对称触发。
+- 验证：`monkeypatch _sftp_connect` 用本机 `tar` 子进程模拟远程解包，实测 默认过滤(.git)/sync_all/取消/空格路径 四项全过 + 无头浏览器零控制台错误回归。
 
 ## 构建注意事项（重要）
 - 实时测速 `speed-test` 已改为 **TCP 端口(22)探测 + 并行**（绕过阿里云/腾讯云 ICMP 拦截，原 ICMP ping 误报"超时"）。
