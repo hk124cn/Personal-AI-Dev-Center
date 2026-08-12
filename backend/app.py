@@ -12,6 +12,10 @@ import time
 import socket
 import re
 import markdown
+import threading
+import tempfile
+import html as _html
+from html.parser import HTMLParser
 from datetime import datetime
 from pathlib import Path
 
@@ -201,9 +205,152 @@ class AssetModel(BaseModel):
     linked_email_id: str = ""  # 绑定邮箱 → 邮箱资产 id（会员订阅用）
 
 
+# ==================== 安全与写入工具 ====================
+
+# 配置/数据写入锁：避免并发读写导致文件损坏或互相覆盖
+_write_lock = threading.Lock()
+
+
+def atomic_write_json(path, data):
+    """原子写入 JSON：先写唯一临时文件再 os.replace 重命名，避免读到半截文件，
+    也避免并发写同一文件时因共用临时文件名而产生竞争。Windows 下并发替换可能
+    因文件被短暂占用而偶发“拒绝访问”，对替换步骤做有限重试以吸收瞬时竞争。"""
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp = tempfile.mkstemp(dir=str(path.parent), prefix=path.stem + ".tmp", suffix="")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+    except Exception:
+        try:
+            os.unlink(tmp)
+        except Exception:
+            pass
+        raise
+    last_err = None
+    for _ in range(5):
+        try:
+            os.replace(tmp, path)
+            return
+        except (PermissionError, OSError) as e:
+            last_err = e
+            time.sleep(0.02 * (_ + 1))
+    try:
+        os.unlink(tmp)
+    except Exception:
+        pass
+    raise last_err
+
+
+# 知识库 Markdown 渲染白名单：仅保留安全标签/属性，阻断 script/iframe/on* 与危险 URL
+_ALLOWED_TAGS = {
+    "p", "br", "hr", "h1", "h2", "h3", "h4", "h5", "h6",
+    "strong", "em", "b", "i", "u", "s", "code", "pre", "blockquote",
+    "ul", "ol", "li", "a", "span", "div",
+    "table", "thead", "tbody", "tr", "td", "th", "img",
+}
+_ALLOWED_ATTRS = {
+    "a": {"href", "title", "target", "rel"},
+    "img": {"src", "alt", "title", "width", "height"},
+    "td": {"align"}, "th": {"align"},
+    "code": {"class"}, "pre": {"class"}, "span": {"class"}, "div": {"class"},
+}
+
+
+class _HTMLSanitizer(HTMLParser):
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self.out = []
+        self._stack = []
+
+    def _safe_url(self, value):
+        if not value:
+            return ""
+        v = value.strip()
+        if v.startswith(("/", "#", "./", "../")):
+            return v
+        low = v.lower()
+        if low.startswith(("http://", "https://", "mailto:")):
+            return v
+        return ""
+
+    def handle_starttag(self, tag, attrs):
+        if tag not in _ALLOWED_TAGS:
+            self._stack.append(tag)  # 仍入栈以便正确闭合
+            return
+        self._stack.append(tag)
+        allowed = _ALLOWED_ATTRS.get(tag, set())
+        parts = [tag]
+        for k, v in attrs:
+            if k not in allowed:
+                continue
+            if k in ("href", "src"):
+                sv = self._safe_url(v or "")
+                if tag == "img" and k == "src" and not sv.lower().startswith(("http://", "https://")):
+                    continue
+                if not sv:
+                    continue
+                parts.append(f'{k}="{_html.escape(sv, quote=True)}"')
+            else:
+                parts.append(f'{k}="{_html.escape(v or "", quote=True)}"')
+        self.out.append("<" + " ".join(parts) + ">")
+
+    def handle_endtag(self, tag):
+        if tag not in _ALLOWED_TAGS:
+            if tag in self._stack:
+                self._stack.remove(tag)
+            return
+        if tag in self._stack:
+            while self._stack and self._stack[-1] != tag:
+                t = self._stack.pop()
+                self.out.append(f"</{t}>")
+            if self._stack:
+                self._stack.pop()
+                self.out.append(f"</{tag}>")
+
+    def handle_startendtag(self, tag, attrs):
+        if tag not in _ALLOWED_TAGS:
+            return
+        allowed = _ALLOWED_ATTRS.get(tag, set())
+        parts = [tag]
+        for k, v in attrs:
+            if k not in allowed:
+                continue
+            if k in ("href", "src"):
+                sv = self._safe_url(v or "")
+                if not sv:
+                    continue
+                parts.append(f'{k}="{_html.escape(sv, quote=True)}"')
+            else:
+                parts.append(f'{k}="{_html.escape(v or "", quote=True)}"')
+        self.out.append("<" + " ".join(parts) + " />")
+
+    def handle_data(self, data):
+        # 处于被禁用的标签（script/style 等）内部时，丢弃其内容，避免脚本文本泄漏为可见文字
+        if self._stack and self._stack[-1] not in _ALLOWED_TAGS:
+            return
+        self.out.append(_html.escape(data))
+
+    def handle_comment(self, data):
+        pass  # 丢弃注释（可能含条件注释）
+
+    def handle_decl(self, decl):
+        pass  # 丢弃 <!DOCTYPE> 等声明
+
+
+def sanitize_html(html_str: str) -> str:
+    """白名单消毒：仅保留安全标签/属性，阻断 script/iframe/on* 与危险 URL。"""
+    if not html_str:
+        return ""
+    s = _HTMLSanitizer()
+    s.feed(html_str)
+    s.close()
+    return "".join(s.out)
+
+
 def save_config(config):
-    with open(CONFIG_PATH, "w", encoding="utf-8") as f:
-        json.dump(config, f, ensure_ascii=False, indent=2)
+    with _write_lock:
+        atomic_write_json(CONFIG_PATH, config)
 
 
 def sync_active_llm_config(config: dict) -> None:
@@ -392,11 +539,15 @@ _DOWNLOAD_CANCEL = {}
 # 上传取消令牌：project_id -> threading.Event
 _UPLOAD_CANCEL = {}
 
+# 取消注册表访问锁：避免同项目并发下载/上传互相覆盖取消标志
+_cancel_lock = threading.Lock()
+
 
 @app.post("/api/sync-download-cancel/{project_id}")
 def sync_download_cancel(project_id: str):
     """取消正在进行的下载（只影响本地写入，不触碰服务器）"""
-    ev = _DOWNLOAD_CANCEL.get(project_id)
+    with _cancel_lock:
+        ev = _DOWNLOAD_CANCEL.get(project_id)
     if ev:
         ev.set()
         return {"success": True}
@@ -406,7 +557,8 @@ def sync_download_cancel(project_id: str):
 @app.post("/api/sync-upload-cancel/{project_id}")
 def sync_upload_cancel(project_id: str):
     """取消正在进行的上传（只停止本地读取与发送，不动服务器已写入部分）"""
-    ev = _UPLOAD_CANCEL.get(project_id)
+    with _cancel_lock:
+        ev = _UPLOAD_CANCEL.get(project_id)
     if ev:
         ev.set()
         return {"success": True}
@@ -432,7 +584,8 @@ def sync_download_project(project_id: str, all: str = ""):
     import queue, threading
     q = queue.Queue()
     cancel_event = threading.Event()
-    _DOWNLOAD_CANCEL[project_id] = cancel_event
+    with _cancel_lock:
+        _DOWNLOAD_CANCEL[project_id] = cancel_event
 
     def progress_cb(data):
         q.put(data)
@@ -465,7 +618,8 @@ def sync_download_project(project_id: str, all: str = ""):
                     else:
                         q.put({"phase": "error", "error": err_msg})
         finally:
-            _DOWNLOAD_CANCEL.pop(project_id, None)
+            with _cancel_lock:
+                _DOWNLOAD_CANCEL.pop(project_id, None)
         q.put(None)
 
     threading.Thread(target=run, daemon=True).start()
@@ -534,7 +688,8 @@ def sync_upload_project(project_id: str, force: bool = False, files: str = "", a
     import queue, threading
     q = queue.Queue()
     cancel_event = threading.Event()
-    _UPLOAD_CANCEL[project_id] = cancel_event
+    with _cancel_lock:
+        _UPLOAD_CANCEL[project_id] = cancel_event
 
     def progress_cb(data):
         q.put(data)
@@ -574,7 +729,8 @@ def sync_upload_project(project_id: str, force: bool = False, files: str = "", a
                     else:
                         q.put({"phase": "error", "error": err_msg})
         finally:
-            _UPLOAD_CANCEL.pop(project_id, None)
+            with _cancel_lock:
+                _UPLOAD_CANCEL.pop(project_id, None)
         q.put(None)
 
     threading.Thread(target=run, daemon=True).start()
@@ -1389,6 +1545,7 @@ def kb_render(payload: dict):
     body = payload.get("body", "")
     try:
         html = markdown.markdown(body, extensions=["fenced_code", "tables", "nl2br"])
+        html = sanitize_html(html)
     except Exception:
         html = "<pre>" + body.replace("&", "&amp;").replace("<", "&lt;") + "</pre>"
     return {"html": html}
