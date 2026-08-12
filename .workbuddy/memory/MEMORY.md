@@ -30,7 +30,13 @@
   - **R2 上传爆内存**：`sync_upload` 由 `io.BytesIO` 整包进内存改为 `tarfile mode='w|'` 流式写 SSH stdin（与下载对称），大项目不再爆内存。
   - **R3 上传命令注入**：`tar xf - -C {remote_path}` 由单引号改为 `shlex.quote(remote_path)`。
   - **R4 上传无法取消**：新增 `_UPLOAD_CANCEL` 注册表 + `POST /api/sync-upload-cancel/{id}` + 前端 `closeSyncProgress` 对 upload 对称触发；`sync_upload` 加 `cancel_event` 与 `phase='cancelled'`。
-  - ⚠️ **生效前提**：用户正在运行的 live app 是从 `%TEMP%` 解包旧 exe（绑 `0.0.0.0`），须**重建 exe 并重启 app** 才能吃到 R1；源码改动已本地提交未推送。
+  - ⚠️ **生效前提**：用户正在运行的 live app 是从 `%TEMP%` 解包旧 exe（绑 `0.0.0.0`），须**重建 exe 并重启 app** 才能吃到 R1；源码改动已本地提交未推送（2026-08-11 已重建 exe 验证）。
+- ✅ **安全/健壮补充三项已修（2026-08-12）**：R6/R7/R10。
+  - **R7 知识库 XSS**：`/api/kb/render` 渲染后过 `sanitize_html()` 白名单消毒（stdlib `html.parser` 自写，零新增依赖）；阻断 `<script>`/`<iframe>`/`on*` 属性/`javascript:` 等，脚本/样式内部文本一并丢弃。
+  - **R6 原子写入**：新增 `atomic_write_json()`（唯一临时文件 + `os.replace` + 对 `os.replace` 重试吸收 Windows 并发“拒绝访问”）；`save_config`(app.py/sync.py) 与两处 `latest.json` 写入均走它，并加 `_write_lock` 串行化。
+  - **R10 取消注册表加锁**：新增 `_cancel_lock`，`_DOWNLOAD_CANCEL`/`_UPLOAD_CANCEL` 的 get/set/pop 八处访问全加锁。
+  - 验证：`test_security_robustness.py`（19 项全过：R7 注入清除+合法 Markdown 保留、R6 8×50 并发写仍为合法 JSON、R10 6×200 并发无异常）+ HTTP 冒烟（kb/render 线上消毒、assets/config/full 200）。
+  - 待处理剩余：R5（PyInstaller 打包后端）、R8（全量同步改 SSE 流式）、R9（扫描期响应取消）、打包杂项（目录选择改 Electron dialog、清理 dist/dist_new）。详见 `docs/system-review.md`。
 
 ## 知识库（2026-07-31 MVP）
 - 本地知识库 **`%APPDATA%/Personal AI Dev Center/knowledge/<分类>/<id>.md`**（即 `USER_DATA_DIR/knowledge`，2026-08-01 从 `backend/data` 迁出，保证打包 exe 也能读写且不被更新包清除）。frontmatter: title/category/tags/author/created/updated。

@@ -48,9 +48,44 @@ def load_config():
         return json.load(f)
 
 
+# 写入锁：避免配置/数据并发读写导致损坏或互相覆盖
+_write_lock = threading.Lock()
+
+
+def atomic_write_json(path, data):
+    """原子写入 JSON：先写唯一临时文件再 os.replace 重命名，避免读到半截文件，
+    也避免并发写同一文件时因共用临时文件名而产生竞争。Windows 下并发替换可能
+    因文件被短暂占用而偶发“拒绝访问”，对替换步骤做有限重试以吸收瞬时竞争。"""
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp = tempfile.mkstemp(dir=str(path.parent), prefix=path.stem + ".tmp", suffix="")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+    except Exception:
+        try:
+            os.unlink(tmp)
+        except Exception:
+            pass
+        raise
+    last_err = None
+    for _ in range(5):
+        try:
+            os.replace(tmp, path)
+            return
+        except (PermissionError, OSError) as e:
+            last_err = e
+            time.sleep(0.02 * (_ + 1))
+    try:
+        os.unlink(tmp)
+    except Exception:
+        pass
+    raise last_err
+
+
 def save_config(config: dict):
-    with open(CONFIG_PATH, "w", encoding="utf-8") as f:
-        json.dump(config, f, ensure_ascii=False, indent=2)
+    with _write_lock:
+        atomic_write_json(CONFIG_PATH, config)
 
 
 def parse_todo_md(content: str) -> dict:
@@ -520,8 +555,8 @@ def sync_single(project_id: str) -> dict:
     output["synced_at"] = datetime.now().isoformat()
     output["project_count"] = len(projects)
     output["server_count"] = len(set(p["server"] for p in projects if p.get("server")))
-    with open(OUTPUT_PATH, "w", encoding="utf-8") as f:
-        json.dump(output, f, ensure_ascii=False, indent=2)
+    with _write_lock:
+        atomic_write_json(OUTPUT_PATH, output)
 
     status = "OK" if not remote_data["error"] else f"ERROR: {remote_data['error']}"
     llm_status = " +LLM" if remote_data.get("llm_analyzed") else ""
@@ -601,8 +636,8 @@ def sync_all():
         "project_count": len(projects_data),
         "projects": projects_data,
     }
-    with open(OUTPUT_PATH, "w", encoding="utf-8") as f:
-        json.dump(output, f, ensure_ascii=False, indent=2)
+    with _write_lock:
+        atomic_write_json(OUTPUT_PATH, output)
 
     llm_count = sum(1 for p in projects_data if p.get("llm_analyzed"))
     print(f"\n[sync] Done. {len(projects_data)} projects synced{f', {llm_count} with LLM analysis' if llm_count else ''} -> {OUTPUT_PATH}")
