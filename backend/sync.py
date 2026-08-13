@@ -692,8 +692,9 @@ def _sftp_connect(server: dict):
     return client, sftp
 
 
-def _sftp_stat_tree(sftp, remote_dir: str, remote_root: str = "", sync_all: bool = False) -> dict:
-    """递归获取远程目录下所有文件的 (mtime, size)，返回 {完整路径: (mtime, size)}。sync_all=True 时不做任何过滤"""
+def _sftp_stat_tree(sftp, remote_dir: str, remote_root: str = "", sync_all: bool = False, cancel_event=None) -> dict:
+    """递归获取远程目录下所有文件的 (mtime, size)，返回 {完整路径: (mtime, size)}。sync_all=True 时不做任何过滤。
+    cancel_event 命中时提前停止遍历（返回已扫描的部分结果，调用方会在传输前用 _cancelled() 判定为取消）。"""
     if not remote_root:
         remote_root = remote_dir
     result = {}
@@ -702,6 +703,8 @@ def _sftp_stat_tree(sftp, remote_dir: str, remote_root: str = "", sync_all: bool
     except Exception:
         return result
     for entry in entries:
+        if cancel_event is not None and cancel_event.is_set():
+            return result
         if entry.filename in (".", ".."):
             continue
         full = f"{remote_dir}/{entry.filename}"
@@ -718,7 +721,27 @@ def _sftp_stat_tree(sftp, remote_dir: str, remote_root: str = "", sync_all: bool
     return result
 
 
-def _remote_stat_tree_fast(client, remote_path: str, sync_all: bool = False):
+def _parse_find_record(out: dict, base: str, rec: bytes, sync_all: bool):
+    """把一条 find -printf 记录写入 out（base/rel -> (mtime, size)）。"""
+    if not rec:
+        return
+    parts = rec.split(b"\t", 2)
+    if len(parts) != 3:
+        return
+    try:
+        mtime = float(parts[0])
+        size = int(parts[1])
+    except ValueError:
+        return
+    rel = parts[2].decode("utf-8", "surrogateescape")
+    if rel.startswith("./"):
+        rel = rel[2:]
+    if not rel or (not sync_all and _should_ignore(rel)):
+        return
+    out[f"{base}/{rel}"] = (mtime, size)
+
+
+def _remote_stat_tree_fast(client, remote_path: str, sync_all: bool = False, cancel_event=None):
     """
     用一条远程 find 命令快速获取文件树 {完整路径: (mtime, size)}。
     只读操作，不在服务器上写任何文件。失败（非 GNU find 等）返回 None，调用方回退 SFTP 递归。
@@ -734,40 +757,43 @@ def _remote_stat_tree_fast(client, remote_path: str, sync_all: bool = False):
                 f"find . \\( {prune} \\) -prune -o -type f -printf '%T@\\t%s\\t%p\\0'"
             )
         stdin, stdout, stderr = client.exec_command(cmd, timeout=180)
-        data = stdout.read()
-        status = stdout.channel.recv_exit_status()
-        if status != 0 or not data:
-            return None
         out = {}
         base = remote_path.rstrip("/")
-        for rec in data.split(b"\0"):
-            if not rec:
-                continue
-            parts = rec.split(b"\t", 2)
-            if len(parts) != 3:
-                continue
-            try:
-                mtime = float(parts[0])
-                size = int(parts[1])
-            except ValueError:
-                continue
-            rel = parts[2].decode("utf-8", "surrogateescape")
-            if rel.startswith("./"):
-                rel = rel[2:]
-            if not rel or (not sync_all and _should_ignore(rel)):
-                continue
-            out[f"{base}/{rel}"] = (mtime, size)
+        buf = b""
+        while True:
+            # 扫描期周期性检查取消：命中则关闭通道并提前返回（调用方以 _cancelled() 判定为取消）
+            if cancel_event is not None and cancel_event.is_set():
+                try:
+                    stdout.channel.close()
+                except Exception:
+                    pass
+                return None
+            chunk = stdout.read(65536)
+            if not chunk:
+                break
+            buf += chunk
+            # 解析已完整以 \0 结尾的记录，避免把整个输出堆在内存（大目录优化）
+            while b"\0" in buf:
+                rec, buf = buf.split(b"\0", 1)
+                _parse_find_record(out, base, rec, sync_all)
+        if buf:
+            _parse_find_record(out, base, buf, sync_all)
+        if not out:
+            return None
         return out
     except Exception as e:
         print(f"[sync-download] 快速扫描失败，回退 SFTP 递归: {e}")
         return None
 
 
-def _local_stat_tree(local_dir: str, sync_all: bool = False) -> dict:
-    """获取本地目录下所有文件的 (mtime, size)，返回 {相对路径: (mtime, size)}。sync_all=True 时不过滤"""
+def _local_stat_tree(local_dir: str, sync_all: bool = False, cancel_event=None) -> dict:
+    """获取本地目录下所有文件的 (mtime, size)，返回 {相对路径: (mtime, size)}。sync_all=True 时不过滤。
+    cancel_event 命中时提前停止遍历（调用方会在传输前用 _cancelled() 判定为取消）。"""
     result = {}
     local_dir = os.path.normpath(local_dir)
     for root, dirs, files in os.walk(local_dir):
+        if cancel_event is not None and cancel_event.is_set():
+            return result
         # 跳过忽略目录（不屏蔽点文件）
         if not sync_all:
             dirs[:] = [d for d in dirs if d not in DEFAULT_SYNC_IGNORE]
@@ -814,13 +840,13 @@ def sync_download(server: dict, project: dict, local_path: str, progress_cb=None
         print(f"[sync-download] 扫描远程 {remote_path} ...")
         _report(phase='scanning')
         # 优先一条 find 命令快速扫描（只读），失败回退 SFTP 递归
-        remote_files = None if _cancelled() else _remote_stat_tree_fast(client, remote_path, sync_all=sync_all)
+        remote_files = None if _cancelled() else _remote_stat_tree_fast(client, remote_path, sync_all=sync_all, cancel_event=cancel_event)
         if remote_files is None and not _cancelled():
-            remote_files = _sftp_stat_tree(sftp, remote_path, sync_all=sync_all)
+            remote_files = _sftp_stat_tree(sftp, remote_path, sync_all=sync_all, cancel_event=cancel_event)
         if remote_files is None:
             remote_files = {}
         print(f"[sync-download] 远程文件数: {len(remote_files)}（sync_all={sync_all}）")
-        local_files = _local_stat_tree(local_path, sync_all=sync_all) if os.path.isdir(local_path) else {}
+        local_files = _local_stat_tree(local_path, sync_all=sync_all, cancel_event=cancel_event) if os.path.isdir(local_path) else {}
         print(f"[sync-download] 本地文件数: {len(local_files)}")
 
         to_download = []  # list of (remote_full_path, relative_path)
@@ -1048,8 +1074,8 @@ def sync_upload(server: dict, project: dict, local_path: str, progress_cb=None, 
 
         print(f"[sync-upload] 扫描本地 {local_path} ...")
         _report(phase='scanning')
-        local_files = _local_stat_tree(local_path, sync_all=sync_all)
-        remote_files = _sftp_stat_tree(sftp, remote_path, sync_all=sync_all)
+        local_files = _local_stat_tree(local_path, sync_all=sync_all, cancel_event=cancel_event)
+        remote_files = _sftp_stat_tree(sftp, remote_path, sync_all=sync_all, cancel_event=cancel_event)
 
         to_upload = []  # list of (relative_path, local_full_path)
         selected_set = set(selected_files) if selected_files else None

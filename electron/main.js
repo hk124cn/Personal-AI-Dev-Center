@@ -166,6 +166,22 @@ function killBackend() {
 ipcMain.handle('get-logs', () => logBuffer);
 ipcMain.handle('clear-logs', () => { logBuffer.length = 0; return true; });
 
+// 原生目录选择对话框（替代后端 tkinter，打包后更可靠、不依赖 Python GUI 库）
+ipcMain.handle('dialog:pickDirectory', async () => {
+  if (!mainWindow) return '';
+  try {
+    const { canceled, filePaths } = await dialog.showOpenDialog(mainWindow, {
+      title: '选择项目本地目录',
+      properties: ['openDirectory', 'createDirectory'],
+    });
+    if (canceled || !filePaths || filePaths.length === 0) return '';
+    return filePaths[0];
+  } catch (e) {
+    console.error('[Electron] pickDirectory failed:', e);
+    return '';
+  }
+});
+
 // ==================== MENU BAR (Chinese) ====================
 const menuTemplate = [
   {

@@ -3004,18 +3004,31 @@ async function syncProject(projectId) {
 
 async function pickDirectory(projectId) {
   try {
+    // 优先用 Electron 原生对话框（打包后不依赖 Python tkinter，更可靠）
+    if (window.electronAPI && typeof window.electronAPI.pickDirectory === 'function') {
+      const path = await window.electronAPI.pickDirectory();
+      if (path) {
+        applyPickedDir(projectId, path);
+      }
+      return;
+    }
+    // 回退：HTTP 端点（开发 / 网页模式）
     const res = await fetch(`${API_BASE}/api/pick-directory`, { method: 'POST', signal: AbortSignal.timeout(60000) });
     const data = await res.json();
     if (data.success && data.path) {
-      const input = document.getElementById('local-path-input');
-      if (input) input.value = data.path;
-      const p = state.projects.find(x => x.id === projectId);
-      if (p) p.localPath = data.path;
-      await saveLocalPath(projectId, data.path);
+      applyPickedDir(projectId, data.path);
     }
   } catch(e) {
     showToast('❌ ' + t('pick_dir_fail'), 'alert-circle');
   }
+}
+
+function applyPickedDir(projectId, path) {
+  const input = document.getElementById('local-path-input');
+  if (input) input.value = path;
+  const p = state.projects.find(x => x.id === projectId);
+  if (p) p.localPath = path;
+  saveLocalPath(projectId, path);
 }
 
 async function saveLocalPath(projectId, pathOverride) {
