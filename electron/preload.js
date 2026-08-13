@@ -11,4 +11,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
   // Check if running in Electron
   isElectron: true,
+  // Native directory picker (returns '' on cancel / unsupported)
+  pickDirectory: () => ipcRenderer.invoke('dialog:pickDirectory'),
 });
