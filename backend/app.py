@@ -9,6 +9,7 @@ import shutil
 import subprocess
 import sys
 import time
+import signal
 import socket
 import re
 import markdown
@@ -476,26 +477,55 @@ def test_llm_connection(payload: dict):
     return test_connection(llm_config)
 
 
+def _kill_proc_tree(proc):
+    """跨平台杀掉进程及其子进程（Windows 用 taskkill /T），避免超时后子进程残留。"""
+    try:
+        if proc.poll() is not None:
+            return
+        if sys.platform == "win32":
+            subprocess.run(
+                ["taskkill", "/PID", str(proc.pid), "/T", "/F"],
+                capture_output=True, timeout=10,
+            )
+        else:
+            os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+    except Exception:
+        try:
+            proc.kill()
+        except Exception:
+            pass
+
+
 @app.post("/api/sync")
 def trigger_sync():
     """手动触发一次数据同步"""
     try:
-        result = subprocess.run(
+        proc = subprocess.Popen(
             [sys.executable, str(BASE_DIR / "backend" / "sync.py")],
-            capture_output=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
             text=True,
-            timeout=120,
             cwd=str(BASE_DIR),
         )
-        output = result.stdout + result.stderr
+        try:
+            out, err = proc.communicate(timeout=120)
+            success = proc.returncode == 0
+        except subprocess.TimeoutExpired:
+            # 超时：彻底杀掉子进程树，避免其派生的 SSH 子进程残留后台
+            _kill_proc_tree(proc)
+            try:
+                out, err = proc.communicate(timeout=10)
+            except Exception:
+                out, err = "", "Sync timed out and child process killed"
+            raise HTTPException(status_code=504, detail="Sync timed out (120s), process killed")
         data = load_json(LATEST_JSON)
         return {
-            "success": result.returncode == 0,
-            "output": output,
+            "success": success,
+            "output": (out or "") + (err or ""),
             "data": data,
         }
-    except subprocess.TimeoutExpired:
-        raise HTTPException(status_code=504, detail="Sync timed out (120s)")
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -899,10 +929,10 @@ def analyze_local_project(project_id: str):
 
 @app.post("/api/pick-directory")
 def pick_directory():
-    """打开系统原生目录选择对话框"""
-    import tkinter as tk
-    from tkinter import filedialog
+    """打开系统原生目录选择对话框（打包后由 Electron 原生对话框接管，见 electron/main.js + preload.js）"""
     try:
+        import tkinter as tk
+        from tkinter import filedialog
         root = tk.Tk()
         root.withdraw()
         root.attributes("-topmost", True)
