@@ -4,7 +4,7 @@
 
 > A local multi-server / multi-project management panel — one console to rule all your development resources: servers, remote projects, AI agents, knowledge base, and personal assets.
 
-![Version](https://img.shields.io/badge/version-1.4.16-blue) ![Platform](https://img.shields.io/badge/platform-Windows-lightgrey) ![Stack](https://img.shields.io/badge/Electron%20%2B%20FastAPI%20%2B%20SPA-green)
+![Version](https://img.shields.io/badge/version-1.4.17-blue) ![Platform](https://img.shields.io/badge/platform-Windows-lightgrey) ![Stack](https://img.shields.io/badge/Electron%20%2B%20FastAPI%20%2B%20SPA-green)
 
 ## Introduction
 
@@ -13,6 +13,7 @@ Personal AI Dev Center is a local desktop console that brings everything under o
 - **Electron shell + FastAPI backend** (localhost:8765) + **single-file static SPA** (no frontend build step)
 - **SSH/Paramiko sync engine**: bidirectional incremental sync over tar-over-SSH; file lists are piped via stdin; downloads are **read-only on the server**
 - **Optional LLM analysis** of project Markdown docs (OpenAI-compatible API, multiple saved configs)
+- **Zero environment dependency**: the backend is bundled as a self-contained `devcenter-backend.exe` via PyInstaller, so **no Python install is needed on the target machine**; source mode can still use the system Python for debugging
 - All data stays local (`%APPDATA%/Personal AI Dev Center/`) — nothing is uploaded anywhere
 
 ## Screenshots
@@ -41,6 +42,8 @@ Personal AI Dev Center is a local desktop console that brings everything under o
 
 ## Architecture
 
+> The backend is bundled as a self-contained `devcenter-backend.exe` via PyInstaller (embedding the Python runtime + all dependencies) and shipped with Electron, so **no Python install is required on the target machine**.
+
 ```
 ┌────────────────────────────────────────────┐
 │ Electron shell (electron/main.js)          │
@@ -62,7 +65,7 @@ Data flow: SPA edits config → `config.json` → manual sync → SSH reads remo
 
 ### Option 1: Prebuilt exe (Windows)
 
-Download `Personal-AI-Dev-Center.exe` from Releases and double-click (portable, no install). On first run the demo config is copied to `%APPDATA%/Personal AI Dev Center/config.json` — replace it with your own servers afterwards.
+Download `Personal-AI-Dev-Center.exe` from Releases and double-click (portable, no install, **no Python required**). On first run the demo config is copied to `%APPDATA%/Personal AI Dev Center/config.json` — replace it with your own servers afterwards.
 
 ### Option 2: Run from source
 
@@ -82,9 +85,12 @@ npm start
 ### Build it yourself
 
 ```bash
-npm run build        # portable exe → dist/
+build_backend.bat   # first bundle the backend into the built-in devcenter-backend.exe via PyInstaller (needs a local Python env)
+npm run build        # portable exe → dist/ (auto-bundles the built-in backend exe into resources)
 npm run build:setup  # NSIS installer
 ```
+
+> Skipping `build_backend.bat` makes Electron fall back to launching the backend with the system Python (still works, but won't start on machines without Python installed).
 
 ## Configuration
 
