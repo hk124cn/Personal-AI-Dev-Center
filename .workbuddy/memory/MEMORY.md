@@ -6,7 +6,7 @@
 
 ## 开发 / 发布 / 推送
 - **推送规则（用户明确）**：不主动推 GitHub，仅用户要求才推；本地 commit 照常做、做完告知即可。远程 `git@github.com:hk124cn/Personal-AI-Dev-Center.git`(public, main)。
-- 本地跑：`pip install -r backend/requirements.txt` → `python backend/app.py`。Electron 启动时 spawn 该 python（R5 计划改 PyInstaller 把后端打进 exe 内置）。
+- 本地跑：`pip install -r backend/requirements.txt` → `python backend/app.py`。Electron 启动时**优先 spawn 内置 `resources/backend/devcenter-backend.exe`**（PyInstaller 自包含 Python，目标机无需装 Python），找不到该 exe 才回退 `python backend/app.py`。
 - 发布：`npm run build`(portable, dist/) 或 `npm run build:setup`(NSIS)。package.json `extraResources` 把 `backend/`、`index.html`、`config.example.json`(脱敏) 复制进 `resources/`；真实 `config.json` 不进包（运行时读 `%APPDATA%/Personal AI Dev Center/config.json`）。
 - ⚠️ **构建坑**：`npm run build` 后 `node.exe`(electron-builder) 易孤儿化并锁 `dist/Personal-AI-Dev-Center.exe`；重建前先 `tasklist`/`taskkill` 清残留 node.exe + 关闭 live app。`dist/` 与 `dist_new/` 两目录并存，清理时只删 `dist_new`。验证打包是否含密钥：解包 `resources/` 查（不要只 grep 压缩的 asar）。
 
@@ -22,14 +22,14 @@
 | R2 | 上传整包进内存爆内存 | ✅ 改流式 tar |
 | R3 | 上传命令注入 | ✅ shlex.quote |
 | R4 | 上传无法取消 | ✅ 加取消机制 |
-| R5 | 后端依赖本机 python | ⬜ 待做(PyInstaller，硬骨头) |
+| R5 | 后端依赖本机 python | ✅ PyInstaller 内置 exe + python 回退 |
 | R6 | 配置/数据并发写非原子 | ✅ atomic_write_json + 锁 |
 | R7 | 知识库 Markdown XSS | ✅ sanitize_html |
 | R8 | 全量同步阻塞/子进程残留 | ✅ Popen+超时杀进程树(_kill_proc_tree) |
 | R9 | 扫描阶段不响应取消 | ✅ 扫描函数增量读+周期检查 cancel_event |
 | R10 | 取消注册表缺锁 | ✅ 加锁 |
 - 验证脚本：`test_security_robustness.py`(19 项)、`test_r8_r9.py`(12 项)。详见 `docs/system-review.md`。
-- **剩余唯一待做：R5（PyInstaller 把后端打进 exe，换无 python 机器也能跑）**——硬骨头，建议单独一轮充分测，本机有 python 当前无需。打包杂项（目录选择改 Electron dialog + 清 dist_new）已完成。
+- **R1–R10 全部完成**：R5 已用 PyInstaller 把后端打进 `devcenter-backend.exe`（自包含 Python 运行时，目标机无需装 Python），Electron 优先 spawn 该 exe 并注入环境变量，回退 python；版本号经 `DEV_CENTER_APP_VERSION` 注入。打包杂项（目录选择改 Electron dialog + 清 dist_new）已完成。
 
 ## 模块要点
 - **知识库**：`%APPDATA%/…/knowledge/<分类>/<id>.md`；API `/api/kb/*`；AI 可经 `/api/kb/doc` 写(`author:"ai"`) 但绝不自动灌，经用户点头才写。

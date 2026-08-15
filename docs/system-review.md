@@ -10,7 +10,7 @@
 | R2 | 上传把整个目录 `io.BytesIO` 整包进内存，数万文件/数十 GB 必爆内存 | 高（大项目上传崩溃） | ✅ 已修 |
 | R3 | 上传命令 `tar xf - -C '{remote_path}'` 仅套单引号，未 `shlex.quote`，命令注入 | 高（在服务器上执行任意命令） | ✅ 已修 |
 | R4 | 上传无取消机制，点 × 只关窗口、后台继续传 | 高（大上传关不掉） | ✅ 已修 |
-| R5 | 打包 exe 用 `spawn('python')` 启动后端，目标机无 python/不在 PATH 则起不来 | 中高（换机分发风险） | ⏸ 待处理 |
+| R5 | 打包 exe 用 `spawn('python')` 启动后端，目标机无 python/不在 PATH 则起不来 | 中高（换机分发风险） | ✅ 已修（PyInstaller 内置 exe + python 回退） |
 | R6 | `save_config` / `latest.json` 读写为读-改-写、非原子，并发可能损坏或互相覆盖 | 中 | ✅ 已修 |
 | R7 | 知识库 `/api/kb/render` 不过滤原始 HTML，前端 `innerHTML` 直接渲染，`<script>`/`onerror` 会执行 | 中（分享知识库时危险） | ✅ 已修 |
 | R8 | 全量同步 `/api/sync` 用 `subprocess.run(timeout=120)` 阻塞，超 120s 返 504 但子进程可能残留 | 中 | ✅ 已修 |
@@ -35,13 +35,20 @@
 - **R9 扫描阶段可取消**：`_remote_stat_tree_fast` 改为**增量读取**（边收边解析，避免把整个输出堆内存），并在两次读之间检查 `cancel_event`，命中即关闭 SSH 通道提前返回；`_sftp_stat_tree` / `_local_stat_tree` 也在遍历中检查 `cancel_event` 提前停止。下载/上传的传输前 `_cancelled()` 判定保持不变。9 万文件项目点 × 不必等整轮扫描完。
 - **打包杂项**：目录选择从后端 `tkinter` 改为 **Electron 原生 `dialog`**（`ipcMain.handle('dialog:pickDirectory')` + `preload.js` 暴露 `electronAPI.pickDirectory` + 前端优先走 IPC、回退 HTTP 端点）；后端 `/api/pick-directory` 的 `import tkinter` 移入 try 内，tkinter 缺失时返回干净 `success:false` 而非 500。另清理冗余的 `dist_new/` 构建目录。
 
-## 三、待处理（仅剩一项）
+### 第四轮（R5 PyInstaller 内置后端——收尾）
+- **统一路径解析**：新增 `backend/common_paths.py`，用环境变量（`DEV_CENTER_PACKAGED` / `DEV_CENTER_RESOURCE_DIR` / `DEV_CENTER_DATA_DIR` / `DEV_CENTER_APP_VERSION`）感知 dev 与打包两种模式；`app.py` / `sync.py` 全部改用它，`backend/` 补 `__init__.py` 成为正式包（解决打包后 `from llm_analyzer import` 与 `sys.path` 技巧失效问题）。
+- **同步调用分支**：`/api/sync` 在 `DEV_CENTER_PACKAGED=1` 时改为**进程内 `import backend.sync` → `sync_all()`**（保留 R8 的超时与 `_kill_proc_tree` 语义），彻底摆脱打包后对磁盘 `sync.py` + 系统 `python` 的 subprocess 依赖；dev 模式仍走原 subprocess 路径。
+- **打包后端**：PyInstaller one-file 把 `backend/app.py` 打成自包含 `devcenter-backend.exe`（含 Python 运行时 + uvicorn/starlette/paramiko/markdown/multipart 等），经 `package.json` 的 `extraResources` 复制进 `dist/win-unpacked/resources/backend/`。新增 `build_backend.bat` 供复现。
+- **Electron 启动**：`main.js` 检测到 `resources/backend/devcenter-backend.exe` 存在则 **spawn 该 exe** 并注入上述四个环境变量（`DATA_DIR` 指向 `%APPDATA%/Personal AI Dev Center/data`，因 NSIS 安装后 resources 只读）；找不到才回退 `python backend/app.py`。
+- **版本号注入**：`package.json` 移出 `extraResources`（仅留 asar，避免 asar 校验失败），版本号改由 Electron 经 `DEV_CENTER_APP_VERSION` 注入后端，不再依赖磁盘 `package.json`。
 
-1. **R5 打包健壮性（硬骨头）**：用 PyInstaller 把后端打进 exe，或启动时探测 python 完整路径；否则换台没装 python 的机器起不来。改动大、需重设计 Electron 启动方式，建议单独一轮 + 充分测。本机有 python 当前无需。
+## 三、待处理（已全部完成）
+
+R1–R10 全部修复并通过验证。无遗留项。
 
 ## 四、验证方式（每次改动后必做）
 
 - **单元测试**：`test_security_robustness.py` 覆盖 R7/R6/R10；`test_r8_r9.py` 覆盖 R8（`_kill_proc_tree` 杀掉子进程树）、R9（扫描增量读取+取消、本地/SFTP 扫描取消、find 记录解析与默认过滤）。
 - **HTTP 冒烟**：起后端后 `curl` 验证 `/api/health`、`/api/kb/render`（注入载荷应返回已消毒 HTML）、`/api/assets`、`/api/config/full` 均 200 且返回真实数据。
 - **无头浏览器回归**：加载页面确认 0 控制台错误、0 页面异常（本机 sandbox 下 Chromium 偶发 teardown 崩溃，属环境限制；页面标题正常渲染即证明 SPA 可加载）。
-- **打包验证**：`npm run build` 后解包 `dist/win-unpacked/resources/`（`backend/`、`index.html` 由 `extraResources` 复制，不在 asar 内），grep 确认改动已打入，并扫描无真实密钥/私钥泄漏。
+- **打包验证**：`npm run build` 后解包 `dist/win-unpacked/resources/`（`backend/`、`index.html` 由 `extraResources` 复制，不在 asar 内），grep 确认改动已打入，并扫描无真实密钥/私钥泄漏。另确认 `resources/backend/devcenter-backend.exe` 随包复制、且 `app.asar` 内含有 `package.json`（`main` 入口）与最新 `electron/main.js`（含 `DEV_CENTER_APP_VERSION` / `devcenter-backend.exe` 分支）。
