@@ -27,46 +27,21 @@ from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
 from typing import Optional, List
 
-BASE_DIR = Path(__file__).resolve().parent.parent
-DATA_DIR = BASE_DIR / "backend" / "data"
+# 让 backend 作为正式包可导入（dev 下需把仓库根加入 sys.path；打包后 backend 已被收集）
+_REPO_ROOT = str(Path(__file__).resolve().parent.parent)
+if _REPO_ROOT not in sys.path:
+    sys.path.insert(0, _REPO_ROOT)
 
+from backend.common_paths import (
+    USER_DATA_DIR, CONFIG_PATH, RESOURCE_DIR, BASE_DIR, DATA_DIR, LATEST_JSON,
+    RESOURCE_CONFIG, RESOURCE_CONFIG_EXAMPLE, APP_VERSION,
+)
 
-def _get_pkg_version():
-    """从 package.json 读取版本号，保证与发布版本一致"""
-    try:
-        with open(BASE_DIR / "package.json", "r", encoding="utf-8") as f:
-            return json.load(f).get("version", "1.0.0")
-    except Exception:
-        return "1.0.0"
-
-
-APP_VERSION = _get_pkg_version()
-
-# 使用用户数据目录存储配置，确保打包后配置能持久化
-# Windows: %APPDATA%/Personal AI Dev Center/
-# macOS: ~/Library/Application Support/Personal AI Dev Center/
-# Linux: ~/.config/Personal AI Dev Center/
-def get_user_data_dir():
-    if sys.platform == 'win32':
-        return Path(os.environ.get('APPDATA', Path.home() / 'AppData' / 'Roaming')) / 'Personal AI Dev Center'
-    elif sys.platform == 'darwin':
-        return Path.home() / 'Library' / 'Application Support' / 'Personal AI Dev Center'
-    else:
-        return Path.home() / '.config' / 'Personal AI Dev Center'
-
-USER_DATA_DIR = get_user_data_dir()
-USER_DATA_DIR.mkdir(parents=True, exist_ok=True)
-CONFIG_PATH = USER_DATA_DIR / "config.json"
-
-# 如果用户配置不存在，从资源目录复制默认配置
-RESOURCE_CONFIG = BASE_DIR / "config.json"
-RESOURCE_CONFIG_EXAMPLE = BASE_DIR / "config.example.json"
+# 如果用户配置不存在，从资源目录复制默认配置（首次启动）
 if not CONFIG_PATH.exists():
     src = RESOURCE_CONFIG if RESOURCE_CONFIG.exists() else RESOURCE_CONFIG_EXAMPLE
     if src.exists():
         shutil.copy2(src, CONFIG_PATH)
-
-LATEST_JSON = DATA_DIR / "latest.json"
 
 app = FastAPI(title="Personal AI Dev Center API", version=APP_VERSION)
 
@@ -498,8 +473,14 @@ def _kill_proc_tree(proc):
 
 @app.post("/api/sync")
 def trigger_sync():
-    """手动触发一次数据同步"""
+    """手动触发一次数据同步。
+    - 打包模式（DEV_CENTER_PACKAGED=1）：进程内调用 sync_all()，不依赖外部 python/sync.py。
+    - dev 模式：沿用 subprocess 调 python backend/sync.py（保留 R8 超时杀进程树语义）。
+    """
     try:
+        if os.environ.get("DEV_CENTER_PACKAGED") == "1":
+            return _trigger_sync_inprocess()
+        # ---- dev 模式：subprocess 隔离，超时杀进程树 ----
         proc = subprocess.Popen(
             [sys.executable, str(BASE_DIR / "backend" / "sync.py")],
             stdout=subprocess.PIPE,
@@ -528,6 +509,35 @@ def trigger_sync():
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+def _trigger_sync_inprocess():
+    """打包模式的全量同步：进程内执行 sync_all，带线程超时（保留 R8 超时兜底）。"""
+    from backend.sync import sync_all
+
+    box: dict = {}
+    err_box: dict = {}
+
+    def _run():
+        try:
+            box["result"] = sync_all()
+        except Exception as e:  # noqa: BLE001
+            err_box["error"] = e
+
+    t = threading.Thread(target=_run, daemon=True)
+    t.start()
+    t.join(120)
+    if t.is_alive():
+        # 无法强杀 paramiko 线程，但至少不阻塞 API，返回超时
+        raise HTTPException(status_code=504, detail="Sync timed out (120s)")
+    if "error" in err_box:
+        raise HTTPException(status_code=500, detail=str(err_box["error"]))
+    data = load_json(LATEST_JSON)
+    return {
+        "success": True,
+        "output": "[packaged] in-process sync_all completed",
+        "data": data,
+    }
 
 
 @app.post("/api/sync/{project_id}")

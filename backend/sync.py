@@ -18,6 +18,11 @@ import tempfile
 from datetime import datetime
 from pathlib import Path
 
+# 让 backend 作为正式包可导入（dev 下需把仓库根加入 sys.path；打包后 backend 已被收集）
+_REPO_ROOT = str(Path(__file__).resolve().parent.parent)
+if _REPO_ROOT not in sys.path:
+    sys.path.insert(0, _REPO_ROOT)
+
 # Windows 控制台 GBK 编码无法打印 emoji 等 Unicode 字符，强制使用 UTF-8
 if sys.stdout and hasattr(sys.stdout, 'reconfigure'):
     try:
@@ -27,17 +32,20 @@ if sys.stdout and hasattr(sys.stdout, 'reconfigure'):
 
 import paramiko
 
-# Import LLM analyzer
+# Import LLM analyzer（优先按正式包导入，回退到脚本同目录导入，兼容两种运行方式）
 try:
-    from llm_analyzer import analyze_project
+    from backend.llm_analyzer import analyze_project
 except ImportError:
-    analyze_project = None
+    try:
+        from llm_analyzer import analyze_project
+    except ImportError:
+        analyze_project = None
 
-# Paths
-BASE_DIR = Path(__file__).resolve().parent.parent
-CONFIG_PATH = BASE_DIR / "config.json"
-DATA_DIR = BASE_DIR / "backend" / "data"
-OUTPUT_PATH = DATA_DIR / "latest.json"
+# Paths（统一走 common_paths：config 落在 APPDATA，latest.json 落可写数据目录）
+from backend.common_paths import CONFIG_PATH, DATA_DIR, LATEST_JSON, USER_DATA_DIR
+
+BASE_DIR = Path(__file__).resolve().parent.parent  # 向后兼容（部分内部逻辑仍引用）
+OUTPUT_PATH = LATEST_JSON
 
 # MD files to look for in each project directory
 MD_FILES = ["TODO.md", "PROGRESS.md", "ISSUES.md"]

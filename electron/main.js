@@ -1,6 +1,8 @@
 const { app, BrowserWindow, dialog, ipcMain, Menu } = require('electron');
 const { spawn } = require('child_process');
 const path = require('path');
+const fs = require('fs');
+const os = require('os');
 const http = require('http');
 
 // 从 package.json 读取版本号，保证与发布版本一致
@@ -38,17 +40,44 @@ function getResourceDir() {
 
 function startBackend() {
   const resourceDir = getResourceDir();
-  const backendScript = path.join(resourceDir, 'backend', 'app.py');
+  // R5: 打包后优先用内置 exe（自包含 Python，目标机无需安装 Python）
+  const bundledExe = path.join(resourceDir, 'backend', 'devcenter-backend.exe');
+  const useBundled = fs.existsSync(bundledExe);
 
-  console.log(`[Electron] Starting backend: python ${backendScript}`);
-  console.log(`[Electron] Working directory: ${resourceDir}`);
-  addLog('info', `[Electron] Starting backend: python ${backendScript}`);
+  let command, args, env;
+  if (useBundled) {
+    console.log(`[Electron] Starting bundled backend: ${bundledExe}`);
+    addLog('info', `[Electron] Starting bundled backend: ${bundledExe}`);
+    command = bundledExe;
+    args = [];
+    const dataDir = path.join(
+      process.env.APPDATA || path.join(os.homedir(), 'AppData', 'Roaming'),
+      'Personal AI Dev Center', 'data'
+    );
+    env = {
+      ...process.env,
+      DEV_CENTER_PACKAGED: '1',
+      DEV_CENTER_RESOURCE_DIR: resourceDir,
+      DEV_CENTER_DATA_DIR: dataDir,
+      DEV_CENTER_APP_VERSION: APP_VERSION,
+      PYTHONIOENCODING: 'utf-8',
+    };
+  } else {
+    // dev / 回退：用系统 python 运行 backend/app.py
+    const backendScript = path.join(resourceDir, 'backend', 'app.py');
+    console.log(`[Electron] Starting backend: python ${backendScript}`);
+    console.log(`[Electron] Working directory: ${resourceDir}`);
+    addLog('info', `[Electron] Starting backend: python ${backendScript}`);
+    command = 'python';
+    args = [backendScript];
+    env = { ...process.env, DEV_CENTER_APP_VERSION: APP_VERSION, PYTHONIOENCODING: 'utf-8' };
+  }
 
-  backendProcess = spawn('python', [backendScript], {
+  backendProcess = spawn(command, args, {
     cwd: resourceDir,
     stdio: ['ignore', 'pipe', 'pipe'],
     windowsHide: true,
-    env: { ...process.env, PYTHONIOENCODING: 'utf-8' },
+    env,
   });
 
   backendProcess.stdout.on('data', (data) => {
@@ -72,7 +101,7 @@ function startBackend() {
     addLog('error', `[Electron] Failed to start Python: ${err.message}`);
     dialog.showErrorBox(
       '启动失败 / Startup Failed',
-      `无法启动 Python 后端。\n请确认已安装 Python 并加入 PATH。\n\n错误: ${err.message}`
+      `无法启动后端服务。\n（打包版内置运行环境；若用源码运行请确认已安装 Python 并加入 PATH。）\n\n错误: ${err.message}`
     );
     app.quit();
   });
@@ -261,7 +290,7 @@ app.on('ready', async () => {
     addLog('error', `[Electron] ${err.message}`);
     dialog.showErrorBox(
       '启动超时 / Startup Timeout',
-      `后端服务未能在 ${MAX_WAIT_MS / 1000} 秒内启动。\n\n可能原因:\n1. 端口 ${PORT} 被占用\n2. Python 依赖未安装\n3. 配置错误\n\n请检查后重试。`
+      `后端服务未能在 ${MAX_WAIT_MS / 1000} 秒内启动。\n\n可能原因:\n1. 端口 ${PORT} 被占用\n2. 后端未正确启动（内置运行环境损坏）\n3. 配置错误\n\n请检查后重试。`
     );
     killBackend();
     app.quit();

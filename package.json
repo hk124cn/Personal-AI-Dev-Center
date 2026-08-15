@@ -15,13 +15,18 @@
       "output": "dist"
     },
     "files": [
-      "electron/**/*"
+      "electron/**/*",
+      "package.json"
     ],
     "extraResources": [
       {
         "from": "backend",
         "to": "backend",
-        "filter": ["**/*", "!__pycache__/**", "!data/**"]
+        "filter": ["**/*", "!__pycache__/**", "!data/**", "!build_venv/**", "!dist/**", "!build/**"]
+      },
+      {
+        "from": "backend/dist/devcenter-backend.exe",
+        "to": "backend/devcenter-backend.exe"
       },
       {
         "from": "index.html",
