@@ -4,7 +4,7 @@
 
 > 本地「多服务器 / 多项目管理面板」——一台面板掌控你的全部开发资源：服务器、远程项目、AI Agent、知识库与个人资产。
 
-![版本](https://img.shields.io/badge/version-1.4.16-blue) ![平台](https://img.shields.io/badge/platform-Windows-lightgrey) ![技术栈](https://img.shields.io/badge/Electron%20%2B%20FastAPI%20%2B%20SPA-green)
+![版本](https://img.shields.io/badge/version-1.4.17-blue) ![平台](https://img.shields.io/badge/platform-Windows-lightgrey) ![技术栈](https://img.shields.io/badge/Electron%20%2B%20FastAPI%20%2B%20SPA-green)
 
 ## 简介
 
@@ -13,6 +13,7 @@ Personal AI Dev Center 是一个运行在本地的个人开发控制台。它把
 - **Electron 外壳 + FastAPI 后端**（localhost:8765）+ **纯静态 SPA**（无前端构建步骤）
 - **SSH/Paramiko 同步引擎**：tar-over-SSH 双向增量同步，文件清单走 stdin，下载对服务器**只读零写入**
 - **可选 LLM 分析**：对项目 Markdown 文档做智能分析（OpenAI 兼容接口，可配多套）
+- **零环境依赖**：后端已用 PyInstaller 打包为自包含 `devcenter-backend.exe`，**运行目标机无需安装 Python**；源码模式仍可用系统 Python 调试
 - 数据全部存本地（`%APPDATA%/Personal AI Dev Center/`），不上传任何云端
 
 ## 截图
@@ -41,6 +42,8 @@ Personal AI Dev Center 是一个运行在本地的个人开发控制台。它把
 
 ## 技术架构
 
+> 后端已通过 PyInstaller 打包为自包含 `devcenter-backend.exe`（内嵌 Python 运行时 + 全部依赖），随 Electron 一并分发，运行目标机**无需安装 Python**。
+
 ```
 ┌────────────────────────────────────────────┐
 │ Electron 外壳（electron/main.js）           │
@@ -62,7 +65,7 @@ Personal AI Dev Center 是一个运行在本地的个人开发控制台。它把
 
 ### 方式一：下载打包好的 exe（Windows）
 
-从 Releases 下载 `Personal-AI-Dev-Center.exe`，双击即用（portable，免安装）。首次运行会自动把演示配置复制到 `%APPDATA%/Personal AI Dev Center/config.json`，之后改成你自己的服务器即可。
+从 Releases 下载 `Personal-AI-Dev-Center.exe`，双击即用（portable，免安装，**无需安装 Python 环境**）。首次运行会自动把演示配置复制到 `%APPDATA%/Personal AI Dev Center/config.json`，之后改成你自己的服务器即可。
 
 ### 方式二：源码运行
 
@@ -82,9 +85,12 @@ npm start
 ### 自行打包
 
 ```bash
-npm run build        # portable exe → dist/
+build_backend.bat   # 先把后端用 PyInstaller 打包为内置 devcenter-backend.exe（需本机 Python 环境）
+npm run build        # portable exe → dist/（自动把内置后端 exe 随 resources 一并打包）
 npm run build:setup  # NSIS 安装包
 ```
+
+> 若跳过 `build_backend.bat`，Electron 会回退到用系统 Python 启动后端（仍可用，但分发给未装 Python 的机器将起不来）。
 
 ## 配置说明
 
