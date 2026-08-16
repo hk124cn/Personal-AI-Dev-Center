@@ -1814,7 +1814,9 @@ def kb_import(payload: dict):
 def serve_frontend():
     index = BASE_DIR / "index.html"
     if index.exists():
-        return FileResponse(str(index))
+        # 显式声明 text/html，避免 PyInstaller/Windows 环境下 mimetypes 猜错，
+        # 导致浏览器把 HTML 当纯文本（CSS）显示。
+        return FileResponse(str(index), media_type="text/html")
     raise HTTPException(status_code=404, detail="Frontend not found")
 
 
