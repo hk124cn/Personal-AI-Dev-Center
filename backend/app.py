@@ -1000,6 +1000,181 @@ def speed_test():
     return results
 
 
+# ==================== 主机监控 (Host Monitoring) ====================
+
+def _connect_ssh_monitor(server: dict):
+    """复用 sync.py 的 Paramiko 连接方式，支持多密钥类型回退"""
+    import paramiko
+    key_path = os.path.expanduser(server.get("key_path") or server.get("sshKey") or "")
+    if not key_path:
+        raise RuntimeError("服务器未配置 SSH 私钥路径 (key_path)")
+    pkey = None
+    last_err = None
+    for key_cls in (paramiko.Ed25519Key, paramiko.RSAKey, paramiko.ECDSAKey):
+        try:
+            pkey = key_cls.from_private_key_file(key_path)
+            break
+        except Exception as e:
+            last_err = e
+            continue
+    if pkey is None:
+        raise RuntimeError(f"无法加载私钥: {last_err}")
+    client = paramiko.SSHClient()
+    client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+    client.connect(
+        hostname=server.get("host") or server.get("ip"),
+        port=int(server.get("port") or server.get("sshPort") or 22),
+        username=server.get("user") or server.get("sshUser"),
+        pkey=pkey,
+        timeout=15,
+    )
+    return client
+
+
+def _ssh_run(client, cmd):
+    stdin, stdout, stderr = client.exec_command(cmd)
+    return stdout.read().decode("utf-8", "replace").strip()
+
+
+def _parse_stat_line(s):
+    parts = s.split()
+    if not parts or parts[0] != "cpu":
+        return None
+    nums = [int(x) for x in parts[1:7]]
+    return {"total": sum(nums), "idle": nums[3]}
+
+
+def _parse_netdev(s):
+    rx = tx = 0
+    for line in s.splitlines()[2:]:
+        c = line.split(":")
+        if len(c) < 2:
+            continue
+        f = c[1].split()
+        if len(f) < 10 or c[0].strip() == "lo":
+            continue
+        rx += int(f[0])
+        tx += int(f[8])
+    return {"rx": rx, "tx": tx}
+
+
+def _grep_kv(text, key):
+    for line in text.splitlines():
+        if line.startswith(key + ":"):
+            try:
+                return int(line.split()[1])
+            except Exception:
+                return None
+    return None
+
+
+def _collect_metrics(client):
+    """采集一次服务器资源指标，返回 (metrics, error)"""
+    import time as _t
+    m = {
+        "status": "ok", "hostname": None, "kernel": None, "cpu_cores": None,
+        "cpu_percent": None, "mem_total_mb": None, "mem_used_mb": None, "mem_percent": None,
+        "disk_total_gb": None, "disk_used_gb": None, "disk_percent": None,
+        "load1": None, "load5": None, "load15": None,
+        "net_rx_kbps": None, "net_tx_kbps": None, "uptime_seconds": None,
+    }
+    try:
+        net1 = _parse_netdev(_ssh_run(client, "cat /proc/net/dev"))
+        cpu1 = _ssh_run(client, "head -1 /proc/stat")
+        _t.sleep(1)
+        cpu2 = _ssh_run(client, "head -1 /proc/stat")
+        net2 = _parse_netdev(_ssh_run(client, "cat /proc/net/dev"))
+
+        a, b = _parse_stat_line(cpu1), _parse_stat_line(cpu2)
+        if a and b and b["total"] > a["total"]:
+            di = b["total"] - a["total"]
+            m["cpu_percent"] = round(max(0.0, min(100.0, (di - (b["idle"] - a["idle"])) / di * 100)), 1)
+
+        mi = _ssh_run(client, "cat /proc/meminfo")
+        mt, ma = _grep_kv(mi, "MemTotal"), _grep_kv(mi, "MemAvailable")
+        if mt:
+            m["mem_total_mb"] = round(mt / 1024)
+            if ma:
+                used = mt - ma
+                m["mem_used_mb"] = round(used / 1024)
+                m["mem_percent"] = round(used / mt * 100, 1)
+
+        df = _ssh_run(client, "df -Pk / | tail -1").split()
+        if len(df) >= 5:
+            tk, uk = int(df[1]), int(df[2])
+            m["disk_total_gb"] = round(tk / 1024 / 1024, 1)
+            m["disk_used_gb"] = round(uk / 1024 / 1024, 1)
+            m["disk_percent"] = int(df[4].rstrip("%"))
+
+        la = _ssh_run(client, "cat /proc/loadavg").split()
+        if len(la) >= 3:
+            m["load1"], m["load5"], m["load15"] = float(la[0]), float(la[1]), float(la[2])
+
+        if net1 and net2:
+            m["net_rx_kbps"] = round((net2["rx"] - net1["rx"]) / 1024, 1)
+            m["net_tx_kbps"] = round((net2["tx"] - net1["tx"]) / 1024, 1)
+
+        uname = _ssh_run(client, "uname -a").split()
+        if uname:
+            m["hostname"] = uname[1] if len(uname) > 1 else None
+            m["kernel"] = uname[2] if len(uname) > 2 else None
+        try:
+            m["cpu_cores"] = int(_ssh_run(client, "nproc"))
+        except Exception:
+            pass
+        up = _ssh_run(client, "cat /proc/uptime").split()
+        try:
+            m["uptime_seconds"] = int(float(up[0]))
+        except Exception:
+            pass
+        return m, None
+    except Exception as e:
+        m["status"] = "error"
+        return m, str(e)
+
+
+_MONITOR_HISTORY = {}
+_MONITOR_HISTORY_MAX = 60
+
+
+@app.get("/api/monitor/{server_id}")
+def monitor_server(server_id: str):
+    """采集单台服务器的实时资源指标，并写入历史缓存"""
+    config = load_json(CONFIG_PATH) or {"servers": []}
+    server = next((s for s in config.get("servers", []) if s.get("id") == server_id), None)
+    if not server:
+        raise HTTPException(status_code=404, detail="服务器不存在")
+    try:
+        client = _connect_ssh_monitor(server)
+    except Exception as e:
+        return {"status": "error", "error": f"SSH 连接失败: {e}", "server_id": server_id}
+    try:
+        metrics, err = _collect_metrics(client)
+    finally:
+        try:
+            client.close()
+        except Exception:
+            pass
+    if err:
+        metrics["error"] = err
+    hist = _MONITOR_HISTORY.setdefault(server_id, [])
+    if metrics.get("cpu_percent") is not None and metrics["status"] == "ok":
+        hist.append({
+            "cpu_percent": metrics["cpu_percent"],
+            "mem_percent": metrics.get("mem_percent"),
+            "disk_percent": metrics.get("disk_percent"),
+        })
+        if len(hist) > _MONITOR_HISTORY_MAX:
+            hist[:] = hist[-_MONITOR_HISTORY_MAX:]
+    metrics["history"] = hist
+    return metrics
+
+
+@app.get("/api/monitor/{server_id}/history")
+def monitor_history(server_id: str):
+    return {"server_id": server_id, "history": _MONITOR_HISTORY.get(server_id, [])}
+
+
 @app.get("/api/health")
 def health():
     """健康检查"""

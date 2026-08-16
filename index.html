@@ -549,6 +549,107 @@ select.form-input{cursor:pointer;appearance:none;background-image:url("data:imag
 .sync-resize-se{bottom:-3px;right:-3px;width:12px;height:12px;cursor:nwse-resize}
 .sync-resize-se::after{content:'';position:absolute;bottom:2px;right:2px;width:8px;height:8px;border-right:2px solid var(--text-tertiary);border-bottom:2px solid var(--text-tertiary);opacity:.3}
 </style>
+
+/* ===== MONITOR (主机实时监控) ===== */
+.modal-xl{max-width:920px}
+.mon-wrap{display:flex;flex-direction:column;gap:16px}
+.mon-top{display:flex;align-items:center;gap:12px}
+.mon-pulse{width:9px;height:9px;border-radius:50%;background:var(--green);box-shadow:0 0 0 0 rgba(34,197,94,.6);animation:pulse 1.6s infinite}
+.mon-pulse.err{background:var(--red);animation:none}
+@keyframes pulse{0%{box-shadow:0 0 0 0 rgba(34,197,94,.5)}70%{box-shadow:0 0 0 7px rgba(34,197,94,0)}100%{box-shadow:0 0 0 0 rgba(34,197,94,0)}}
+.mon-host{font-size:12px;color:var(--text-secondary);font-family:var(--mono)}
+.mon-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+.mon-card{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);padding:16px;position:relative;overflow:hidden}
+.mon-card .mc-label{font-size:11px;color:var(--text-tertiary);text-transform:uppercase;letter-spacing:.6px;margin-bottom:10px;display:flex;align-items:center;gap:6px}
+.mon-card .mc-label svg{width:13px;height:13px;stroke-width:1.8}
+.mon-ring{width:96px;height:96px;border-radius:50%;display:flex;align-items:center;justify-content:center;margin:2px auto 0;position:relative;background:conic-gradient(var(--ac,var(--accent)) calc(var(--p,0)*1%),var(--bg-elevated) 0);transition:background .4s var(--ease)}
+.mon-ring::before{content:'';position:absolute;inset:9px;border-radius:50%;background:var(--bg-card)}
+.mon-ring .mc-val{position:relative;font-size:22px;font-weight:800;letter-spacing:-.5px}
+.mon-ring .mc-val small{font-size:12px;color:var(--text-tertiary);font-weight:400}
+.mon-bar{height:8px;border-radius:6px;background:var(--bg-elevated);overflow:hidden;margin-top:12px}
+.mon-bar > i{display:block;height:100%;border-radius:6px;background:var(--ac,var(--accent));transition:width .4s var(--ease),background .4s var(--ease)}
+.mon-bar-info{display:flex;justify-content:space-between;font-size:11px;color:var(--text-tertiary);margin-top:7px}
+.mon-big{font-size:26px;font-weight:800;letter-spacing:-.5px;line-height:1}
+.mon-sub{font-size:11px;color:var(--text-tertiary);margin-top:6px}
+.mon-load{display:flex;gap:8px;margin-top:4px}
+.mon-load .ml{text-align:center;flex:1;background:var(--bg-elevated);border-radius:8px;padding:8px 4px}
+.mon-load .ml b{display:block;font-size:17px;font-weight:700;line-height:1.2}
+.mon-load .ml span{font-size:10px;color:var(--text-tertiary)}
+.mon-chart-card{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);padding:16px 18px}
+.mon-chart-card h4{font-size:13px;font-weight:600;margin-bottom:4px;display:flex;align-items:center;gap:6px}
+.mon-chart-card h4 svg{width:14px;height:14px;stroke-width:1.8;color:var(--accent)}
+.mon-chart-sub{font-size:11px;color:var(--text-tertiary);margin-bottom:10px}
+.mon-chart{width:100%;height:140px;display:block}
+.mon-net{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.mon-net .mn{background:var(--bg-elevated);border-radius:8px;padding:12px 14px;display:flex;align-items:center;gap:12px}
+.mon-net .mn svg{width:22px;height:22px;stroke-width:1.8;flex-shrink:0}
+.mon-net .mn.down{color:var(--blue)}.mon-net .mn.up{color:var(--green)}
+.mon-net .mn .mv{font-size:18px;font-weight:700}.mon-net .mn .ml{font-size:11px;color:var(--text-tertiary)}
+.mon-foot{display:flex;flex-wrap:wrap;gap:10px 22px;font-size:12px;color:var(--text-secondary);padding:14px 16px;background:var(--bg-elevated);border:1px solid var(--border);border-radius:var(--radius)}
+.mon-foot .mf{display:flex;align-items:center;gap:6px}.mon-foot .mf svg{width:13px;height:13px;stroke-width:1.8;opacity:.6}
+.mon-foot b{color:var(--text);font-weight:600}
+.mon-error{text-align:center;padding:30px 20px;color:var(--red);font-size:13px}
+.btn.mon-live{background:var(--green);border-color:var(--green);color:#fff}
+.btn.mon-live.off{background:var(--bg-elevated);border-color:var(--border);color:var(--text-secondary)}
+
+/* ===== DASHBOARD MONITOR (首页概览实时监控) ===== */
+.dash-mon-panel{}
+.dash-mon-head{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.dash-mon-actions{display:flex;align-items:center;gap:8px}
+.dash-mon-toggle{display:flex;align-items:center;background:var(--bg-elevated);border:1px solid var(--border);border-radius:var(--radius);padding:3px}
+.dash-mon-toggle .tbtn{font-size:12px;padding:5px 10px;border-radius:6px;border:none;background:transparent;color:var(--text-secondary);cursor:pointer;display:flex;align-items:center;gap:5px;transition:all .2s var(--ease)}
+.dash-mon-toggle .tbtn.active{background:var(--accent);color:#fff;box-shadow:0 2px 6px rgba(0,0,0,.12)}
+.dash-mon-toggle .tbtn svg{width:13px;height:13px}
+.dash-mon-refresh{font-size:11px;color:var(--text-tertiary);display:flex;align-items:center;gap:6px}
+.dash-mon-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-top:14px}
+.dash-mon-card{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);padding:16px;cursor:pointer;transition:transform .15s var(--ease),box-shadow .15s var(--ease),border-color .15s var(--ease);position:relative;overflow:hidden}
+.dash-mon-card:hover{transform:translateY(-2px);box-shadow:0 8px 24px rgba(0,0,0,.14);border-color:var(--accent)}
+.dash-mon-card .dmc-top{display:flex;align-items:center;gap:10px;margin-bottom:12px}
+.dash-mon-card .dmc-icon{width:34px;height:34px;border-radius:9px;display:flex;align-items:center;justify-content:center;background:var(--bg-elevated)}
+.dash-mon-card .dmc-icon .dot{width:10px;height:10px}
+.dash-mon-card .dmc-title{flex:1;min-width:0}
+.dash-mon-card .dmc-title h4{font-size:14px;font-weight:600;margin:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dash-mon-card .dmc-title .dmc-sub{font-size:11px;color:var(--text-tertiary);margin-top:2px}
+.dash-mon-card .dmc-rings{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;align-items:center;justify-items:center;margin:6px 0 10px}
+.dash-mon-mini-ring{width:64px;height:64px;border-radius:50%;display:flex;align-items:center;justify-content:center;position:relative;background:conic-gradient(var(--ac,var(--accent)) calc(var(--p,0)*1%),var(--bg-elevated) 0);transition:background .4s var(--ease)}
+.dash-mon-mini-ring::before{content:'';position:absolute;inset:7px;border-radius:50%;background:var(--bg-card)}
+.dash-mon-mini-ring .mv{position:relative;font-size:13px;font-weight:700}
+.dash-mon-mini-ring .mv small{font-size:9px;color:var(--text-tertiary);font-weight:400}
+.dash-mon-mini-label{position:absolute;bottom:-2px;font-size:9px;color:var(--text-tertiary);background:var(--bg-card);padding:0 4px}
+.dash-mon-card .dmc-foot{display:flex;justify-content:space-between;align-items:center;font-size:11px;color:var(--text-tertiary);margin-top:10px;padding-top:10px;border-top:1px solid var(--border)}
+.dash-mon-card .dmc-foot b{color:var(--text);font-weight:600}
+.dash-mon-row-list{display:flex;flex-direction:column;gap:10px;margin-top:14px}
+.dash-mon-row{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;display:grid;grid-template-columns:200px 1fr auto;align-items:center;gap:18px;cursor:pointer;transition:border-color .15s var(--ease),box-shadow .15s var(--ease)}
+.dash-mon-row:hover{border-color:var(--accent);box-shadow:0 6px 18px rgba(0,0,0,.1)}
+.dash-mon-row .dmr-left{display:flex;align-items:center;gap:10px;min-width:0}
+.dash-mon-row .dmr-icon{width:32px;height:32px;border-radius:8px;display:flex;align-items:center;justify-content:center;background:var(--bg-elevated);flex-shrink:0}
+.dash-mon-row .dmr-icon .dot{width:9px;height:9px}
+.dash-mon-row .dmr-info{min-width:0}
+.dash-mon-row .dmr-info h4{font-size:14px;font-weight:600;margin:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dash-mon-row .dmr-info .dmr-sub{font-size:11px;color:var(--text-tertiary);margin-top:2px}
+.dash-mon-row .dmr-bars{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+.dash-mon-bar-item{min-width:0}
+.dash-mon-bar-item .dmb-top{display:flex;justify-content:space-between;align-items:center;font-size:11px;margin-bottom:5px}
+.dash-mon-bar-item .dmb-top .dmb-name{color:var(--text-secondary);display:flex;align-items:center;gap:4px}
+.dash-mon-bar-item .dmb-top .dmb-name svg{width:11px;height:11px;stroke-width:2}
+.dash-mon-bar-item .dmb-top .dmb-val{color:var(--text);font-weight:600;font-variant-numeric:tabular-nums}
+.dash-mon-bar-item .dmb-top .dmb-total{color:var(--text-tertiary);font-weight:400;margin-left:3px}
+.dash-mon-bar{height:7px;border-radius:6px;background:var(--bg-elevated);overflow:hidden}
+.dash-mon-bar > i{display:block;height:100%;border-radius:6px;background:var(--ac,var(--accent));transition:width .4s var(--ease),background .4s var(--ease)}
+.dash-mon-row .dmr-right{display:flex;align-items:center;gap:10px;flex-shrink:0}
+.dash-mon-row .dmr-status{font-size:12px;font-weight:600}
+.dash-mon-row .dmr-days{font-size:11px;color:var(--text-tertiary);white-space:nowrap}
+@media(max-width:1100px){
+  .dash-mon-grid{grid-template-columns:repeat(2,1fr)}
+  .dash-mon-row{grid-template-columns:160px 1fr auto;gap:12px}
+}
+@media(max-width:820px){
+  .dash-mon-grid{grid-template-columns:1fr}
+  .dash-mon-row{grid-template-columns:1fr;gap:12px}
+  .dash-mon-row .dmr-bars{grid-column:1/-1}
+  .dash-mon-row .dmr-right{justify-content:flex-end}
+}
+
 </head>
 <body>
 <div id="app" class="app"></div>
@@ -667,6 +768,7 @@ function daysAgo(d){ return hoursAgo(d*24); }
 let todoIdCounter = 100;
 const state = {
   view:'dashboard', projectViewMode:'grouped', collapsedGroups:{}, alertsCollapsed:false, modal:null,
+  dashMonMode:'ring', dashMonLive:true, _mon:{},
   servers:[
     {id:'ali',name:'阿里云轻量',provider:'阿里云',providerHue:24,cpu:2,ram:2,disk:'60G SSD',ip:'47.xx.xx.xx',region:'杭州',os:'Ubuntu 22.04',tools:['OpenClaw','Claude Code'],expiry:'2027-02-01',status:'online',projects:['ecommerce-platform','api-gateway'],sshPort:22,sshUser:'root',sshKey:'~/.ssh/ali_key'},
     {id:'tx',name:'腾讯云轻量',provider:'腾讯云',providerHue:210,cpu:4,ram:4,disk:'80G SSD',ip:'101.xx.xx.xx',region:'上海',os:'Ubuntu 22.04',tools:['OpenClaw','Claude Code'],expiry:'2027-05-15',status:'online',projects:['ai-chatbot','data-dashboard'],sshPort:22,sshUser:'root',sshKey:'~/.ssh/tx_key'},
@@ -1132,6 +1234,7 @@ function render(){
   applyTheme(currentTheme);
   if(window.lucide)lucide.createIcons();
   if(editMode) renderEditModal();
+  if(state.view==='dashboard'&&state.dashMonLive&&!_dashMonTimer){initDashboardMonitor();}
 }
 
 function sidebarHTML(){
@@ -1162,11 +1265,144 @@ function viewDashboard(){
     <div class="stat"><div class="stat-label">${icon('bot')} ${t('stat_ai_tools')}</div><div class="stat-val">${state.agents.length}</div><div class="stat-sub">${t('stat_on_servers')} ${agS} ${t('stat_servers_unit')}</div>${trendHTML(tAgents)}</div>
     <div class="stat"><div class="stat-label">${icon('trending-up')} ${t('stat_progress')}</div><div class="stat-val">${avgP}<span class="dim">%</span></div><div class="stat-sub">${t('stat_all_avg')}</div>${trendHTML(tProgress)}</div>
   </div>
-  <div class="grid-2">
-    <div class="panel"><div class="panel-head"><h3>${icon('server')} ${t('panel_server_status')}</h3></div><div class="panel-body">${state.servers.filter(s=>s.id!=='future').map(s=>`<div class="li" style="cursor:pointer" onclick="openServerDetail('${s.id}')"><div class="li-icon" style="background:${s.status==='online'?'var(--green-muted)':'var(--blue-muted)'}"><div class="dot ${dotClass(s.status)}"></div></div><div class="li-body"><div class="li-title">${s.name}</div><div class="li-sub">${s.cpu} ${t('unit_cores')} ${s.ram}G · ${s.region}</div></div><div style="display:flex;align-items:center;gap:6px">${s.sshUser?`<button class="btn btn-sm" onclick="event.stopPropagation();sshLogin('${s.ip}',${s.sshPort},'${s.sshUser}','${s.sshKey}')" title="${t('pd_ssh_login')}">${icon('terminal')} SSH</button>`:''}<span class="tag ${s.status==='online'?'tag-green':'tag-blue'}">${statusText(s.status)}</span></div></div>`).join('')}</div></div>
-    <div class="panel"><div class="panel-head"><h3>${icon('bot')} ${t('panel_agent_dist')}</h3></div><div class="panel-body">${state.agents.map(a=>`<div class="li"><div class="li-icon" style="background:${a.bg}">${icon(a.icon)}</div><div class="li-body"><div class="li-title">${a.name}</div><div class="li-sub">${a.servers.map(sid=>{const s=getServer(sid);return s?s.name:sid}).join(' · ')}</div></div></div>`).join('')}</div></div>
+  <div class="panel dash-mon-panel">
+    <div class="panel-head dash-mon-head">
+      <h3>${icon('server')} ${t('panel_server_status')}</h3>
+      <div class="dash-mon-actions">
+        <span class="dash-mon-refresh" id="dash-mon-refresh">${icon('loader-2')} 自动刷新中</span>
+        <div class="dash-mon-toggle">
+          <button class="tbtn ${state.dashMonMode==='ring'?'active':''}" onclick="setDashMonMode('ring')">${icon('pie-chart')} 环形</button>
+          <button class="tbtn ${state.dashMonMode==='bar'?'active':''}" onclick="setDashMonMode('bar')">${icon('align-left')} 进度条</button>
+        </div>
+        <button class="btn btn-sm" id="dash-mon-live-btn" onclick="toggleDashMonLive()">${icon(state.dashMonLive?'pause':'play')} ${state.dashMonLive?'暂停':'继续'}</button>
+      </div>
+    </div>
+    <div class="panel-body">${state.dashMonMode==='ring'?renderDashMonRingGrid():renderDashMonBarList()}</div>
   </div>
+  <div class="panel"><div class="panel-head"><h3>${icon('bot')} ${t('panel_agent_dist')}</h3></div><div class="panel-body">${state.agents.map(a=>`<div class="li"><div class="li-icon" style="background:${a.bg}">${icon(a.icon)}</div><div class="li-body"><div class="li-title">${a.name}</div><div class="li-sub">${a.servers.map(sid=>{const s=getServer(sid);return s?s.name:sid}).join(' · ')}</div></div></div>`).join('')}</div></div>
   <div class="panel" style="margin-bottom:16px"><div class="panel-head"><h3>${icon('folder-kanban')} ${t('panel_project_overview')}</h3><button class="btn btn-sm" onclick="navigate('projects')">${t('view_all')} ${icon('arrow-right')}</button></div><div class="panel-body">${state.projects.map(p=>{const srv=getServer(p.server);return`<div class="li" style="cursor:pointer" onclick="openProjectDetail('${p.id}')"><div class="li-icon" style="background:${p.status==='active'?'var(--green-muted)':p.status==='dev'?'var(--amber-muted)':'var(--blue-muted)'}"><div class="dot ${dotClass(p.status)}"></div></div><div class="li-body"><div class="li-title">${p.name}</div><div class="li-sub">${statusText(p.status)} · ${srv?srv.name:'-'} · ${relativeTime(p.lastUpdate)}</div></div><div style="display:flex;align-items:center;gap:6px">${srv&&srv.sshUser?`<button class="btn btn-sm" onclick="event.stopPropagation();sshLogin('${srv.ip}',${srv.sshPort},'${srv.sshUser}','${srv.sshKey}')" title="${t('pd_ssh_login')}">${icon('terminal')} SSH</button>`:''}<div style="width:80px"><div class="progress"><div class="bar" style="width:${p.progress}%"></div></div><div style="font-size:10px;color:var(--text-tertiary);text-align:right;margin-top:2px">${p.progress}%</div></div></div></div>`}).join('')}</div></div>`}
+
+// ==================== DASHBOARD MONITOR ====================
+function renderDashMonRingGrid(){
+  const srvs=state.servers.filter(s=>s.id!=='future');
+  if(!srvs.length) return `<div class="empty" style="padding:28px">${icon('server')}<p>暂无服务器</p></div>`;
+  return `<div class="dash-mon-grid">${srvs.map(s=>{
+    const d=state._mon[s.id]||{};
+    const cpu=d.cpu_percent??null, mem=d.mem_percent??null, disk=d.disk_percent??null;
+    const up=d.uptime_seconds??null;
+    const days=up==null?null:Math.floor(up/86400);
+    return `<div class="dash-mon-card" onclick="openServerMonitor('${s.id}')">
+      <div class="dmc-top">
+        <div class="dmc-icon" style="background:${s.status==='online'?'var(--green-muted)':'var(--blue-muted)'}"><div class="dot ${dotClass(s.status)}"></div></div>
+        <div class="dmc-title"><h4>${s.name}</h4><div class="dmc-sub">${s.cpu} ${t('unit_cores')} ${s.ram}G · ${s.region}</div></div>
+      </div>
+      <div class="dmc-rings">
+        <div style="position:relative;display:flex;justify-content:center">
+          <div class="dash-mon-mini-ring" id="dm-ring-cpu-${s.id}" style="--p:${cpu??0};--ac:${pctColor(cpu)}"><div class="mv">${cpu==null?'—':cpu}<small>%</small></div></div>
+          <span class="dash-mon-mini-label">CPU</span>
+        </div>
+        <div style="position:relative;display:flex;justify-content:center">
+          <div class="dash-mon-mini-ring" id="dm-ring-mem-${s.id}" style="--p:${mem??0};--ac:${pctColor(mem)}"><div class="mv">${mem==null?'—':mem}<small>%</small></div></div>
+          <span class="dash-mon-mini-label">内存</span>
+        </div>
+        <div style="position:relative;display:flex;justify-content:center">
+          <div class="dash-mon-mini-ring" id="dm-ring-disk-${s.id}" style="--p:${disk??0};--ac:${pctColor(disk)}"><div class="mv">${disk==null?'—':disk}<small>%</small></div></div>
+          <span class="dash-mon-mini-label">磁盘</span>
+        </div>
+      </div>
+      <div class="dmc-foot">
+        <span>${icon('activity')} 负载 <b id="dm-load-${s.id}">${d.load1==null?'—':d.load1}</b></span>
+        <span id="dm-days-${s.id}">${days==null?'—':(days+'天在线')}</span>
+      </div>
+    </div>`;
+  }).join('')}</div>`;
+}
+function renderDashMonBarList(){
+  const srvs=state.servers.filter(s=>s.id!=='future');
+  if(!srvs.length) return `<div class="empty" style="padding:28px">${icon('server')}<p>暂无服务器</p></div>`;
+  return `<div class="dash-mon-row-list">${srvs.map(s=>{
+    const d=state._mon[s.id]||{};
+    const cpu=d.cpu_percent??null, mem=d.mem_percent??null, disk=d.disk_percent??null;
+    const up=d.uptime_seconds??null;
+    const days=up==null?null:Math.floor(up/86400);
+    const memUsed=d.mem_used_mb, memTotal=d.mem_total_mb;
+    const diskUsed=d.disk_used_gb, diskTotal=d.disk_total_gb;
+    return `<div class="dash-mon-row" onclick="openServerMonitor('${s.id}')">
+      <div class="dmr-left">
+        <div class="dmr-icon" style="background:${s.status==='online'?'var(--green-muted)':'var(--blue-muted)'}"><div class="dot ${dotClass(s.status)}"></div></div>
+        <div class="dmr-info"><h4>${s.name}</h4><div class="dmr-sub">${s.cpu} ${t('unit_cores')} ${s.ram}G · ${s.region}</div></div>
+      </div>
+      <div class="dmr-bars">
+        <div class="dash-mon-bar-item">
+          <div class="dmb-top"><span class="dmb-name">${icon('cpu')} CPU</span><span><span class="dmb-val" id="dm-bar-cpu-val-${s.id}">${cpu==null?'—':cpu+'%'}</span></span></div>
+          <div class="dash-mon-bar"><i id="dm-bar-cpu-${s.id}" style="width:${cpu??0}%;background:${pctColor(cpu)}"></i></div>
+        </div>
+        <div class="dash-mon-bar-item">
+          <div class="dmb-top"><span class="dmb-name">${icon('memory-stick')} 内存</span><span><span class="dmb-val" id="dm-bar-mem-val-${s.id}">${mem==null?'—':mem+'%'}</span><span class="dmb-total" id="dm-bar-mem-total-${s.id}">${memUsed!=null&&memTotal!=null?' · '+memUsed+'M/'+memTotal+'M':''}</span></span></div>
+          <div class="dash-mon-bar"><i id="dm-bar-mem-${s.id}" style="width:${mem??0}%;background:${pctColor(mem)}"></i></div>
+        </div>
+        <div class="dash-mon-bar-item">
+          <div class="dmb-top"><span class="dmb-name">${icon('hard-drive')} 磁盘</span><span><span class="dmb-val" id="dm-bar-disk-val-${s.id}">${disk==null?'—':disk+'%'}</span><span class="dmb-total" id="dm-bar-disk-total-${s.id}">${diskUsed!=null&&diskTotal!=null?' · '+diskUsed+'G/'+diskTotal+'G':''}</span></span></div>
+          <div class="dash-mon-bar"><i id="dm-bar-disk-${s.id}" style="width:${disk??0}%;background:${pctColor(disk)}"></i></div>
+        </div>
+      </div>
+      <div class="dmr-right">
+        <span class="dmr-status tag ${s.status==='online'?'tag-green':'tag-blue'}">${statusText(s.status)}</span>
+        <span class="dmr-days" id="dm-bar-days-${s.id}">${days==null?'—':(days+'天在线')}</span>
+      </div>
+    </div>`;
+  }).join('')}</div>`;
+}
+function setDashMonMode(mode){state.dashMonMode=mode;render();}
+function toggleDashMonLive(){
+  state.dashMonLive=!state.dashMonLive;
+  const btn=document.getElementById('dash-mon-live-btn');
+  if(btn){btn.innerHTML=icon(state.dashMonLive?'pause':'play')+' '+(state.dashMonLive?'暂停':'继续');}
+  const rf=document.getElementById('dash-mon-refresh');
+  if(rf){rf.innerHTML=icon(state.dashMonLive?'loader-2':'pause-circle')+' '+(state.dashMonLive?'自动刷新中':'已暂停');}
+  if(state.dashMonLive){initDashboardMonitor();}else{stopDashboardMonitor();}
+}
+function stopDashboardMonitor(){if(_dashMonTimer){clearInterval(_dashMonTimer);_dashMonTimer=null;}}
+async function dashboardMonTick(){
+  if(!state.dashMonLive) return;
+  const ids=state.servers.filter(s=>s.id!=='future').map(s=>s.id);
+  if(!ids.length) return;
+  await Promise.all(ids.map(async id=>{
+    try{
+      const res=await fetch(API_BASE+'/api/monitor/'+encodeURIComponent(id),{signal:AbortSignal.timeout(12000)});
+      const d=await res.json();
+      if(d.status==='error'||d.error){state._mon[id]={_error:d.error};return;}
+      state._mon[id]=d;
+      updateDashMonDOM(id,d);
+    }catch(e){state._mon[id]={_error:e.message};}
+  }));
+  const rf=document.getElementById('dash-mon-refresh');
+  if(rf){rf.innerHTML=icon('check-circle')+' 更新于 '+new Date().toLocaleTimeString();}
+}
+function updateDashMonDOM(id,d){
+  const cpu=d.cpu_percent??null, mem=d.mem_percent??null, disk=d.disk_percent??null;
+  const cpuColor=pctColor(cpu), memColor=pctColor(mem), diskColor=pctColor(disk);
+  const days=d.uptime_seconds==null?null:Math.floor(d.uptime_seconds/86400);
+  const rCpu=document.getElementById('dm-ring-cpu-'+id); if(rCpu){rCpu.style.setProperty('--p',cpu??0);rCpu.style.setProperty('--ac',cpuColor);rCpu.querySelector('.mv').innerHTML=(cpu==null?'—':cpu)+'<small>%</small>';}
+  const rMem=document.getElementById('dm-ring-mem-'+id); if(rMem){rMem.style.setProperty('--p',mem??0);rMem.style.setProperty('--ac',memColor);rMem.querySelector('.mv').innerHTML=(mem==null?'—':mem)+'<small>%</small>';}
+  const rDisk=document.getElementById('dm-ring-disk-'+id); if(rDisk){rDisk.style.setProperty('--p',disk??0);rDisk.style.setProperty('--ac',diskColor);rDisk.querySelector('.mv').innerHTML=(disk==null?'—':disk)+'<small>%</small>';}
+  const rLoad=document.getElementById('dm-load-'+id); if(rLoad) rLoad.textContent=d.load1==null?'—':d.load1;
+  const rDays=document.getElementById('dm-days-'+id); if(rDays) rDays.textContent=days==null?'—':(days+'天在线');
+  const bCpu=document.getElementById('dm-bar-cpu-'+id); if(bCpu){bCpu.style.width=(cpu??0)+'%';bCpu.style.background=cpuColor;}
+  const bCpuVal=document.getElementById('dm-bar-cpu-val-'+id); if(bCpuVal) bCpuVal.textContent=cpu==null?'—':cpu+'%';
+  const bMem=document.getElementById('dm-bar-mem-'+id); if(bMem){bMem.style.width=(mem??0)+'%';bMem.style.background=memColor;}
+  const bMemVal=document.getElementById('dm-bar-mem-val-'+id); if(bMemVal) bMemVal.textContent=mem==null?'—':mem+'%';
+  const bMemTotal=document.getElementById('dm-bar-mem-total-'+id); if(bMemTotal) bMemTotal.textContent=(d.mem_used_mb!=null&&d.mem_total_mb!=null)?' · '+d.mem_used_mb+'M/'+d.mem_total_mb+'M':'';
+  const bDisk=document.getElementById('dm-bar-disk-'+id); if(bDisk){bDisk.style.width=(disk??0)+'%';bDisk.style.background=diskColor;}
+  const bDiskVal=document.getElementById('dm-bar-disk-val-'+id); if(bDiskVal) bDiskVal.textContent=disk==null?'—':disk+'%';
+  const bDiskTotal=document.getElementById('dm-bar-disk-total-'+id); if(bDiskTotal) bDiskTotal.textContent=(d.disk_used_gb!=null&&d.disk_total_gb!=null)?' · '+d.disk_used_gb+'G/'+d.disk_total_gb+'G':'';
+  const bDays=document.getElementById('dm-bar-days-'+id); if(bDays) bDays.textContent=days==null?'—':(days+'天在线');
+}
+function initDashboardMonitor(){
+  stopDashboardMonitor();
+  dashboardMonTick();
+  _dashMonTimer=setInterval(dashboardMonTick,10000);
+}
 
 // ==================== SERVERS ====================
 function viewServers(){
@@ -2253,7 +2489,7 @@ function openServerDetail(id){
     </div>
     <div class="detail-section"><h4>${icon('package')} ${t('sd_tools')}</h4><div style="display:flex;flex-wrap:wrap;gap:5px">${s.tools.map(tool=>`<span class="tag tag-accent">${tool}</span>`).join('')}</div></div>
     ${projs.length?`<div class="detail-section"><h4>${icon('folder-kanban')} ${t('sd_running_projects')} (${projs.length})</h4>${projs.map(p=>`<div class="li" style="cursor:pointer" onclick="closeModal();setTimeout(()=>openProjectDetail('${p.id}'),200)"><div class="li-icon" style="background:${p.status==='active'?'var(--green-muted)':'var(--amber-muted)'}"><div class="dot ${dotClass(p.status)}"></div></div><div class="li-body"><div class="li-title">${p.name}</div><div class="li-sub">${statusText(p.status)} · ${p.progress}%</div></div></div>`).join('')}</div>`:''}
-    ${s.sshUser?`<div class="detail-section"><h4>${icon('terminal')} ${t('sd_ssh')}</h4><div class="ssh-block"><div>$ ssh ${s.sshUser}@${s.ip} -p ${s.sshPort}${s.sshKey?' -i '+s.sshKey:''}</div><div class="comment"># ${t('sd_key')}: ${s.sshKey}</div></div><div style="margin-top:10px"><button class="btn btn-sm" onclick="sshLogin('${s.ip}',${s.sshPort},'${s.sshUser}','${s.sshKey}')">${icon('terminal')} ${t('pd_ssh_login')}</button></div></div>`:''}
+    ${s.sshUser?`<div class="detail-section"><h4>${icon('terminal')} ${t('sd_ssh')}</h4><div class="ssh-block"><div>$ ssh ${s.sshUser}@${s.ip} -p ${s.sshPort}${s.sshKey?' -i '+s.sshKey:''}</div><div class="comment"># ${t('sd_key')}: ${s.sshKey}</div></div><div style="margin-top:10px;display:flex;gap:8px"><button class="btn btn-sm" onclick="sshLogin('${s.ip}',${s.sshPort},'${s.sshUser}','${s.sshKey}')">${icon('terminal')} ${t('pd_ssh_login')}</button><button class="btn btn-sm btn-primary" onclick="openServerMonitor('${s.id}')">${icon('activity')} 实时监控</button></div></div>`:''}
     <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:20px;padding-top:16px;border-top:1px solid var(--border)">
       <button class="btn btn-sm" onclick="cloneServer('${s.id}')">${icon('copy')} ${t('sd_clone')}</button>
       <button class="btn btn-sm" onclick="editServer('${s.id}')">${icon('pencil')} ${t('sd_edit')}</button>
@@ -2263,7 +2499,187 @@ function openServerDetail(id){
   render();
 }
 
-function closeModal(){state.modal=null;editMode=null;render()}
+// ==================== 主机实时监控 ====================
+let _monTimer = null;
+let _monData = [];
+let _monLive = false;
+let _dashMonTimer = null;
+
+function fmtUptime(s){
+  if(s==null) return '—';
+  const d=Math.floor(s/86400), h=Math.floor(s%86400/3600), m=Math.floor(s%3600/60);
+  if(d>0) return d+'天 '+h+'时'+m+'分';
+  if(h>0) return h+'时'+m+'分';
+  return m+'分';
+}
+function fmtRate(kbps){
+  if(kbps==null) return '—';
+  if(kbps>=1024) return (kbps/1024).toFixed(2)+' MB/s';
+  return kbps.toFixed(1)+' KB/s';
+}
+function loadColor(load, cores){
+  if(load==null) return 'var(--text)';
+  const c = cores||1;
+  if(load < c*0.7) return 'var(--green)';
+  if(load < c*1.0) return 'var(--amber)';
+  return 'var(--red)';
+}
+function pctColor(p){
+  if(p==null) return 'var(--accent)';
+  if(p<70) return 'var(--accent)';
+  if(p<90) return 'var(--amber)';
+  return 'var(--red)';
+}
+function openServerMonitor(id){
+  const s=getServer(id); if(!s) return;
+  state.modal={title:'📊 实时监控 · '+s.name, body: monitorHTML(s), size:'modal-xl'};
+  render();
+  if(window.lucide) lucide.createIcons();
+  _monData=[]; _monLive=true;
+  initMonitor(id);
+}
+function monitorHTML(s){
+  return `<div class="mon-wrap">
+    <div class="mon-top">
+      <span class="mon-pulse" id="mon-pulse"></span>
+      <span id="mon-status" style="font-size:13px;font-weight:600;color:var(--green)">连接中…</span>
+      <span class="mon-host" id="mon-host">${escapeHtml(s.ip||'')}</span>
+      <span style="flex:1"></span>
+      <button class="btn btn-sm mon-live" id="mon-toggle" onclick="toggleMonitor('${s.id}')">${icon('pause')} 暂停</button>
+    </div>
+    <div class="mon-grid">
+      <div class="mon-card"><div class="mc-label">${icon('cpu')} CPU 使用率</div>
+        <div class="mon-ring" id="mon-cpu-ring" style="--p:0"><div class="mc-val" id="mon-cpu-val">0<small>%</small></div></div>
+      </div>
+      <div class="mon-card"><div class="mc-label">${icon('memory-stick')} 内存</div>
+        <div class="mon-big" id="mon-mem-val">—</div>
+        <div class="mon-bar"><i id="mon-mem-bar" style="width:0%"></i></div>
+        <div class="mon-bar-info"><span id="mon-mem-used">—</span><span id="mon-mem-total">—</span></div>
+      </div>
+      <div class="mon-card"><div class="mc-label">${icon('hard-drive')} 磁盘 (根分区)</div>
+        <div class="mon-big" id="mon-disk-val">—</div>
+        <div class="mon-bar"><i id="mon-disk-bar" style="width:0%"></i></div>
+        <div class="mon-bar-info"><span id="mon-disk-used">—</span><span id="mon-disk-total">—</span></div>
+      </div>
+      <div class="mon-card"><div class="mc-label">${icon('activity')} 系统负载</div>
+        <div class="mon-load">
+          <div class="ml"><b id="mon-load1">—</b><span>1分钟</span></div>
+          <div class="ml"><b id="mon-load5">—</b><span>5分钟</span></div>
+          <div class="ml"><b id="mon-load15">—</b><span>15分钟</span></div>
+        </div>
+        <div class="mon-sub" id="mon-load-sub" style="text-align:center"></div>
+      </div>
+    </div>
+    <div class="mon-chart-card">
+      <h4>${icon('line-chart')} CPU 使用率趋势</h4>
+      <div class="mon-chart-sub">实时采样（每 3 秒），最近 60 个采样点</div>
+      <canvas class="mon-chart" id="mon-chart"></canvas>
+    </div>
+    <div class="mon-net">
+      <div class="mn down">${icon('arrow-down')}<div><div class="mv" id="mon-rx">—</div><div class="ml">↓ 下行 (接收)</div></div></div>
+      <div class="mn up">${icon('arrow-up')}<div><div class="mv" id="mon-tx">—</div><div class="ml">↑ 上行 (发送)</div></div></div>
+    </div>
+    <div class="mon-foot">
+      <div class="mf">${icon('server')} 主机 <b id="mon-hostname">—</b></div>
+      <div class="mf">${icon('cpu')} 核心 <b id="mon-cores">—</b></div>
+      <div class="mf">${icon('clock')} 运行 <b id="mon-uptime">—</b></div>
+      <div class="mf">${icon('terminal')} 内核 <b id="mon-kernel">—</b></div>
+    </div>
+  </div>`;
+}
+function setText(id,v){const el=document.getElementById(id); if(el) el.textContent=v;}
+function colorLoad(id,v,cores){const el=document.getElementById(id); if(el&&v!=null) el.style.color=loadColor(v,cores);}
+function setMonOk(){
+  const p=document.getElementById('mon-pulse'); if(p) p.classList.remove('err');
+  const st=document.getElementById('mon-status'); if(st){st.textContent='实时监控中';st.style.color='var(--green)';}
+}
+function setMonError(msg){
+  const p=document.getElementById('mon-pulse'); if(p) p.classList.add('err');
+  const st=document.getElementById('mon-status'); if(st){st.textContent='连接异常';st.style.color='var(--red)';}
+  const c=document.getElementById('mon-chart');
+  if(c){const ctx=c.getContext('2d');ctx.clearRect(0,0,c.width,c.height);
+    ctx.fillStyle='rgba(239,68,68,.85)';ctx.font='13px sans-serif';ctx.textAlign='center';
+    ctx.fillText(msg||'无法采集',c.width/2,c.height/2);}
+}
+function initMonitor(id){
+  if(_monTimer) clearInterval(_monTimer);
+  pollMonitor(id);
+  _monTimer=setInterval(()=>pollMonitor(id), 3000);
+}
+function toggleMonitor(id){
+  const btn=document.getElementById('mon-toggle');
+  if(_monLive){
+    _monLive=false; if(_monTimer){clearInterval(_monTimer);_monTimer=null;}
+    if(btn){btn.classList.remove('mon-live');btn.classList.add('off');btn.innerHTML=icon('play')+' 继续';}
+  }else{
+    _monLive=true;
+    if(btn){btn.classList.add('mon-live');btn.classList.remove('off');btn.innerHTML=icon('pause')+' 暂停';}
+    initMonitor(id);
+  }
+}
+async function pollMonitor(id){
+  try{
+    const res=await fetch(API_BASE+'/api/monitor/'+encodeURIComponent(id),{signal:AbortSignal.timeout(15000)});
+    const d=await res.json();
+    if(d.status==='error'||d.error){ setMonError(d.error||'采集失败'); return; }
+    setMonOk();
+    const cpu=d.cpu_percent??0;
+    const ring=document.getElementById('mon-cpu-ring');
+    if(ring){ring.style.setProperty('--p',cpu);ring.style.setProperty('--ac',pctColor(cpu));}
+    const cv=document.getElementById('mon-cpu-val'); if(cv) cv.innerHTML=cpu+'<small>%</small>';
+    const mp=d.mem_percent??null;
+    const mb=document.getElementById('mon-mem-bar'); if(mb){mb.style.width=(mp??0)+'%';mb.style.background=pctColor(mp);}
+    setText('mon-mem-val', mp==null?'—':mp+'%');
+    setText('mon-mem-used', d.mem_used_mb==null?'—':d.mem_used_mb+' MB');
+    setText('mon-mem-total', d.mem_total_mb==null?'—':d.mem_total_mb+' MB');
+    const dp=d.disk_percent??null;
+    const db=document.getElementById('mon-disk-bar'); if(db){db.style.width=(dp??0)+'%';db.style.background=pctColor(dp);}
+    setText('mon-disk-val', dp==null?'—':dp+'%');
+    setText('mon-disk-used', d.disk_used_gb==null?'—':d.disk_used_gb+' GB');
+    setText('mon-disk-total', d.disk_total_gb==null?'—':d.disk_total_gb+' GB');
+    setText('mon-load1', d.load1==null?'—':d.load1);
+    setText('mon-load5', d.load5==null?'—':d.load5);
+    setText('mon-load15', d.load15==null?'—':d.load15);
+    const ls=document.getElementById('mon-load-sub'); if(ls) ls.textContent='基于 '+(d.cpu_cores||'?')+' 核心';
+    colorLoad('mon-load1', d.load1, d.cpu_cores);
+    colorLoad('mon-load5', d.load5, d.cpu_cores);
+    colorLoad('mon-load15', d.load15, d.cpu_cores);
+    setText('mon-rx', fmtRate(d.net_rx_kbps));
+    setText('mon-tx', fmtRate(d.net_tx_kbps));
+    setText('mon-hostname', d.hostname||'—');
+    setText('mon-cores', d.cpu_cores==null?'—':d.cpu_cores);
+    setText('mon-uptime', fmtUptime(d.uptime_seconds));
+    setText('mon-kernel', d.kernel||'—');
+    if(Array.isArray(d.history)) _monData=d.history.map(h=>h.cpu_percent).filter(x=>x!=null);
+    if(_monData.length>1) drawMonChart(document.getElementById('mon-chart'), _monData);
+  }catch(e){ setMonError('请求失败: '+e.message); }
+}
+function drawMonChart(canvas, data){
+  if(!canvas) return;
+  const dpr=window.devicePixelRatio||1;
+  const w=canvas.clientWidth, h=canvas.clientHeight;
+  if(w===0) return;
+  canvas.width=w*dpr; canvas.height=h*dpr;
+  const ctx=canvas.getContext('2d'); ctx.setTransform(dpr,0,0,dpr,0,0); ctx.clearRect(0,0,w,h);
+  const padL=4,padR=4,padT=10,padB=16, cw=w-padL-padR, ch=h-padT-padB, max=100;
+  ctx.strokeStyle='rgba(255,255,255,.06)'; ctx.lineWidth=1; ctx.font='9px sans-serif';
+  for(let i=0;i<=4;i++){const y=padT+ch*i/4; ctx.beginPath();ctx.moveTo(padL,y);ctx.lineTo(padL+cw,y);ctx.stroke();
+    ctx.fillStyle='rgba(150,150,175,.5)';ctx.textAlign='right';ctx.fillText((max-(max*i/4))+'%',padL+cw-2,y-1);}
+  if(data.length<2) return;
+  const n=data.length, xAt=i=>padL+cw*(i/(n-1)), yAt=v=>padT+ch*(1-v/max);
+  const grad=ctx.createLinearGradient(0,padT,0,padT+ch);
+  grad.addColorStop(0,'rgba(139,92,246,.35)'); grad.addColorStop(1,'rgba(139,92,246,0)');
+  ctx.beginPath(); ctx.moveTo(xAt(0),yAt(data[0]));
+  for(let i=1;i<n;i++) ctx.lineTo(xAt(i),yAt(data[i]));
+  ctx.lineTo(xAt(n-1),padT+ch); ctx.lineTo(xAt(0),padT+ch); ctx.closePath(); ctx.fillStyle=grad; ctx.fill();
+  ctx.beginPath(); ctx.moveTo(xAt(0),yAt(data[0]));
+  for(let i=1;i<n;i++) ctx.lineTo(xAt(i),yAt(data[i]));
+  ctx.strokeStyle='#8b5cf6'; ctx.lineWidth=2; ctx.lineJoin='round'; ctx.stroke();
+  const lx=xAt(n-1), ly=yAt(data[n-1]);
+  ctx.beginPath(); ctx.arc(lx,ly,3,0,Math.PI*2); ctx.fillStyle='#8b5cf6'; ctx.fill();
+}
+
+function closeModal(){if(_monTimer){clearInterval(_monTimer);_monTimer=null;}_monLive=false;state.modal=null;editMode=null;render()}
 
 // ==================== LLM SETTINGS ====================
 let llmConfigs = [];
@@ -2831,7 +3247,7 @@ function deleteFeature(projId, idx){
 }
 
 // ==================== NAVIGATION ====================
-function navigate(v){state.view=v;state.modal=null;render()}
+function navigate(v){if(_monTimer){clearInterval(_monTimer);_monTimer=null;}if(_dashMonTimer){clearInterval(_dashMonTimer);_dashMonTimer=null;}_monLive=false;state.view=v;state.modal=null;render();if(v==='dashboard'&&state.dashMonLive){initDashboardMonitor();}}
 
 document.addEventListener('keydown',e=>{
   if(e.key==='Escape')closeModal();
