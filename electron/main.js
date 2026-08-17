@@ -38,7 +38,23 @@ function getResourceDir() {
   return path.join(__dirname, '..');
 }
 
+// 启动前清理可能残留的旧后端进程，避免其占用 8765 导致新后端起不来
+// （典型现象：新 exe 加载了旧后端 → 页面被显示为 CSS 源码）
+function clearStaleBackend() {
+  if (process.platform !== 'win32') return;
+  try {
+    require('child_process').execSync(
+      'taskkill /F /IM devcenter-backend.exe',
+      { windowsHide: true, stdio: 'ignore' }
+    );
+  } catch (e) {
+    // 没有残留进程时 taskkill 返回非零，属正常
+  }
+}
+
 function startBackend() {
+  // 先清理残留的旧后端，释放 8765
+  clearStaleBackend();
   const resourceDir = getResourceDir();
   // R5: 打包后优先用内置 exe（自包含 Python，目标机无需安装 Python）
   const bundledExe = path.join(resourceDir, 'backend', 'devcenter-backend.exe');
@@ -273,6 +289,18 @@ const menuTemplate = [
 ];
 
 // --- App lifecycle ---
+
+// 单实例锁：防止重复双击启动多个 Electron 实例互相抢占 8765 端口
+if (!app.requestSingleInstanceLock()) {
+  app.quit();
+}
+app.on('second-instance', () => {
+  if (mainWindow) {
+    if (mainWindow.isMinimized()) mainWindow.restore();
+    mainWindow.focus();
+    mainWindow.reload();
+  }
+});
 
 app.on('ready', async () => {
   Menu.setApplicationMenu(Menu.buildFromTemplate(menuTemplate));
