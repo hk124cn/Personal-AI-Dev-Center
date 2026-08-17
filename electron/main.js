@@ -38,23 +38,44 @@ function getResourceDir() {
   return path.join(__dirname, '..');
 }
 
-// 启动前清理可能残留的旧后端进程，避免其占用 8765 导致新后端起不来
-// （典型现象：新 exe 加载了旧后端 → 页面被显示为 CSS 源码）
-function clearStaleBackend() {
+// 启动前清理占用 8765 端口的旧进程（旧 Electron 实例及其后端进程树），
+// 确保本次启动总能拿到一个全新的、已修复的后端，而不是被旧实例劫持。
+// 关键点：必须在 requestSingleInstanceLock 之前执行——否则新实例会被旧实例
+// 持有的锁挡住、直接 app.quit()，结果只是把焦点交还给那个页面已损坏的旧实例。
+function clearStalePort() {
   if (process.platform !== 'win32') return;
   try {
-    require('child_process').execSync(
-      'taskkill /F /IM devcenter-backend.exe',
-      { windowsHide: true, stdio: 'ignore' }
-    );
+    const out = require('child_process').execSync(
+      'netstat -ano -p TCP | findstr ":8765"',
+      { windowsHide: true, stdio: ['ignore', 'pipe', 'ignore'] }
+    ).toString();
+    const pids = new Set();
+    out.split(/\r?\n/).forEach((line) => {
+      // 匹配 LISTENING 状态的 8765 监听者，提取其 PID（最后一列）
+      const m = line.trim().match(/:8765\b.*?LISTENING\s+(\d+)/i);
+      if (m) pids.add(parseInt(m[1], 10));
+    });
+    pids.forEach((pid) => {
+      if (pid && pid !== process.pid) {
+        try {
+          // /T 杀整棵进程树（含旧 Electron 父进程），/F 强杀
+          require('child_process').execSync(`taskkill /PID ${pid} /T /F`, {
+            windowsHide: true,
+            stdio: 'ignore',
+          });
+        } catch (e) {
+          // 进程已退出或权限不足，忽略
+        }
+      }
+    });
   } catch (e) {
-    // 没有残留进程时 taskkill 返回非零，属正常
+    // netstat 无结果时 execSync 抛错，属正常（端口空闲）
   }
 }
 
 function startBackend() {
-  // 先清理残留的旧后端，释放 8765
-  clearStaleBackend();
+  // 先清理占用 8765 的旧进程树，释放端口
+  clearStalePort();
   const resourceDir = getResourceDir();
   // R5: 打包后优先用内置 exe（自包含 Python，目标机无需安装 Python）
   const bundledExe = path.join(resourceDir, 'backend', 'devcenter-backend.exe');
@@ -289,6 +310,11 @@ const menuTemplate = [
 ];
 
 // --- App lifecycle ---
+
+// 关键：先按端口杀掉占用 8765 的旧进程树（含旧 Electron 父进程），
+// 再申请单实例锁。否则若旧实例仍活着并持有锁，新实例会直接退出、
+// 把焦点交还给那个页面已损坏（显示为 CSS 源码）的旧实例。
+clearStalePort();
 
 // 单实例锁：防止重复双击启动多个 Electron 实例互相抢占 8765 端口
 if (!app.requestSingleInstanceLock()) {
