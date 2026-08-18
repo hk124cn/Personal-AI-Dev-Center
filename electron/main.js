@@ -38,14 +38,29 @@ function getResourceDir() {
   return path.join(__dirname, '..');
 }
 
-// 启动前清理占用 8765 端口的旧进程（旧 Electron 实例及其后端进程树），
-// 确保本次启动总能拿到一个全新的、已修复的后端，而不是被旧实例劫持。
-// 关键点：必须在 requestSingleInstanceLock 之前执行——否则新实例会被旧实例
-// 持有的锁挡住、直接 app.quit()，结果只是把焦点交还给那个页面已损坏的旧实例。
+// 启动前清理旧实例：旧 Electron / portable exe 进程即使没监听 8765，
+// 只要还活着就会持有单实例锁，让新实例 requestSingleInstanceLock 失败、
+// app.quit()，结果只是把焦点交还给那个页面已损坏（显示 CSS 源码）的旧实例。
+// 因此必须按进程名先杀旧 Electron/portable 主进程，再按端口清理残留后端。
+// 关键点：必须在 requestSingleInstanceLock 之前执行。
 function clearStalePort() {
   if (process.platform !== 'win32') return;
+  const { execSync } = require('child_process');
+  const selfPid = process.pid;
+
+  // 1. 直接按镜像名强杀所有同名旧主程序（含子进程树），释放单实例锁。
+  //    taskkill /IM 不会终止调用者自身，无需逐个遍历 PID，启动更快。
+  ['Personal-AI-Dev-Center.exe', 'electron.exe'].forEach((name) => {
+    try {
+      execSync(`taskkill /F /IM "${name}" /T`, { windowsHide: true, stdio: 'ignore' });
+    } catch (e) {
+      // 无同名进程，正常
+    }
+  });
+
+  // 2. 再按端口 8765 清理残留后端（兜底）
   try {
-    const out = require('child_process').execSync(
+    const out = execSync(
       'netstat -ano -p TCP | findstr ":8765"',
       { windowsHide: true, stdio: ['ignore', 'pipe', 'ignore'] }
     ).toString();
@@ -56,10 +71,9 @@ function clearStalePort() {
       if (m) pids.add(parseInt(m[1], 10));
     });
     pids.forEach((pid) => {
-      if (pid && pid !== process.pid) {
+      if (pid && pid !== selfPid) {
         try {
-          // /T 杀整棵进程树（含旧 Electron 父进程），/F 强杀
-          require('child_process').execSync(`taskkill /PID ${pid} /T /F`, {
+          execSync(`taskkill /PID ${pid} /T /F`, {
             windowsHide: true,
             stdio: 'ignore',
           });
