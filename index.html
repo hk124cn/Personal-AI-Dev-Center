@@ -579,8 +579,8 @@ select.form-input{cursor:pointer;appearance:none;background-image:url("data:imag
 .mon-chart-card{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);padding:16px 18px}
 .mon-chart-card h4{font-size:13px;font-weight:600;margin-bottom:4px;display:flex;align-items:center;gap:6px}
 .mon-chart-card h4 svg{width:14px;height:14px;stroke-width:1.8;color:var(--accent)}
-.mon-chart-sub{font-size:11px;color:var(--text-tertiary);margin-bottom:10px}
-.mon-chart{width:100%;height:140px;display:block}
+.mon-chart-sub{font-size:11px;color:var(--text-tertiary);margin-bottom:6px}
+.mon-chart{width:100%;height:90px;display:block}
 .mon-net{display:grid;grid-template-columns:1fr 1fr;gap:12px}
 .mon-net .mn{background:var(--bg-elevated);border-radius:8px;padding:12px 14px;display:flex;align-items:center;gap:12px}
 .mon-net .mn svg{width:22px;height:22px;stroke-width:1.8;flex-shrink:0}
@@ -1276,10 +1276,10 @@ function viewDashboard(){
           <button class="tbtn ${state.dashMonMode==='ring'?'active':''}" onclick="setDashMonMode('ring')">${icon('pie-chart')} 环形</button>
           <button class="tbtn ${state.dashMonMode==='bar'?'active':''}" onclick="setDashMonMode('bar')">${icon('align-left')} 进度条</button>
         </div>
-        <button class="btn btn-sm" id="dash-mon-live-btn" onclick="toggleDashMonLive()">${icon(state.dashMonLive?'pause':'play')} ${state.dashMonLive?'暂停':'继续'}</button>
+        <button class="btn btn-sm" id="dash-mon-live-btn" onclick="toggleDashMonLive()">${icon(state.dashMonLive?'pause':'play')} ${state.dashMonLive?'暂停刷新':'继续刷新'}</button>
       </div>
     </div>
-    <div class="panel-body">${state.dashMonMode==='ring'?renderDashMonRingGrid():renderDashMonBarList()}</div>
+    <div class="panel-body" id="dash-mon-panel-body">${state.dashMonMode==='ring'?renderDashMonRingGrid():renderDashMonBarList()}</div>
   </div>
   <div class="panel"><div class="panel-head"><h3>${icon('bot')} ${t('panel_agent_dist')}</h3></div><div class="panel-body">${state.agents.map(a=>`<div class="li"><div class="li-icon" style="background:${a.bg}">${icon(a.icon)}</div><div class="li-body"><div class="li-title">${a.name}</div><div class="li-sub">${a.servers.map(sid=>{const s=getServer(sid);return s?s.name:sid}).join(' · ')}</div></div></div>`).join('')}</div></div>
   <div class="panel" style="margin-bottom:16px"><div class="panel-head"><h3>${icon('folder-kanban')} ${t('panel_project_overview')}</h3><button class="btn btn-sm" onclick="navigate('projects')">${t('view_all')} ${icon('arrow-right')}</button></div><div class="panel-body">${state.projects.map(p=>{const srv=getServer(p.server);return`<div class="li" style="cursor:pointer" onclick="openProjectDetail('${p.id}')"><div class="li-icon" style="background:${p.status==='active'?'var(--green-muted)':p.status==='dev'?'var(--amber-muted)':'var(--blue-muted)'}"><div class="dot ${dotClass(p.status)}"></div></div><div class="li-body"><div class="li-title">${p.name}</div><div class="li-sub">${statusText(p.status)} · ${srv?srv.name:'-'} · ${relativeTime(p.lastUpdate)}</div></div><div style="display:flex;align-items:center;gap:6px">${srv&&srv.sshUser?`<button class="btn btn-sm" onclick="event.stopPropagation();sshLogin('${srv.ip}',${srv.sshPort},'${srv.sshUser}','${srv.sshKey}')" title="${t('pd_ssh_login')}">${icon('terminal')} SSH</button>`:''}<div style="width:80px"><div class="progress"><div class="bar" style="width:${p.progress}%"></div></div><div style="font-size:10px;color:var(--text-tertiary);text-align:right;margin-top:2px">${p.progress}%</div></div></div></div>`}).join('')}</div></div>`}
@@ -1355,7 +1355,15 @@ function renderDashMonBarList(){
     </div>`;
   }).join('')}</div>`;
 }
-function setDashMonMode(mode){state.dashMonMode=mode;render();}
+function setDashMonMode(mode){
+  // 只重渲染监控面板本体，不整页 render：切换瞬间直接复用 state._mon 缓存，零联网、无闪烁
+  state.dashMonMode=mode;
+  const body=document.getElementById('dash-mon-panel-body');
+  if(body) body.innerHTML = state.dashMonMode==='ring'?renderDashMonRingGrid():renderDashMonBarList();
+  document.querySelectorAll('.dash-mon-toggle .tbtn').forEach(b=>{
+    b.classList.toggle('active', (b.getAttribute('onclick')||'').includes("'"+mode+"'"));
+  });
+}
 function toggleDashMonLive(){
   state.dashMonLive=!state.dashMonLive;
   const btn=document.getElementById('dash-mon-live-btn');
@@ -2547,7 +2555,7 @@ function monitorHTML(s){
       <span id="mon-status" style="font-size:13px;font-weight:600;color:var(--green)">连接中…</span>
       <span class="mon-host" id="mon-host">${escapeHtml(s.ip||'')}</span>
       <span style="flex:1"></span>
-      <button class="btn btn-sm mon-live" id="mon-toggle" onclick="toggleMonitor('${s.id}')">${icon('pause')} 暂停</button>
+      <button class="btn btn-sm mon-live" id="mon-toggle" onclick="toggleMonitor('${s.id}')">${icon('pause')} 暂停刷新</button>
     </div>
     <div class="mon-grid">
       <div class="mon-card"><div class="mc-label">${icon('cpu')} CPU 使用率</div>
@@ -2574,7 +2582,7 @@ function monitorHTML(s){
     </div>
     <div class="mon-chart-card">
       <h4>${icon('line-chart')} CPU 使用率趋势</h4>
-      <div class="mon-chart-sub">实时采样（每 3 秒），最近 60 个采样点</div>
+      <div class="mon-chart-sub">每分钟采样一次 · 最近 60 个采样点（约 1 小时）</div>
       <canvas class="mon-chart" id="mon-chart"></canvas>
     </div>
     <div class="mon-net">
@@ -2606,16 +2614,16 @@ function setMonError(msg){
 function initMonitor(id){
   if(_monTimer) clearInterval(_monTimer);
   pollMonitor(id);
-  _monTimer=setInterval(()=>pollMonitor(id), 3000);
+  _monTimer=setInterval(()=>pollMonitor(id), 60000);
 }
 function toggleMonitor(id){
   const btn=document.getElementById('mon-toggle');
   if(_monLive){
     _monLive=false; if(_monTimer){clearInterval(_monTimer);_monTimer=null;}
-    if(btn){btn.classList.remove('mon-live');btn.classList.add('off');btn.innerHTML=icon('play')+' 继续';}
+    if(btn){btn.classList.remove('mon-live');btn.classList.add('off');btn.innerHTML=icon('play')+' 继续刷新';}
   }else{
     _monLive=true;
-    if(btn){btn.classList.add('mon-live');btn.classList.remove('off');btn.innerHTML=icon('pause')+' 暂停';}
+    if(btn){btn.classList.add('mon-live');btn.classList.remove('off');btn.innerHTML=icon('pause')+' 暂停刷新';}
     initMonitor(id);
   }
 }
