@@ -562,6 +562,19 @@ def trigger_sync_single(project_id: str):
 
 # ==================== 定时同步调度 ====================
 
+def _coerce_ints(vals, lo, hi):
+    """把可迭代值过滤成 [lo, hi] 闭区间内的整数列表；无法转换的丢弃。"""
+    out = []
+    for x in (vals or []):
+        try:
+            v = int(x)
+            if lo <= v <= hi:
+                out.append(v)
+        except (TypeError, ValueError):
+            pass
+    return out
+
+
 @app.get("/api/schedules")
 def list_schedules():
     """列出所有定时同步规则。"""
@@ -579,10 +592,16 @@ def create_schedule(payload: dict):
     if scope not in ("all", "selected"):
         scope = "all"
     project_ids = payload.get("project_ids", []) if scope == "selected" else []
+    freq = payload.get("freq", "minutes")
+    if freq not in ("minutes", "weekly", "monthly"):
+        freq = "minutes"
     try:
         interval = max(15, int(payload.get("interval_minutes", 60)))
     except (TypeError, ValueError):
         interval = 60
+    weekdays = _coerce_ints(payload.get("weekdays"), 0, 6) if freq == "weekly" else []
+    month_days = _coerce_ints(payload.get("month_days"), 1, 31) if freq == "monthly" else []
+    run_time = payload.get("run_time") or "09:00"
     enabled = bool(payload.get("enabled", True))
     sid = f"sch_{int(time.time() * 1000)}"
     schedule = {
@@ -590,15 +609,27 @@ def create_schedule(payload: dict):
         "name": name,
         "scope": scope,
         "project_ids": project_ids,
+        "freq": freq,
         "interval_minutes": interval,
+        "weekdays": weekdays,
+        "month_days": month_days,
+        "run_time": run_time,
         "enabled": enabled,
         "last_run": None,
-        "next_run": (datetime.now() + timedelta(minutes=interval)).isoformat(),
+        "next_run": None,
         "last_status": None,
     }
     config = load_json(CONFIG_PATH) or {}
     config.setdefault("schedules", []).append(schedule)
     save_config(config)
+    # 立即按频率算出下次运行时间，便于前端展示（不会立即触发）
+    from backend import scheduler as sch
+    try:
+        schedule["next_run"] = sch.compute_next_run(schedule, datetime.now())
+        config["schedules"][-1]["next_run"] = schedule["next_run"]
+        save_config(config)
+    except Exception:
+        pass
     return schedule
 
 
@@ -618,13 +649,25 @@ def update_schedule(schedule_id: str, payload: dict):
         sched["project_ids"] = payload["project_ids"] if sched["scope"] == "selected" else []
     if "enabled" in payload:
         sched["enabled"] = bool(payload["enabled"])
+    if "freq" in payload and payload["freq"] in ("minutes", "weekly", "monthly"):
+        sched["freq"] = payload["freq"]
     if "interval_minutes" in payload:
         try:
             sched["interval_minutes"] = max(15, int(payload["interval_minutes"]))
         except (TypeError, ValueError):
             pass
-    # 编辑后让新间隔立即生效：下次运行时间重置为 现在 + 间隔
-    sched["next_run"] = (datetime.now() + timedelta(minutes=sched["interval_minutes"])).isoformat()
+    if "weekdays" in payload:
+        sched["weekdays"] = _coerce_ints(payload["weekdays"], 0, 6) if sched.get("freq") == "weekly" else []
+    if "month_days" in payload:
+        sched["month_days"] = _coerce_ints(payload["month_days"], 1, 31) if sched.get("freq") == "monthly" else []
+    if "run_time" in payload:
+        sched["run_time"] = payload["run_time"] or "09:00"
+    # 编辑后让新频率/间隔立即生效：重置下次运行时间
+    from backend import scheduler as sch
+    try:
+        sched["next_run"] = sch.compute_next_run(sched, datetime.now())
+    except Exception:
+        sched["next_run"] = None
     save_config(config)
     return sched
 
@@ -653,6 +696,19 @@ def run_schedule_now(schedule_id: str):
         return {"success": True, "result": result}
     except HTTPException:
         raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/sync-now")
+def sync_now(payload: dict = None):
+    """立即同步一次（独立于定时规则）：全量或指定项目 + 强制 LLM 分析 + 写「最新系统开发情况」。"""
+    payload = payload or {}
+    scope = "selected" if payload.get("project_ids") else "all"
+    from backend import scheduler as sch
+    try:
+        result = sch.run_sync_now(scope=scope, project_ids=payload.get("project_ids") or [])
+        return {"success": True, "result": result}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
