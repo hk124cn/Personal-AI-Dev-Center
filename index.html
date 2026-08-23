@@ -221,6 +221,7 @@ body{font-family:var(--font);background:var(--bg-deep);color:var(--text);height:
 .tag{font-size:10px;padding:2px 8px;border-radius:5px;font-weight:500;white-space:nowrap}
 .tag-accent{background:var(--accent-muted);color:var(--accent);border:1px solid var(--accent-border)}
 .tag-green{background:var(--green-muted);color:var(--green);border:1px solid var(--green-border)}
+.tag-gray{background:var(--overlay);color:var(--text-tertiary);border:1px solid var(--border)}
 .tag-amber{background:var(--amber-muted);color:var(--amber);border:1px solid var(--amber-border)}
 .tag-red{background:var(--red-muted);color:var(--red);border:1px solid var(--red-border)}
 .tag-blue{background:var(--blue-muted);color:var(--blue);border:1px solid var(--blue-border)}
@@ -651,6 +652,34 @@ select.form-input{cursor:pointer;appearance:none;background-image:url("data:imag
   .dash-mon-row .dmr-right{justify-content:flex-end}
 }
 
+/* ===== 定时同步 ===== */
+.dev-status-banner{display:flex;gap:12px;padding:14px 16px;margin-bottom:16px;border:1px solid var(--accent-border,var(--border));border-radius:var(--radius-lg,12px);background:var(--accent-muted,var(--overlay))}
+.dev-status-banner .dsb-icon{color:var(--accent);flex-shrink:0;margin-top:2px}
+.dev-status-banner .dsb-icon svg{width:20px;height:20px;stroke-width:1.8}
+.dev-status-banner .dsb-title{font-size:13px;font-weight:600;color:var(--text);margin-bottom:3px}
+.dev-status-banner .dsb-note{font-size:12.5px;color:var(--text-secondary);line-height:1.6}
+.dev-status-banner .dsb-meta{font-size:11px;color:var(--text-tertiary);margin-top:4px}
+.sched-list{display:flex;flex-direction:column;gap:10px}
+.sched-card{display:flex;align-items:center;gap:14px;padding:12px 16px;border:1px solid var(--border);border-radius:var(--radius-lg,12px);background:var(--bg-elevated,var(--bg-base))}
+.sched-card .sched-main{flex:1;min-width:0}
+.sched-card .sched-name{font-size:13.5px;font-weight:600;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sched-card .sched-sub{font-size:11.5px;color:var(--text-tertiary);margin-top:2px}
+.sched-card .sched-status{display:flex;gap:6px;flex-shrink:0}
+.sched-card .sched-actions{display:flex;gap:6px;align-items:center;flex-shrink:0}
+.switch-mini{position:relative;display:inline-block;width:38px;height:20px;flex-shrink:0}
+.switch-mini input{opacity:0;width:0;height:0}
+.switch-mini span{position:absolute;inset:0;background:var(--border);border-radius:20px;transition:.2s;cursor:pointer}
+.switch-mini span:before{content:"";position:absolute;width:16px;height:16px;left:2px;top:2px;background:#fff;border-radius:50%;transition:.2s}
+.switch-mini input:checked+span{background:var(--accent)}
+.switch-mini input:checked+span:before{transform:translateX(18px)}
+.form-row{margin-bottom:14px}
+.form-row>label{display:block;font-size:12px;color:var(--text-secondary);margin-bottom:5px;font-weight:500}
+.form-row .inp{width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:var(--radius-sm,8px);background:var(--bg-base);color:var(--text);font-size:13px}
+.form-row .form-unit{font-size:11px;color:var(--text-tertiary);margin-left:8px}
+.form-row .form-hint{font-size:11px;color:var(--text-tertiary);margin-top:4px}
+.form-actions{display:flex;gap:8px;margin-top:8px}
+.form-note{font-size:11.5px;color:var(--text-tertiary);margin-top:12px;line-height:1.6;padding-top:10px;border-top:1px solid var(--border)}
+
 </style>
 </head>
 <body>
@@ -770,7 +799,7 @@ function daysAgo(d){ return hoursAgo(d*24); }
 let todoIdCounter = 100;
 const state = {
   view:'dashboard', projectViewMode:'grouped', collapsedGroups:{}, alertsCollapsed:false, modal:null,
-  dashMonMode:'ring', dashMonLive:true, _mon:{},
+  dashMonMode:'ring', dashMonLive:true, _mon:{}, schedules:[],
   servers:[
     {id:'ali',name:'阿里云轻量',provider:'阿里云',providerHue:24,cpu:2,ram:2,disk:'60G SSD',ip:'47.xx.xx.xx',region:'杭州',os:'Ubuntu 22.04',tools:['OpenClaw','Claude Code'],expiry:'2027-02-01',status:'online',projects:['ecommerce-platform','api-gateway'],sshPort:22,sshUser:'root',sshKey:'~/.ssh/ali_key'},
     {id:'tx',name:'腾讯云轻量',provider:'腾讯云',providerHue:210,cpu:4,ram:4,disk:'80G SSD',ip:'101.xx.xx.xx',region:'上海',os:'Ubuntu 22.04',tools:['OpenClaw','Claude Code'],expiry:'2027-05-15',status:'online',projects:['ai-chatbot','data-dashboard'],sshPort:22,sshUser:'root',sshKey:'~/.ssh/tx_key'},
@@ -827,6 +856,33 @@ const I18N = {
   nav_projects:{zh:'项目中心',en:'Projects'},
   nav_agents:{zh:'Agent 中心',en:'Agents'},
   nav_knowledge:{zh:'知识库',en:'Knowledge'},
+  nav_schedules:{zh:'定时同步',en:'Auto Sync'},
+  top_schedules:{zh:'定时同步',en:'Scheduled Sync'},
+  top_schedules_sub:{zh:'自动拉取进度 + LLM 分析',en:'Auto pull + LLM analysis'},
+  sch_add:{zh:'新建规则',en:'New Rule'},
+  sch_loading:{zh:'加载中…',en:'Loading…'},
+  sch_empty:{zh:'暂无定时同步规则，点右上角新建一条',en:'No schedules yet'},
+  sch_scope_all:{zh:'全部项目',en:'All projects'},
+  sch_scope_sel:{zh:'选中',en:'Selected'},
+  sch_scope_selected:{zh:'指定项目',en:'Selected projects'},
+  sch_enabled:{zh:'已启用',en:'Enabled'},
+  sch_disabled:{zh:'已停用',en:'Disabled'},
+  sch_run:{zh:'立即运行',en:'Run now'},
+  sch_edit:{zh:'编辑',en:'Edit'},
+  sch_delete:{zh:'删除',en:'Delete'},
+  sch_name:{zh:'规则名称',en:'Name'},
+  sch_name_ph:{zh:'如：每天同步全部项目',en:'e.g. Sync all daily'},
+  sch_scope:{zh:'同步范围',en:'Scope'},
+  sch_projects:{zh:'选择项目',en:'Projects'},
+  sch_projects_hint:{zh:'按住 Ctrl / ⌘ 可多选',en:'Ctrl/⌘ to multi-select'},
+  sch_interval:{zh:'同步间隔（分钟）',en:'Interval (min)'},
+  sch_save:{zh:'保存',en:'Save'},
+  sch_cancel:{zh:'取消',en:'Cancel'},
+  sch_llm_note:{zh:'定时同步会强制调用大模型分析整理远程文档，并在结果中标注「最新系统开发情况」（不代表本地程序已是最新）。',en:'Scheduled sync forces LLM analysis and labels results as latest dev status.'},
+  sch_saved:{zh:'已保存',en:'Saved'},
+  sch_deleted:{zh:'已删除',en:'Deleted'},
+  sch_ran:{zh:'已触发运行',en:'Triggered'},
+  sch_delete_confirm:{zh:'确定删除该定时同步规则？',en:'Delete this schedule?'},
   nav_role:{zh:'全栈独立开发',en:'Full-Stack Dev'},
   // Topbar titles & subs
   top_dashboard:{zh:'首页概览',en:'Dashboard'},
@@ -1240,18 +1296,18 @@ function render(){
 }
 
 function sidebarHTML(){
-  const items=[{v:'dashboard',icon:'layout-dashboard',label:t('nav_dashboard')},{v:'servers',icon:'server',label:t('nav_servers'),badge:state.servers.filter(s=>s.status==='online').length},{v:'projects',icon:'folder-kanban',label:t('nav_projects'),badge:state.projects.length},{v:'domains',icon:'globe',label:t('nav_domains'),badge:state.domains.length},{v:'assets',icon:'credit-card',label:t('nav_assets'),badge:state.assets.length},{v:'agents',icon:'bot',label:t('nav_agents')},{v:'knowledge',icon:'book-open',label:t('nav_knowledge')}];
+  const items=[{v:'dashboard',icon:'layout-dashboard',label:t('nav_dashboard')},{v:'servers',icon:'server',label:t('nav_servers'),badge:state.servers.filter(s=>s.status==='online').length},{v:'projects',icon:'folder-kanban',label:t('nav_projects'),badge:state.projects.length},{v:'domains',icon:'globe',label:t('nav_domains'),badge:state.domains.length},{v:'assets',icon:'credit-card',label:t('nav_assets'),badge:state.assets.length},{v:'agents',icon:'bot',label:t('nav_agents')},{v:'knowledge',icon:'book-open',label:t('nav_knowledge')},{v:'schedules',icon:'clock',label:t('nav_schedules')}];
   return`<aside class="sidebar"><div class="sidebar-header"><div class="logo"><div class="logo-mark">${icon('rocket')}</div><div><div class="logo-text">Dev Center</div><div class="logo-sub">Personal Console</div></div></div></div><nav class="sidebar-nav">${items.map(i=>`<div class="nav-item ${state.view===i.v?'active':''}" onclick="navigate('${i.v}')">${icon(i.icon)}<span>${i.label}</span>${i.badge?`<span class="badge">${i.badge}</span>`:''}</div>`).join('')}</nav>${alertsHTML()}<div class="sidebar-footer"><div class="user-row"><div class="avatar">D</div><div><div class="user-name">Developer</div><div class="user-role">${t('nav_role')}</div></div></div><div style="margin-top:8px;font-size:10px;color:var(--text-tertiary);letter-spacing:.5px">v${APP_VERSION}</div></div></aside>`}
 
 function topbarHTML(){
-  const titles={dashboard:[t('top_dashboard'),t('top_dashboard_sub')],servers:[t('top_servers'),state.servers.length+' '+t('top_servers_sub')],projects:[t('top_projects'),state.projects.length+' '+t('top_projects_sub')],domains:[t('top_domains'),state.domains.length+' '+t('top_domains_sub')],assets:[t('top_assets'),state.assets.length+' '+t('top_assets_sub')],agents:[t('top_agents'),state.agents.length+' '+t('top_agents_sub')],knowledge:[t('top_knowledge'),t('top_knowledge_sub')]};
+  const titles={dashboard:[t('top_dashboard'),t('top_dashboard_sub')],servers:[t('top_servers'),state.servers.length+' '+t('top_servers_sub')],projects:[t('top_projects'),state.projects.length+' '+t('top_projects_sub')],domains:[t('top_domains'),state.domains.length+' '+t('top_domains_sub')],assets:[t('top_assets'),state.assets.length+' '+t('top_assets_sub')],agents:[t('top_agents'),state.agents.length+' '+t('top_agents_sub')],knowledge:[t('top_knowledge'),t('top_knowledge_sub')],schedules:[t('top_schedules'),t('top_schedules_sub')]};
   const[title,sub]=titles[state.view]||['',''];
   const connBadge = apiConnected
     ? `<span class="conn-badge conn-ok"><span class="dot dot-green dot-pulse" style="width:6px;height:6px"></span>${t('conn_ok')}</span>`
     : `<span class="conn-badge conn-demo"><span class="dot dot-amber" style="width:6px;height:6px"></span>${t('conn_demo')}</span>`;
   return`<header class="topbar"><div class="topbar-left"><span class="topbar-title">${title}</span><span class="topbar-sub">${sub}</span></div><div class="topbar-right">${langToggleHTML()}${connBadge}<button class="btn-icon" onclick="openAboutModal()" title="${t('about_title')}">${icon('info')}</button><button class="btn-icon" onclick="openSettingsModal()" title="${t('llm_settings')}">${icon('settings')}</button><button class="btn-icon" onclick="openLogViewer()" title="${t('log_btn')}">${icon('terminal')}</button><span class="theme-label">${t('theme')}</span><div class="theme-dots">${Object.entries(themes).map(([k,v])=>`<div class="theme-dot ${currentTheme===k?'active':''}" data-theme="${k}" style="background:${v.dot}" title="${t('theme_'+k)}" onclick="applyTheme('${k}');render()"></div>`).join('')}</div></div></header>`}
 
-function renderView(){return({dashboard:viewDashboard,servers:viewServers,projects:viewProjects,domains:viewDomains,assets:viewAssets,agents:viewAgents,knowledge:viewKnowledge})[state.view]()}
+function renderView(){return({dashboard:viewDashboard,servers:viewServers,projects:viewProjects,domains:viewDomains,assets:viewAssets,agents:viewAgents,knowledge:viewKnowledge,schedules:viewSchedules})[state.view]()}
 
 // ==================== DASHBOARD ====================
 function viewDashboard(){
@@ -3256,8 +3312,140 @@ function deleteFeature(projId, idx){
   }
 }
 
+// ==================== 定时同步 ====================
+function viewSchedules(){
+  return `<div class="sec-head"><h3>${icon('clock')} ${t('nav_schedules')}</h3><button class="btn btn-sm btn-primary" onclick="openScheduleModal()">${icon('plus')} ${t('sch_add')}</button></div>
+  <div id="dev-status-banner"></div>
+  <div id="schedules-list"><div class="empty" style="padding:28px">${icon('loader-2')}<p>${t('sch_loading')}</p></div></div>`;
+}
+
+async function refreshSchedules(){
+  try{
+    const [schRes,dataRes]=await Promise.all([
+      fetch(API_BASE+'/api/schedules',{signal:AbortSignal.timeout(5000)}),
+      fetch(API_BASE+'/api/data',{signal:AbortSignal.timeout(5000)})
+    ]);
+    const schedules=schRes.ok?await schRes.json():[];
+    const data=dataRes.ok?await dataRes.json():{};
+    state.schedules=schedules||[];
+    const banner=document.getElementById('dev-status-banner');
+    if(banner) banner.innerHTML=renderDevStatusBanner(data.dev_status);
+    const list=document.getElementById('schedules-list');
+    if(list) list.innerHTML=renderSchedulesList(state.schedules);
+  }catch(e){
+    const list=document.getElementById('schedules-list');
+    if(list) list.innerHTML=`<div class="empty" style="padding:28px">${icon('alert-circle')}<p>加载失败</p></div>`;
+  }
+}
+
+function renderDevStatusBanner(ds){
+  if(!ds||!ds.note) return '';
+  const when=ds.generated_at?relativeTime(ds.generated_at):'';
+  return `<div class="dev-status-banner">
+    <div class="dsb-icon">${icon('sparkles')}</div>
+    <div class="dsb-body">
+      <div class="dsb-title">最新系统开发情况</div>
+      <div class="dsb-note">${escapeHtml(ds.note)}</div>
+      <div class="dsb-meta">生成于 ${escapeHtml(when)} · 已 LLM 分析 ${ds.llm_analyzed_projects||0}/${ds.total_projects||0} 个项目${ds.schedule_name?(' · 来源：'+escapeHtml(ds.schedule_name)):''}</div>
+    </div>
+  </div>`;
+}
+
+function renderSchedulesList(schedules){
+  if(!schedules.length) return `<div class="empty" style="padding:28px">${icon('clock')}<p>${t('sch_empty')}</p></div>`;
+  return `<div class="sched-list">${schedules.map(s=>{
+    const scopeText=s.scope==='all'?t('sch_scope_all'):(t('sch_scope_sel')+' '+(s.project_ids||[]).length+' 个');
+    const nextText=s.next_run?relativeTime(s.next_run):'-';
+    const lastText=s.last_run?relativeTime(s.last_run):'-';
+    return `<div class="sched-card">
+      <div class="sched-main">
+        <div class="sched-name">${escapeHtml(s.name)}</div>
+        <div class="sched-sub">${scopeText} · 每 ${s.interval_minutes} 分钟 · 下次 ${nextText} · 上次 ${lastText}</div>
+      </div>
+      <div class="sched-status"><span class="tag ${s.enabled?'tag-green':'tag-gray'}">${s.enabled?t('sch_enabled'):t('sch_disabled')}</span>${s.last_status?`<span class="tag tag-blue">${escapeHtml(s.last_status)}</span>`:''}</div>
+      <div class="sched-actions">
+        <button class="btn btn-sm" onclick="runScheduleNow('${s.id}')">${icon('play')} ${t('sch_run')}</button>
+        <button class="btn btn-sm" onclick="openScheduleModal('${s.id}')">${icon('edit')} ${t('sch_edit')}</button>
+        <button class="btn btn-sm" onclick="deleteSchedule('${s.id}')">${icon('trash-2')} ${t('sch_delete')}</button>
+        <label class="switch-mini"><input type="checkbox" ${s.enabled?'checked':''} onchange="toggleSchedule('${s.id}',this.checked)"><span></span></label>
+      </div>
+    </div>`;
+  }).join('')}</div>`;
+}
+
+function openScheduleModal(id){
+  const s=id?state.schedules.find(x=>x.id===id):null;
+  const projOptions=state.projects.map(p=>`<option value="${p.id}" ${(s&&(s.project_ids||[]).includes(p.id))?'selected':''}>${escapeHtml(p.name)}</option>`).join('');
+  const scope=s?s.scope:'all';
+  state.modal={title:s?t('sch_edit'):t('sch_add'),size:'modal-md',body:`
+    <div class="form-row"><label>${t('sch_name')}</label><input id="sch-name" class="inp" value="${s?escapeHtml(s.name):''}" placeholder="${t('sch_name_ph')}"></div>
+    <div class="form-row"><label>${t('sch_scope')}</label>
+      <select id="sch-scope" class="inp" onchange="document.getElementById('sch-projects-wrap').style.display=this.value==='selected'?'block':'none'">
+        <option value="all" ${scope==='all'?'selected':''}>${t('sch_scope_all')}</option>
+        <option value="selected" ${scope==='selected'?'selected':''}>${t('sch_scope_selected')}</option>
+      </select>
+    </div>
+    <div class="form-row" id="sch-projects-wrap" style="display:${scope==='selected'?'block':'none'}">
+      <label>${t('sch_projects')}</label>
+      <select id="sch-projects" class="inp" multiple size="6">${projOptions}</select>
+      <div class="form-hint">${t('sch_projects_hint')}</div>
+    </div>
+    <div class="form-row"><label>${t('sch_interval')}</label><input id="sch-interval" class="inp" type="number" min="15" step="5" value="${s?s.interval_minutes:60}"><span class="form-unit">分钟（最小 15）</span></div>
+    <div class="form-row"><label style="display:flex;align-items:center;gap:8px;cursor:pointer"><input id="sch-enabled" type="checkbox" ${s?(s.enabled?'checked':''):'checked'}> ${t('sch_enabled')}</label></div>
+    <div class="form-actions"><button class="btn btn-primary" onclick="saveSchedule('${id||''}')">${t('sch_save')}</button><button class="btn" onclick="closeModal()">${t('sch_cancel')}</button></div>
+    <div class="form-note">${t('sch_llm_note')}</div>
+  `};
+  render();
+}
+
+async function saveSchedule(id){
+  const name=document.getElementById('sch-name').value.trim();
+  const scope=document.getElementById('sch-scope').value;
+  const interval=Math.max(15,parseInt(document.getElementById('sch-interval').value)||60);
+  const enabled=document.getElementById('sch-enabled').checked;
+  let project_ids=[];
+  if(scope==='selected'){const sel=document.getElementById('sch-projects');project_ids=Array.from(sel.selectedOptions).map(o=>o.value);}
+  const body={name,scope,project_ids,interval_minutes:interval,enabled};
+  try{
+    const url=id?API_BASE+'/api/schedules/'+id:API_BASE+'/api/schedules';
+    const method=id?'PUT':'POST';
+    const res=await fetch(url,{method,headers:{'Content-Type':'application/json'},body:JSON.stringify(body),signal:AbortSignal.timeout(8000)});
+    if(!res.ok){const e=await res.json().catch(()=>({}));throw new Error(e.detail||'保存失败');}
+    closeModal();
+    showToast(t('sch_saved'));
+    refreshSchedules();
+  }catch(e){showToast(e.message||'保存失败','alert-circle');}
+}
+
+async function deleteSchedule(id){
+  if(!confirm(t('sch_delete_confirm'))) return;
+  try{
+    const res=await fetch(API_BASE+'/api/schedules/'+id,{method:'DELETE',signal:AbortSignal.timeout(8000)});
+    if(!res.ok) throw new Error('删除失败');
+    showToast(t('sch_deleted'));
+    refreshSchedules();
+  }catch(e){showToast(e.message||'删除失败','alert-circle');}
+}
+
+async function runScheduleNow(id){
+  try{
+    const res=await fetch(API_BASE+'/api/schedules/'+id+'/run',{method:'POST',signal:AbortSignal.timeout(120000)});
+    const data=await res.json().catch(()=>({}));
+    if(!res.ok) throw new Error(data.detail||'运行失败');
+    showToast(t('sch_ran'));
+    refreshSchedules();
+  }catch(e){showToast(e.message||'运行失败','alert-circle');}
+}
+
+async function toggleSchedule(id,enabled){
+  try{
+    await fetch(API_BASE+'/api/schedules/'+id,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({enabled}),signal:AbortSignal.timeout(8000)});
+    const s=state.schedules.find(x=>x.id===id);if(s) s.enabled=enabled;
+  }catch(e){showToast('更新失败','alert-circle');}
+}
+
 // ==================== NAVIGATION ====================
-function navigate(v){if(_monTimer){clearInterval(_monTimer);_monTimer=null;}if(_dashMonTimer){clearInterval(_dashMonTimer);_dashMonTimer=null;}_monLive=false;state.view=v;state.modal=null;render();if(v==='dashboard'&&state.dashMonLive){initDashboardMonitor();}}
+function navigate(v){if(_monTimer){clearInterval(_monTimer);_monTimer=null;}if(_dashMonTimer){clearInterval(_dashMonTimer);_dashMonTimer=null;}_monLive=false;state.view=v;state.modal=null;render();if(v==='dashboard'&&state.dashMonLive){initDashboardMonitor();}if(v==='schedules'){refreshSchedules();}}
 
 document.addEventListener('keydown',e=>{
   if(e.key==='Escape')closeModal();
