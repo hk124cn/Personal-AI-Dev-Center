@@ -17,7 +17,7 @@ import threading
 import tempfile
 import html as _html
 from html.parser import HTMLParser
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
@@ -554,6 +554,103 @@ def trigger_sync_single(project_id: str):
         if "error" in result and "not found" in result["error"]:
             raise HTTPException(404, result["error"])
         return {"success": result.get("sync_error") is None, "data": result}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ==================== 定时同步调度 ====================
+
+@app.get("/api/schedules")
+def list_schedules():
+    """列出所有定时同步规则。"""
+    config = load_json(CONFIG_PATH) or {}
+    return config.get("schedules", [])
+
+
+@app.post("/api/schedules")
+def create_schedule(payload: dict):
+    """新建一条定时同步规则（自动拉 MD + 强制 LLM 分析）。"""
+    name = (payload.get("name") or "").strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="name 不能为空")
+    scope = payload.get("scope", "all")
+    if scope not in ("all", "selected"):
+        scope = "all"
+    project_ids = payload.get("project_ids", []) if scope == "selected" else []
+    try:
+        interval = max(15, int(payload.get("interval_minutes", 60)))
+    except (TypeError, ValueError):
+        interval = 60
+    enabled = bool(payload.get("enabled", True))
+    sid = f"sch_{int(time.time() * 1000)}"
+    schedule = {
+        "id": sid,
+        "name": name,
+        "scope": scope,
+        "project_ids": project_ids,
+        "interval_minutes": interval,
+        "enabled": enabled,
+        "last_run": None,
+        "next_run": (datetime.now() + timedelta(minutes=interval)).isoformat(),
+        "last_status": None,
+    }
+    config = load_json(CONFIG_PATH) or {}
+    config.setdefault("schedules", []).append(schedule)
+    save_config(config)
+    return schedule
+
+
+@app.put("/api/schedules/{schedule_id}")
+def update_schedule(schedule_id: str, payload: dict):
+    """更新一条定时同步规则。"""
+    config = load_json(CONFIG_PATH) or {}
+    schedules = config.setdefault("schedules", [])
+    sched = next((s for s in schedules if s.get("id") == schedule_id), None)
+    if not sched:
+        raise HTTPException(status_code=404, detail="Schedule not found")
+    if "name" in payload:
+        sched["name"] = (payload["name"] or "").strip() or sched["name"]
+    if "scope" in payload and payload["scope"] in ("all", "selected"):
+        sched["scope"] = payload["scope"]
+    if "project_ids" in payload and isinstance(payload["project_ids"], list):
+        sched["project_ids"] = payload["project_ids"] if sched["scope"] == "selected" else []
+    if "enabled" in payload:
+        sched["enabled"] = bool(payload["enabled"])
+    if "interval_minutes" in payload:
+        try:
+            sched["interval_minutes"] = max(15, int(payload["interval_minutes"]))
+        except (TypeError, ValueError):
+            pass
+    # 编辑后让新间隔立即生效：下次运行时间重置为 现在 + 间隔
+    sched["next_run"] = (datetime.now() + timedelta(minutes=sched["interval_minutes"])).isoformat()
+    save_config(config)
+    return sched
+
+
+@app.delete("/api/schedules/{schedule_id}")
+def delete_schedule(schedule_id: str):
+    """删除一条定时同步规则。"""
+    config = load_json(CONFIG_PATH) or {}
+    schedules = config.get("schedules", [])
+    new = [s for s in schedules if s.get("id") != schedule_id]
+    if len(new) == len(schedules):
+        raise HTTPException(status_code=404, detail="Schedule not found")
+    config["schedules"] = new
+    save_config(config)
+    return {"success": True}
+
+
+@app.post("/api/schedules/{schedule_id}/run")
+def run_schedule_now(schedule_id: str):
+    """立即运行一条定时同步规则（用于测试/手动触发）。"""
+    from backend import scheduler as sched_mod
+    try:
+        result = sched_mod.run_schedule_by_id(schedule_id)
+        if "error" in result:
+            raise HTTPException(status_code=404, detail=result["error"])
+        return {"success": True, "result": result}
     except HTTPException:
         raise
     except Exception as e:
@@ -1821,6 +1918,14 @@ def serve_frontend():
 
 
 # ==================== Entry Point ====================
+
+# 启动定时同步调度线程（幂等，后台 daemon 线程，每 30s 扫描一次 config.json 的 schedules）
+try:
+    from backend import scheduler as _sched_mod
+    _sched_mod.start_scheduler()
+except Exception as _sched_err:  # noqa: BLE001
+    print(f"[scheduler] 启动失败: {_sched_err}")
+
 
 if __name__ == "__main__":
     import uvicorn
