@@ -680,6 +680,24 @@ select.form-input{cursor:pointer;appearance:none;background-image:url("data:imag
 .form-actions{display:flex;gap:8px;margin-top:8px}
 .form-note{font-size:11.5px;color:var(--text-tertiary);margin-top:12px;line-height:1.6;padding-top:10px;border-top:1px solid var(--border)}
 
+/* ---- 定时同步：项目选择器 + 频率 ---- */
+.head-actions{display:flex;gap:8px;align-items:center}
+.pick-box{position:relative;min-height:38px;border:1px solid var(--border);border-radius:var(--radius-sm,8px);background:var(--bg-elevated,var(--bg-base));padding:6px 32px 6px 8px;cursor:pointer;display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.pick-placeholder{color:var(--text-tertiary);font-size:13px;line-height:24px}
+.pick-caret{position:absolute;right:8px;top:50%;transform:translateY(-50%);color:var(--text-tertiary);width:14px;height:14px}
+.pick-chips{display:flex;flex-wrap:wrap;gap:6px}
+.pick-chip{display:inline-flex;align-items:center;gap:4px;background:var(--accent-muted,var(--overlay));color:var(--text,var(--text));border:1px solid var(--accent-border,var(--border));border-radius:999px;padding:2px 10px;font-size:12px;white-space:nowrap}
+.pick-panel{margin-top:6px;border:1px solid var(--border);border-radius:var(--radius-sm,8px);background:var(--bg-elevated,var(--bg-base));padding:6px;max-height:210px;overflow-y:auto;display:flex;flex-direction:column;gap:2px}
+.pick-item{display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:6px;cursor:pointer;font-size:13px;color:var(--text-secondary)}
+.pick-item:hover{background:var(--overlay,var(--overlay-hover))}
+.seg{display:flex;gap:8px;flex-wrap:wrap}
+.seg-item{display:flex;align-items:center;gap:6px;padding:7px 12px;border:1px solid var(--border);border-radius:var(--radius-sm,8px);cursor:pointer;font-size:12px;color:var(--text-secondary);background:var(--bg-elevated,var(--bg-base))}
+.seg-item input{accent-color:var(--accent,#6b8cff)}
+.day-grid{display:flex;flex-wrap:wrap;gap:6px}
+.day-chip{border:1px solid var(--border);background:var(--bg-elevated,var(--bg-base));color:var(--text-secondary);border-radius:8px;padding:6px 11px;font-size:12px;cursor:pointer;transition:all var(--dur,0.2s) var(--ease,ease)}
+.day-chip:hover{border-color:var(--border-hover,var(--border));color:var(--text,var(--text))}
+.day-chip.active{background:var(--accent-muted,var(--overlay));border-color:var(--accent-border,var(--accent,#6b8cff));color:var(--text,var(--text));font-weight:600}
+
 </style>
 </head>
 <body>
@@ -883,6 +901,28 @@ const I18N = {
   sch_deleted:{zh:'已删除',en:'Deleted'},
   sch_ran:{zh:'已触发运行',en:'Triggered'},
   sch_delete_confirm:{zh:'确定删除该定时同步规则？',en:'Delete this schedule?'},
+  sch_freq:{zh:'同步频率',en:'Frequency'},
+  sch_freq_minutes:{zh:'每 N 分钟',en:'Every N min'},
+  sch_freq_weekly:{zh:'每周',en:'Weekly'},
+  sch_freq_monthly:{zh:'每月',en:'Monthly'},
+  sch_weekdays:{zh:'星期几',en:'Weekdays'},
+  sch_month_days:{zh:'每月几号',en:'Days of month'},
+  sch_run_time:{zh:'执行时间',en:'Run at'},
+  sch_sync_now:{zh:'立即同步',en:'Sync now'},
+  sch_syncing:{zh:'同步中…',en:'Syncing…'},
+  sch_sync_now_confirm:{zh:'立即同步一次（全量 + LLM 分析）？',en:'Sync now (all + LLM)?'},
+  sch_projects_placeholder:{zh:'点击选择项目',en:'Tap to select projects'},
+  sch_project_pick_hint:{zh:'点选后点击框外完成，可单选或多选',en:'Select, then click outside to confirm'},
+  sch_weekdays_err:{zh:'请至少选择一个星期几',en:'Pick at least one weekday'},
+  sch_monthdays_err:{zh:'请至少选择一个日期',en:'Pick at least one day'},
+  wd_mon:{zh:'周一',en:'Mon'}, wd_tue:{zh:'周二',en:'Tue'}, wd_wed:{zh:'周三',en:'Wed'}, wd_thu:{zh:'周四',en:'Thu'}, wd_fri:{zh:'周五',en:'Fri'}, wd_sat:{zh:'周六',en:'Sat'}, wd_sun:{zh:'周日',en:'Sun'},
+  day_unit:{zh:'号',en:'th'},
+  every_n_min:{zh:'每 {n} 分钟',en:'Every {n} min'},
+  rt_soon:{zh:'即将',en:'Soon'},
+  rt_min_later:{zh:'分钟后',en:'min later'},
+  rt_hour_later:{zh:'小时后',en:'hours later'},
+  rt_day_later:{zh:'天后',en:'days later'},
+  rt_month_later:{zh:'个月后',en:'months later'},
   nav_role:{zh:'全栈独立开发',en:'Full-Stack Dev'},
   // Topbar titles & subs
   top_dashboard:{zh:'首页概览',en:'Dashboard'},
@@ -1263,6 +1303,18 @@ function getServer(id){return state.servers.find(s=>s.id===id)}
 function daysUntil(d){if(!d||['永久','长期','计划中'].some(k=>d.includes(k)))return null;return Math.ceil((new Date(d)-new Date())/864e5)}
 function expiryColor(d){if(d===null)return'var(--text-tertiary)';if(d<=60)return'var(--red)';if(d<=120)return'var(--amber)';return'var(--green)'}
 function relativeTime(iso){const d=Date.now()-new Date(iso).getTime(),m=Math.floor(d/6e4),h=Math.floor(d/36e5),dy=Math.floor(d/864e5);if(m<1)return t('rt_just_now');if(m<60)return m+' '+t('rt_min_ago');if(h<24)return h+' '+t('rt_hour_ago');if(dy<30)return dy+' '+t('rt_day_ago');return Math.floor(dy/30)+' '+t('rt_month_ago')}
+
+function relativeFuture(iso){
+  const diff=new Date(iso).getTime()-Date.now();
+  if(isNaN(diff)) return '-';
+  if(diff<0) return relativeTime(iso); // 已过：回退到过去式
+  const m=Math.floor(diff/6e4),h=Math.floor(diff/36e5),dy=Math.floor(diff/864e5);
+  if(m<1) return t('rt_soon');
+  if(m<60) return m+' '+t('rt_min_later');
+  if(h<24) return h+' '+t('rt_hour_later');
+  if(dy<30) return dy+' '+t('rt_day_later');
+  return Math.floor(dy/30)+' '+t('rt_month_later');
+}
 function statusText(s){return{active:t('st_active'),dev:t('st_dev'),planned:t('st_planned'),paused:t('st_paused'),online:t('st_online'),offline:t('st_offline')}[s]||s}
 
 // ==================== STATS HISTORY (localStorage) ====================
@@ -3314,7 +3366,11 @@ function deleteFeature(projId, idx){
 
 // ==================== 定时同步 ====================
 function viewSchedules(){
-  return `<div class="sec-head"><h3>${icon('clock')} ${t('nav_schedules')}</h3><button class="btn btn-sm btn-primary" onclick="openScheduleModal()">${icon('plus')} ${t('sch_add')}</button></div>
+  return `<div class="sec-head"><h3>${icon('clock')} ${t('nav_schedules')}</h3>
+    <div class="head-actions">
+      <button class="btn btn-sm" onclick="syncNow()">${icon('refresh-cw')} ${t('sch_sync_now')}</button>
+      <button class="btn btn-sm btn-primary" onclick="openScheduleModal()">${icon('plus')} ${t('sch_add')}</button>
+    </div></div>
   <div id="dev-status-banner"></div>
   <div id="schedules-list"><div class="empty" style="padding:28px">${icon('loader-2')}<p>${t('sch_loading')}</p></div></div>`;
 }
@@ -3351,16 +3407,23 @@ function renderDevStatusBanner(ds){
   </div>`;
 }
 
+function _freqText(s){
+  const WD_KEYS=['mon','tue','wed','thu','fri','sat','sun'];
+  if(s.freq==='weekly'){const names=(s.weekdays||[]).slice().sort((a,b)=>a-b).map(d=>t('wd_'+WD_KEYS[d])).join('、');return t('sch_freq_weekly')+' '+names;}
+  if(s.freq==='monthly'){const ds=(s.month_days||[]).slice().sort((a,b)=>a-b).map(d=>d+t('day_unit')).join('、');return t('sch_freq_monthly')+' '+ds;}
+  return t('every_n_min').replace('{n}', s.interval_minutes||60);
+}
+
 function renderSchedulesList(schedules){
   if(!schedules.length) return `<div class="empty" style="padding:28px">${icon('clock')}<p>${t('sch_empty')}</p></div>`;
   return `<div class="sched-list">${schedules.map(s=>{
     const scopeText=s.scope==='all'?t('sch_scope_all'):(t('sch_scope_sel')+' '+(s.project_ids||[]).length+' 个');
-    const nextText=s.next_run?relativeTime(s.next_run):'-';
+    const nextText=s.next_run?relativeFuture(s.next_run):'-';
     const lastText=s.last_run?relativeTime(s.last_run):'-';
     return `<div class="sched-card">
       <div class="sched-main">
         <div class="sched-name">${escapeHtml(s.name)}</div>
-        <div class="sched-sub">${scopeText} · 每 ${s.interval_minutes} 分钟 · 下次 ${nextText} · 上次 ${lastText}</div>
+        <div class="sched-sub">${scopeText} · ${_freqText(s)} · 下次 ${nextText} · 上次 ${lastText}</div>
       </div>
       <div class="sched-status"><span class="tag ${s.enabled?'tag-green':'tag-gray'}">${s.enabled?t('sch_enabled'):t('sch_disabled')}</span>${s.last_status?`<span class="tag tag-blue">${escapeHtml(s.last_status)}</span>`:''}</div>
       <div class="sched-actions">
@@ -3375,8 +3438,19 @@ function renderSchedulesList(schedules){
 
 function openScheduleModal(id){
   const s=id?state.schedules.find(x=>x.id===id):null;
-  const projOptions=state.projects.map(p=>`<option value="${p.id}" ${(s&&(s.project_ids||[]).includes(p.id))?'selected':''}>${escapeHtml(p.name)}</option>`).join('');
   const scope=s?s.scope:'all';
+  const freq=s?s.freq:'minutes';
+  // 初始化选择状态（每次打开重置）
+  state._schPick = s&&scope==='selected'?(s.project_ids||[]).slice():[];
+  state._schWd = s&&freq==='weekly'?(s.weekdays||[]).slice():[];
+  state._schMd = s&&freq==='monthly'?(s.month_days||[]).slice():[];
+  const WD=[['0',t('wd_mon')],['1',t('wd_tue')],['2',t('wd_wed')],['3',t('wd_thu')],['4',t('wd_fri')],['5',t('wd_sat')],['6',t('wd_sun')]];
+  const wdChips=WD.map(([v,l])=>`<button type="button" class="day-chip ${state._schWd.includes(Number(v))?'active':''}" id="wd-${v}" onclick="schToggleWeekday(${v})">${l}</button>`).join('');
+  let mdChips='';for(let d=1;d<=31;d++){mdChips+=`<button type="button" class="day-chip ${state._schMd.includes(d)?'active':''}" id="md-${d}" onclick="schToggleMonthDay(${d})">${d}</button>`;}
+  const projOpts=state.projects.map(p=>`<label class="pick-item"><input type="checkbox" value="${p.id}" onchange="schPickToggle('${p.id}',this.checked)"> ${escapeHtml(p.name)}</label>`).join('');
+  const runTimeVal=s&&s.run_time?s.run_time:'09:00';
+  const fCh=f=>freq===f?'checked':'';
+  const show=cond=>cond?'grid':'none';
   state.modal={title:s?t('sch_edit'):t('sch_add'),size:'modal-md',body:`
     <div class="form-row"><label>${t('sch_name')}</label><input id="sch-name" class="inp" value="${s?escapeHtml(s.name):''}" placeholder="${t('sch_name_ph')}"></div>
     <div class="form-row"><label>${t('sch_scope')}</label>
@@ -3387,25 +3461,91 @@ function openScheduleModal(id){
     </div>
     <div class="form-row" id="sch-projects-wrap" style="display:${scope==='selected'?'block':'none'}">
       <label>${t('sch_projects')}</label>
-      <select id="sch-projects" class="inp" multiple size="6">${projOptions}</select>
-      <div class="form-hint">${t('sch_projects_hint')}</div>
+      <div class="pick-col">
+        <div class="pick-box" id="sch-pick-box" onclick="toggleSchPicker(event)">
+          <span class="pick-placeholder" id="sch-pick-ph">${t('sch_projects_placeholder')}</span>
+          <div class="pick-chips" id="sch-pick-chips"></div>
+          <i data-lucide="chevron-down" class="pick-caret"></i>
+        </div>
+        <div class="pick-panel" id="sch-pick-panel" style="display:none">${projOpts}</div>
+        <div class="form-hint">${t('sch_project_pick_hint')}</div>
+      </div>
     </div>
-    <div class="form-row"><label>${t('sch_interval')}</label><input id="sch-interval" class="inp" type="number" min="15" step="5" value="${s?s.interval_minutes:60}"><span class="form-unit">分钟（最小 15）</span></div>
+    <div class="form-row"><label>${t('sch_freq')}</label>
+      <div class="seg">
+        <label class="seg-item"><input type="radio" name="sch-freq" value="minutes" ${fCh('minutes')} onchange="schFreqChange('minutes')"> ${t('sch_freq_minutes')}</label>
+        <label class="seg-item"><input type="radio" name="sch-freq" value="weekly" ${fCh('weekly')} onchange="schFreqChange('weekly')"> ${t('sch_freq_weekly')}</label>
+        <label class="seg-item"><input type="radio" name="sch-freq" value="monthly" ${fCh('monthly')} onchange="schFreqChange('monthly')"> ${t('sch_freq_monthly')}</label>
+      </div>
+    </div>
+    <div class="form-row" id="sch-min-wrap" style="display:${show(freq==='minutes')}"><label>${t('sch_interval')}</label><div style="display:flex;align-items:center"><input id="sch-interval" class="inp" type="number" min="15" step="5" value="${s?s.interval_minutes:60}"><span class="form-unit">分钟（最小 15）</span></div></div>
+    <div class="form-row" id="sch-wd-wrap" style="display:${show(freq==='weekly')}"><label>${t('sch_weekdays')}</label><div class="day-grid">${wdChips}</div></div>
+    <div class="form-row" id="sch-md-wrap" style="display:${show(freq==='monthly')}"><label>${t('sch_month_days')}</label><div class="day-grid">${mdChips}</div></div>
+    <div class="form-row" id="sch-time-wrap" style="display:${show(freq==='weekly'||freq==='monthly')}"><label>${t('sch_run_time')}</label><input id="sch-time" class="inp" type="time" value="${runTimeVal}"></div>
     <div class="form-row"><label style="display:flex;align-items:center;gap:8px;cursor:pointer"><input id="sch-enabled" type="checkbox" ${s?(s.enabled?'checked':''):'checked'}> ${t('sch_enabled')}</label></div>
     <div class="form-actions"><button class="btn btn-primary" onclick="saveSchedule('${id||''}')">${t('sch_save')}</button><button class="btn" onclick="closeModal()">${t('sch_cancel')}</button></div>
     <div class="form-note">${t('sch_llm_note')}</div>
   `};
   render();
+  setTimeout(renderSchChips,0);
+}
+
+function toggleSchPicker(e){
+  e.stopPropagation();
+  const panel=document.getElementById('sch-pick-panel');
+  if(panel && panel.style.display==='none'){ panel.style.display='block'; }
+}
+function schPickToggle(id,checked){
+  if(checked){ if(!state._schPick.includes(id)) state._schPick.push(id); }
+  else { state._schPick=state._schPick.filter(x=>x!==id); }
+  renderSchChips();
+}
+function renderSchChips(){
+  const box=document.getElementById('sch-pick-chips');
+  const ph=document.getElementById('sch-pick-ph');
+  if(!box) return;
+  if(!state._schPick || !state._schPick.length){ box.innerHTML=''; if(ph) ph.style.display=''; return; }
+  if(ph) ph.style.display='none';
+  box.innerHTML=state._schPick.map(id=>{
+    const p=state.projects.find(x=>x.id===id);
+    return `<span class="pick-chip">${escapeHtml(p?p.name:id)}</span>`;
+  }).join('');
+}
+function schFreqChange(freq){
+  document.getElementById('sch-min-wrap').style.display = freq==='minutes'?'grid':'none';
+  document.getElementById('sch-wd-wrap').style.display = freq==='weekly'?'grid':'none';
+  document.getElementById('sch-md-wrap').style.display = freq==='monthly'?'grid':'none';
+  document.getElementById('sch-time-wrap').style.display = (freq==='weekly'||freq==='monthly')?'grid':'none';
+}
+function schToggleWeekday(v){
+  v=Number(v);
+  if(state._schWd.includes(v)) state._schWd=state._schWd.filter(x=>x!==v); else state._schWd.push(v);
+  const el=document.getElementById('wd-'+v); if(el) el.classList.toggle('active',state._schWd.includes(v));
+}
+function schToggleMonthDay(d){
+  if(state._schMd.includes(d)) state._schMd=state._schMd.filter(x=>x!==d); else state._schMd.push(d);
+  const el=document.getElementById('md-'+d); if(el) el.classList.toggle('active',state._schMd.includes(d));
 }
 
 async function saveSchedule(id){
   const name=document.getElementById('sch-name').value.trim();
   const scope=document.getElementById('sch-scope').value;
-  const interval=Math.max(15,parseInt(document.getElementById('sch-interval').value)||60);
+  const freq=document.querySelector('input[name="sch-freq"]:checked')?.value||'minutes';
   const enabled=document.getElementById('sch-enabled').checked;
-  let project_ids=[];
-  if(scope==='selected'){const sel=document.getElementById('sch-projects');project_ids=Array.from(sel.selectedOptions).map(o=>o.value);}
-  const body={name,scope,project_ids,interval_minutes:interval,enabled};
+  let project_ids=[], interval=60, weekdays=[], month_days=[], run_time='09:00';
+  if(scope==='selected') project_ids=state._schPick.slice();
+  if(freq==='minutes'){ interval=Math.max(15,parseInt(document.getElementById('sch-interval').value)||60); }
+  if(freq==='weekly'){
+    weekdays=state._schWd.slice();
+    run_time=document.getElementById('sch-time').value||'09:00';
+    if(!weekdays.length){ showToast(t('sch_weekdays_err'),'alert-circle'); return; }
+  }
+  if(freq==='monthly'){
+    month_days=state._schMd.slice();
+    run_time=document.getElementById('sch-time').value||'09:00';
+    if(!month_days.length){ showToast(t('sch_monthdays_err'),'alert-circle'); return; }
+  }
+  const body={name,scope,project_ids,freq,interval_minutes:interval,weekdays,month_days,run_time,enabled};
   try{
     const url=id?API_BASE+'/api/schedules/'+id:API_BASE+'/api/schedules';
     const method=id?'PUT':'POST';
@@ -3443,6 +3583,27 @@ async function toggleSchedule(id,enabled){
     const s=state.schedules.find(x=>x.id===id);if(s) s.enabled=enabled;
   }catch(e){showToast('更新失败','alert-circle');}
 }
+
+async function syncNow(){
+  if(!confirm(t('sch_sync_now_confirm'))) return;
+  try{
+    showToast(t('sch_syncing'));
+    const res=await fetch(API_BASE+'/api/sync-now',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({scope:'all',project_ids:[]}),signal:AbortSignal.timeout(120000)});
+    if(!res.ok){const e=await res.json().catch(()=>({}));throw new Error(e.detail||'同步失败');}
+    showToast(t('sch_ran'));
+    refreshSchedules();
+  }catch(e){showToast(e.message||'同步失败','alert-circle');}
+}
+
+// 项目选择器：点击面板/框外时收起，只保留已选项
+document.addEventListener('click',function(e){
+  const panel=document.getElementById('sch-pick-panel');
+  if(!panel||panel.style.display==='none')return;
+  const box=document.getElementById('sch-pick-box');
+  if(box&&(box.contains(e.target)||panel.contains(e.target)))return;
+  panel.style.display='none';
+  renderSchChips();
+});
 
 // ==================== NAVIGATION ====================
 function navigate(v){if(_monTimer){clearInterval(_monTimer);_monTimer=null;}if(_dashMonTimer){clearInterval(_dashMonTimer);_dashMonTimer=null;}_monLive=false;state.view=v;state.modal=null;render();if(v==='dashboard'&&state.dashMonLive){initDashboardMonitor();}if(v==='schedules'){refreshSchedules();}}

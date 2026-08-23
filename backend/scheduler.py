@@ -4,6 +4,11 @@ Dev Center - 定时同步调度器
 轻量进程内调度（无第三方依赖，避免 PyInstaller 打包风险）：
 后台线程每 30s 扫描 config.json 里的 schedules，到点自动跑同步（远程 MD -> 本地 latest.json），
 并强制触发 LLM 分析整理，最后在 latest.json 写入「最新系统开发情况」声明（含免责说明）。
+
+频率类型：
+- minutes：每隔 N 分钟（最小 15，适合高频轻量场景）
+- weekly ：每周指定的星期几（weekdays: 0=周一..6=周日）在 run_time 运行
+- monthly ：每月指定的日期（month_days: 1..31）在 run_time 运行
 """
 
 import json
@@ -65,9 +70,42 @@ def _now_iso():
     return datetime.now().isoformat()
 
 
-def _compute_next(last_iso, interval_minutes):
-    base = datetime.fromisoformat(last_iso) if last_iso else datetime.now()
-    return (base + timedelta(minutes=interval_minutes)).isoformat()
+def _parse_time(s):
+    """把 'HH:MM' 解析成 (时, 分)，出错回退 09:00。"""
+    try:
+        hh, mm = str(s or "09:00").split(":")
+        return max(0, min(23, int(hh))), max(0, min(59, int(mm)))
+    except Exception:
+        return 9, 0
+
+
+def compute_next_run(schedule: dict, from_dt: datetime) -> str:
+    """根据频率计算 from_dt 之后的下一次运行时间（ISO 字符串）。"""
+    freq = schedule.get("freq", "minutes")
+
+    if freq == "weekly":
+        wds = schedule.get("weekdays") or []
+        hh, mm = _parse_time(schedule.get("run_time", "09:00"))
+        cand = from_dt.replace(hour=hh, minute=mm, second=0, microsecond=0)
+        for _ in range(8):  # 一周 7 天 + 余量
+            if (cand.weekday() in wds) and (cand > from_dt):
+                return cand.isoformat()
+            cand += timedelta(days=1)
+        return cand.isoformat()
+
+    if freq == "monthly":
+        mds = schedule.get("month_days") or []
+        hh, mm = _parse_time(schedule.get("run_time", "09:00"))
+        cand = from_dt.replace(hour=hh, minute=mm, second=0, microsecond=0)
+        for _ in range(92):  # 三个月余量，覆盖跨小月/2 月等情况
+            if (cand.day in mds) and (cand > from_dt):
+                return cand.isoformat()
+            cand += timedelta(days=1)
+        return cand.isoformat()
+
+    # minutes
+    interval = max(MIN_INTERVAL, int(schedule.get("interval_minutes", MIN_INTERVAL)))
+    return (from_dt + timedelta(minutes=interval)).isoformat()
 
 
 # ---------------- 核心：执行一条调度 ----------------
@@ -106,18 +144,22 @@ def run_schedule(schedule: dict, config: dict = None) -> dict:
     return result
 
 
+def run_sync_now(scope="all", project_ids=None):
+    """立即同步一次（独立于定时规则）：全量或指定项目 + 强制 LLM 分析 + 写声明。"""
+    syn = {"id": "now", "name": "立即同步", "scope": scope, "project_ids": project_ids or []}
+    return run_schedule(syn)
+
+
 def _apply_timings(sid, started_at, status):
-    """把运行结果回写到 config 的对应 schedule（重载最新 config 避免覆盖他人改动）。"""
+    """把运行结果回写到 config 的对应 schedule（重载最新 config 避免覆盖他人改动），并重置下次运行时间。"""
     with _sched_lock:
         config = _load_config()
         schedules = config.setdefault("schedules", [])
-        interval = MIN_INTERVAL
         for s in schedules:
             if s.get("id") == sid:
-                interval = max(MIN_INTERVAL, int(s.get("interval_minutes", MIN_INTERVAL)))
                 s["last_run"] = started_at
                 s["last_status"] = status
-                s["next_run"] = _compute_next(started_at, interval)
+                s["next_run"] = compute_next_run(s, datetime.now())
                 break
         _save_config(config)
 
@@ -142,22 +184,27 @@ def _tick():
         try:
             config = _load_config()
             schedules = config.get("schedules", [])
-            due = []
             for s in schedules:
                 if not s.get("enabled", True):
                     continue
-                interval = max(MIN_INTERVAL, int(s.get("interval_minutes", MIN_INTERVAL)))
-                next_run = s.get("next_run")
                 now = datetime.now()
-                is_due = (next_run is None) or (datetime.fromisoformat(next_run) <= now)
+                nxt = s.get("next_run")
+                if not nxt:
+                    # 首次：按频率计算下次运行时间并持久化（不会立即触发）
+                    with _sched_lock:
+                        s["next_run"] = compute_next_run(s, now)
+                        _save_config(config)
+                    continue
+                try:
+                    is_due = datetime.fromisoformat(nxt) <= now
+                except Exception:
+                    is_due = True
                 if is_due:
-                    due.append((s, interval))
-            for s, interval in due:
-                print(f"[scheduler] 触发调度: {s.get('name')} ({s.get('id')})")
-                started = _now_iso()
-                res = run_schedule(s, config)
-                status = "ok" if res.get("sync") == "ok" else "error"
-                _apply_timings(s.get("id"), started, status)
+                    print(f"[scheduler] 触发调度: {s.get('name')} ({s.get('id')})")
+                    started = _now_iso()
+                    res = run_schedule(s, config)
+                    status = "ok" if res.get("sync") == "ok" else "error"
+                    _apply_timings(s.get("id"), started, status)
         except Exception as e:  # noqa: BLE001
             print(f"[scheduler] tick error: {e}")
         _sched_stop.wait(30)
