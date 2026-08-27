@@ -654,6 +654,19 @@ select.form-input{cursor:pointer;appearance:none;background-image:url("data:imag
 
 /* ===== 定时同步 ===== */
 .dev-status-banner{display:flex;gap:12px;padding:14px 16px;margin-bottom:16px;border:1px solid var(--accent-border,var(--border));border-radius:var(--radius-lg,12px);background:var(--accent-muted,var(--overlay))}
+.last-sync-bar{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:12px 16px;margin-bottom:16px;border:1px solid var(--border);border-radius:var(--radius-lg,12px);background:var(--bg-elevated,var(--bg-base))}
+.last-sync-bar .lsb-icon{color:var(--accent,#3b82f6);flex-shrink:0}
+.last-sync-bar .lsb-body{flex:1;min-width:0}
+.last-sync-bar .lsb-title{font-size:13px;font-weight:600;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.last-sync-bar .lsb-meta{font-size:11.5px;color:var(--text-tertiary);margin-top:3px}
+.last-sync-bar .lsb-tag{display:inline-flex;align-items:center;gap:3px;padding:1px 8px;border-radius:20px;font-size:11px;font-weight:600}
+.last-sync-bar .lsb-ok{background:var(--green-muted,#dcfce7);color:var(--green,#16a34a)}
+.last-sync-bar .lsb-bad{background:var(--red-muted,#fee2e2);color:var(--red,#dc2626)}
+.last-sync-bar .lsb-llm{background:var(--accent-muted,#e0e7ff);color:var(--accent,#3b82f6)}
+.last-sync-bar .lsb-err-btn{font-size:11px;color:var(--red,#dc2626);cursor:pointer;text-decoration:underline;margin-left:6px}
+.last-sync-bar .lsb-errors{width:100%;margin-top:8px;font-size:11px;color:var(--red,#dc2626);background:var(--red-muted,#fff1f1);border-radius:8px;padding:8px 10px}
+.last-sync-bar .lsb-errors div{padding:2px 0;word-break:break-all}
+.tag-red{background:var(--red-muted,#fee2e2);color:var(--red,#dc2626);border:1px solid var(--red-muted,#fee2e2)}
 .dev-status-banner .dsb-icon{color:var(--accent);flex-shrink:0;margin-top:2px}
 .dev-status-banner .dsb-icon svg{width:20px;height:20px;stroke-width:1.8}
 .dev-status-banner .dsb-title{font-size:13px;font-weight:600;color:var(--text);margin-bottom:3px}
@@ -911,6 +924,17 @@ const I18N = {
   sch_sync_now:{zh:'立即同步',en:'Sync now'},
   sch_syncing:{zh:'同步中…',en:'Syncing…'},
   sch_sync_now_confirm:{zh:'立即同步一次（全量 + LLM 分析）？',en:'Sync now (all + LLM)?'},
+  ls_bar_title:{zh:'最近同步',en:'Last sync'},
+  ls_success:{zh:'成功',en:'ok'},
+  ls_failed:{zh:'失败',en:'failed'},
+  ls_analyzed:{zh:'LLM 分析',en:'LLM'},
+  ls_none:{zh:'暂无任何同步记录',en:'No sync record yet'},
+  ls_err_toggle:{zh:'查看错误',en:'errors'},
+  ls_source:{zh:'来源',en:'source'},
+  ls_duration:{zh:'耗时',en:'took'},
+  sch_sync_allok:{zh:'同步完成：{n} 个项目全部成功，耗时 {sec}s',en:'All {n} synced ({sec}s)'},
+  sch_sync_summary:{zh:'同步完成：{ok} 成功 / {bad} 失败，耗时 {sec}s',en:'Synced: {ok} ok / {bad} failed ({sec}s)'},
+  sch_sync_fail:{zh:'同步失败：{bad} 个项目出错',en:'Sync failed: {bad} errors'},
   sch_projects_placeholder:{zh:'点击选择项目',en:'Tap to select projects'},
   sch_project_pick_hint:{zh:'点选后点击框外完成，可单选或多选',en:'Select, then click outside to confirm'},
   sch_weekdays_err:{zh:'请至少选择一个星期几',en:'Pick at least one weekday'},
@@ -1369,7 +1393,7 @@ function viewDashboard(){
   saveStatsSnapshot({online:onC,active:actP,agents:state.agents.length,progress:avgP});
   const tOnline=getTrend(onC,'online'),tActive=getTrend(actP,'active'),tAgents=getTrend(state.agents.length,'agents'),tProgress=getTrend(avgP,'progress');
   const quickActions=`<div class="quick-actions"><div class="quick-action" onclick="addProject()">${icon('plus')} ${t('qa_new_project')}</div><div class="quick-action" onclick="addServer()">${icon('server')} ${t('qa_add_server')}</div><div style="flex:1"></div><div style="font-size:11px;color:var(--text-tertiary);align-self:center">v${APP_VERSION}</div></div>`;
-  return`${quickActions}<div class="stats-grid">
+  return`${quickActions}${renderLastSyncBar(state.lastSync)}<div class="stats-grid">
     <div class="stat"><div class="stat-label">${icon('server')} ${t('stat_online')}</div><div class="stat-val">${onC}<span class="dim"> / ${state.servers.length}</span></div><div class="stat-sub">${state.servers.filter(s=>s.status==='planned').length} ${t('stat_planned')}</div>${trendHTML(tOnline)}</div>
     <div class="stat"><div class="stat-label">${icon('folder-kanban')} ${t('stat_active')}</div><div class="stat-val">${actP}</div><div class="stat-sub">${t('stat_total')} ${state.projects.length} · ${t('stat_avg_progress')} ${avgP}%</div>${trendHTML(tActive)}</div>
     <div class="stat"><div class="stat-label">${icon('bot')} ${t('stat_ai_tools')}</div><div class="stat-val">${state.agents.length}</div><div class="stat-sub">${t('stat_on_servers')} ${agS} ${t('stat_servers_unit')}</div>${trendHTML(tAgents)}</div>
@@ -3368,10 +3392,11 @@ function deleteFeature(projId, idx){
 function viewSchedules(){
   return `<div class="sec-head"><h3>${icon('clock')} ${t('nav_schedules')}</h3>
     <div class="head-actions">
-      <button class="btn btn-sm" onclick="syncNow()">${icon('refresh-cw')} ${t('sch_sync_now')}</button>
+      <button class="btn btn-sm" id="sch-sync-now-btn" onclick="syncNow(this)">${icon('refresh-cw')} ${t('sch_sync_now')}</button>
       <button class="btn btn-sm btn-primary" onclick="openScheduleModal()">${icon('plus')} ${t('sch_add')}</button>
     </div></div>
   <div id="dev-status-banner"></div>
+  ${renderLastSyncBar(state.lastSync)}
   <div id="schedules-list"><div class="empty" style="padding:28px">${icon('loader-2')}<p>${t('sch_loading')}</p></div></div>`;
 }
 
@@ -3383,6 +3408,7 @@ async function refreshSchedules(){
     ]);
     const schedules=schRes.ok?await schRes.json():[];
     const data=dataRes.ok?await dataRes.json():{};
+    if(data.last_sync) state.lastSync=data.last_sync;
     state.schedules=schedules||[];
     const banner=document.getElementById('dev-status-banner');
     if(banner) banner.innerHTML=renderDevStatusBanner(data.dev_status);
@@ -3407,6 +3433,25 @@ function renderDevStatusBanner(ds){
   </div>`;
 }
 
+function renderLastSyncBar(ls){
+  if(!ls || !ls.finished_at){
+    return `<div class="last-sync-bar" style="opacity:.72"><div class="lsb-icon">${icon('clock')}</div><div class="lsb-body"><div class="lsb-title">${t('ls_bar_title')}</div><div class="lsb-meta">${t('ls_none')}</div></div></div>`;
+  }
+  const when=relativeTime(ls.finished_at||ls.started_at);
+  const ok=ls.success||0, bad=ls.failed||0, ana=ls.llm_analyzed||0, total=ls.total||0;
+  const allOk = bad===0;
+  const errHtml = (ls.errors&&ls.errors.length)?`<div class="lsb-errors" id="lsb-errors" style="display:none">${ls.errors.map(e=>`<div>${escapeHtml(e.name||'?')}：${escapeHtml(e.error||'')}</div>`).join('')}</div>`:'';
+  const errBtn = (ls.errors&&ls.errors.length)?`<span class="lsb-err-btn" onclick="const el=document.getElementById('lsb-errors');el.style.display=(el.style.display==='none'?'block':'none')">${t('ls_err_toggle')} (${ls.errors.length})</span>`:'';
+  return `<div class="last-sync-bar">
+    <div class="lsb-icon">${icon('refresh-cw')}</div>
+    <div class="lsb-body">
+      <div class="lsb-title">${t('ls_bar_title')} · ${escapeHtml(ls.source||'')} <span class="lsb-tag ${allOk?'lsb-ok':'lsb-bad'}">${allOk?t('ls_success'):(bad+' '+t('ls_failed'))}</span>${ana?`<span class="lsb-tag lsb-llm">${ana} ${t('ls_analyzed')}</span>`:''}</div>
+      <div class="lsb-meta">${when} · ${ok} ${t('ls_success')} / ${bad} ${t('ls_failed')} · ${t('ls_duration')} ${ls.duration_sec}s ${total?('· '+total+' 项目'):''} ${errBtn}</div>
+      ${errHtml}
+    </div>
+  </div>`;
+}
+
 function _freqText(s){
   const WD_KEYS=['mon','tue','wed','thu','fri','sat','sun'];
   if(s.freq==='weekly'){const names=(s.weekdays||[]).slice().sort((a,b)=>a-b).map(d=>t('wd_'+WD_KEYS[d])).join('、');return t('sch_freq_weekly')+' '+names;}
@@ -3425,9 +3470,9 @@ function renderSchedulesList(schedules){
         <div class="sched-name">${escapeHtml(s.name)}</div>
         <div class="sched-sub">${scopeText} · ${_freqText(s)} · 下次 ${nextText} · 上次 ${lastText}</div>
       </div>
-      <div class="sched-status"><span class="tag ${s.enabled?'tag-green':'tag-gray'}">${s.enabled?t('sch_enabled'):t('sch_disabled')}</span>${s.last_status?`<span class="tag tag-blue">${escapeHtml(s.last_status)}</span>`:''}</div>
+      <div class="sched-status"><span class="tag ${s.enabled?'tag-green':'tag-gray'}">${s.enabled?t('sch_enabled'):t('sch_disabled')}</span>${s.last_run?`<span class="tag ${s.last_status==='error'?'tag-red':'tag-green'}">${s.last_status==='error'?t('ls_failed'):t('ls_success')}</span>`:''}</div>
       <div class="sched-actions">
-        <button class="btn btn-sm" onclick="runScheduleNow('${s.id}')">${icon('play')} ${t('sch_run')}</button>
+        <button class="btn btn-sm" onclick="runScheduleNow('${s.id}',this)">${icon('play')} ${t('sch_run')}</button>
         <button class="btn btn-sm" onclick="openScheduleModal('${s.id}')">${icon('edit')} ${t('sch_edit')}</button>
         <button class="btn btn-sm" onclick="deleteSchedule('${s.id}')">${icon('trash-2')} ${t('sch_delete')}</button>
         <label class="switch-mini"><input type="checkbox" ${s.enabled?'checked':''} onchange="toggleSchedule('${s.id}',this.checked)"><span></span></label>
@@ -3567,12 +3612,15 @@ async function deleteSchedule(id){
   }catch(e){showToast(e.message||'删除失败','alert-circle');}
 }
 
-async function runScheduleNow(id){
+async function runScheduleNow(id,btn){
   try{
+    if(btn){btn.disabled=true;btn.innerHTML=icon('loader-2');}
     const res=await fetch(API_BASE+'/api/schedules/'+id+'/run',{method:'POST',signal:AbortSignal.timeout(120000)});
     const data=await res.json().catch(()=>({}));
     if(!res.ok) throw new Error(data.detail||'运行失败');
-    showToast(t('sch_ran'));
+    const ls=data.result&&data.result.last_sync;
+    if(ls){ showToast((ls.failed>0?t('sch_sync_summary'):t('sch_sync_allok')).replace('{ok}',ls.success||0).replace('{bad}',ls.failed||0).replace('{sec}',ls.duration_sec||0).replace('{n}',ls.total||0), ls.failed>0?'alert-circle':'check-circle'); }
+    else showToast(t('sch_ran'));
     refreshSchedules();
   }catch(e){showToast(e.message||'运行失败','alert-circle');}
 }
@@ -3584,13 +3632,19 @@ async function toggleSchedule(id,enabled){
   }catch(e){showToast('更新失败','alert-circle');}
 }
 
-async function syncNow(){
-  if(!confirm(t('sch_sync_now_confirm'))) return;
+async function syncNow(btn){
   try{
-    showToast(t('sch_syncing'));
+    if(btn){btn.disabled=true;btn.innerHTML=icon('loader-2')+' '+t('sch_syncing');}
     const res=await fetch(API_BASE+'/api/sync-now',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({scope:'all',project_ids:[]}),signal:AbortSignal.timeout(120000)});
     if(!res.ok){const e=await res.json().catch(()=>({}));throw new Error(e.detail||'同步失败');}
-    showToast(t('sch_ran'));
+    const data=await res.json().catch(()=>({}));
+    const ls=data.result&&data.result.last_sync;
+    if(ls){
+      if(ls.failed>0 && ls.success===0) showToast(t('sch_sync_fail').replace('{bad}',ls.failed),'alert-circle');
+      else if(ls.failed>0) showToast(t('sch_sync_summary').replace('{ok}',ls.success).replace('{bad}',ls.failed).replace('{sec}',ls.duration_sec),'alert-circle');
+      else showToast(t('sch_sync_allok').replace('{n}',ls.total).replace('{sec}',ls.duration_sec),'check-circle');
+    } else showToast(t('sch_ran'));
+    await fetchAPIData();
     refreshSchedules();
   }catch(e){showToast(e.message||'同步失败','alert-circle');}
 }
@@ -3671,6 +3725,7 @@ async function fetchAPIData() {
     const res = await fetch(`${API_BASE}/api/data`, { signal: AbortSignal.timeout(3000) });
     if (!res.ok) return;
     const data = await res.json();
+    if (data.last_sync) state.lastSync = data.last_sync;
     if (data.projects && data.projects.length > 0) {
       apiConnected = true;
       lastSyncTime = data.synced_at;

@@ -111,12 +111,19 @@ def compute_next_run(schedule: dict, from_dt: datetime) -> str:
 # ---------------- 核心：执行一条调度 ----------------
 
 def run_schedule(schedule: dict, config: dict = None) -> dict:
-    """执行一条调度：同步（全量或指定项目）+ 强制 LLM 分析，写声明。返回状态字典。"""
+    """执行一条调度：同步（全量或指定项目）+ 强制 LLM 分析，写声明与「最近同步」状态。
+
+    返回结构化结果：sync(ok/error)、sync_error、last_sync（含成功/失败数、耗时、各项目错误）。
+    即使 SSH 部分失败，latest.json 仍会被 sync 引擎重写（带 sync_error），这里据实统计，
+    不让上层把失败也当成成功。
+    """
     if config is None:
         config = _load_config()
 
     scope = schedule.get("scope", "all")
-    result = {"schedule_id": schedule.get("id"), "started_at": _now_iso()}
+    started = datetime.now()
+    sync_ok = True
+    sync_err = None
     try:
         from backend.sync import sync_all, sync_single
         if scope == "all" or not schedule.get("project_ids"):
@@ -124,24 +131,55 @@ def run_schedule(schedule: dict, config: dict = None) -> dict:
         else:
             for pid in schedule.get("project_ids", []):
                 sync_single(pid)
-        result["sync"] = "ok"
     except Exception as e:  # noqa: BLE001
-        result["sync"] = f"error: {e}"
+        sync_ok = False
+        sync_err = str(e)
+    finished = datetime.now()
+    duration = round((finished - started).total_seconds(), 1)
+
+    # 据实统计结果（sync 引擎把每个项目的 sync_error 写进了 latest.json）
+    latest = _load_latest()
+    projects = latest.get("projects", []) or []
+    success = sum(1 for p in projects if not p.get("sync_error"))
+    failed = sum(1 for p in projects if p.get("sync_error"))
+    analyzed = sum(1 for p in projects if p.get("llm_analyzed"))
+    errors = [
+        {"name": p.get("name"), "error": p.get("sync_error")}
+        for p in projects
+        if p.get("sync_error")
+    ][:10]
+
+    last_sync = {
+        "started_at": started.isoformat(),
+        "finished_at": finished.isoformat(),
+        "duration_sec": duration,
+        "source": schedule.get("name") or "立即同步",
+        "scope": scope,
+        "total": len(projects),
+        "success": success,
+        "failed": failed,
+        "llm_analyzed": analyzed,
+        "errors": errors,
+    }
+    latest["last_sync"] = last_sync
 
     # 写「最新系统开发情况」声明到 latest.json
-    latest = _load_latest()
-    analyzed = [p for p in latest.get("projects", []) if p.get("llm_analyzed")]
     latest["dev_status"] = {
-        "generated_at": _now_iso(),
+        "generated_at": finished.isoformat(),
         "schedule_id": schedule.get("id"),
         "schedule_name": schedule.get("name"),
         "note": DISCLAIMER,
-        "llm_analyzed_projects": len(analyzed),
-        "total_projects": len(latest.get("projects", [])),
+        "llm_analyzed_projects": analyzed,
+        "total_projects": len(projects),
     }
     _save_latest(latest)
-    result["llm_analyzed"] = len(analyzed)
-    return result
+
+    return {
+        "schedule_id": schedule.get("id"),
+        "sync": "ok" if sync_ok else "error",
+        "sync_error": sync_err,
+        "last_sync": last_sync,
+    }
 
 
 def run_sync_now(scope="all", project_ids=None):
