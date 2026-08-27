@@ -51,6 +51,108 @@ OUTPUT_PATH = LATEST_JSON
 MD_FILES = ["TODO.md", "PROGRESS.md", "ISSUES.md"]
 
 
+# ==================== 同步进度追踪（实时回报给前端轮询） ====================
+# 单例，记录一次同步任务的进展：当前项目、远程目录、各项目状态。
+# 状态：pending(等待) / running(同步中) / done(完成) / error(失败)。
+
+class SyncProgress:
+    def __init__(self):
+        self._lock = threading.Lock()
+        self._running = False
+        self._started_at = None
+        self._finished_at = None
+        self._scope = "all"
+        self._total = 0
+        self._current_id = None
+        self._current_dir = None
+        self._current_name = None
+        self._projects = {}  # pid -> {id,name,server,server_name,remote_path,status,error,synced_at,llm_analyzed}
+
+    def start(self, scope: str, project_list: list):
+        """开始一次同步：重置并登记待同步项目列表。"""
+        with self._lock:
+            self._running = True
+            self._started_at = datetime.now().isoformat()
+            self._finished_at = None
+            self._scope = scope
+            self._total = len(project_list)
+            self._current_id = None
+            self._current_dir = None
+            self._current_name = None
+            self._projects = {}
+            for p in project_list:
+                self._projects[p["id"]] = {
+                    "id": p["id"],
+                    "name": p.get("name", p.get("id")),
+                    "server": p.get("server"),
+                    "server_name": p.get("server_name") or "",
+                    "remote_path": p.get("remote_path") or "",
+                    "status": "pending",
+                    "error": None,
+                    "synced_at": None,
+                    "llm_analyzed": False,
+                }
+
+    def set_current(self, pid):
+        """标记某个项目开始同步。"""
+        with self._lock:
+            pr = self._projects.get(pid)
+            if pr is not None:
+                pr["status"] = "running"
+                self._current_dir = pr.get("remote_path")
+                self._current_name = pr.get("name")
+            self._current_id = pid
+
+    def finish_project(self, pid, error=None, llm_analyzed=False):
+        """标记某个项目同步结束（error 为 None 表示成功）。"""
+        with self._lock:
+            pr = self._projects.get(pid)
+            if pr is not None:
+                pr["status"] = "error" if error else "done"
+                pr["error"] = error
+                pr["synced_at"] = datetime.now().isoformat()
+                pr["llm_analyzed"] = bool(llm_analyzed)
+            if self._current_id == pid:
+                self._current_id = None
+                self._current_dir = None
+                self._current_name = None
+
+    def done(self):
+        """整次同步结束。"""
+        with self._lock:
+            self._running = False
+            self._finished_at = datetime.now().isoformat()
+            self._current_id = None
+            self._current_dir = None
+            self._current_name = None
+
+    @property
+    def running(self):
+        with self._lock:
+            return self._running
+
+    def snapshot(self):
+        """返回当前进度的可序列化快照。"""
+        with self._lock:
+            done = sum(1 for p in self._projects.values() if p["status"] in ("done", "error"))
+            return {
+                "running": self._running,
+                "started_at": self._started_at,
+                "finished_at": self._finished_at,
+                "scope": self._scope,
+                "total": self._total,
+                "done_count": done,
+                "current_id": self._current_id,
+                "current_dir": self._current_dir,
+                "current_name": self._current_name,
+                "projects": [dict(p) for p in self._projects.values()],
+            }
+
+
+# 全局单例（同一进程内，scheduler / API 共享）
+sync_progress = SyncProgress()
+
+
 def load_config():
     with open(CONFIG_PATH, "r", encoding="utf-8") as f:
         return json.load(f)
@@ -485,7 +587,7 @@ def apply_llm_analysis(project_name: str, remote_data: dict, config: dict) -> di
 
 
 def sync_single(project_id: str) -> dict:
-    """只同步指定项目"""
+    """只同步指定项目，并实时回报进度到 sync_progress。"""
     config = load_config()
     servers = {s["id"]: s for s in config["servers"]}
     project = next((p for p in config["projects"] if p["id"] == project_id), None)
@@ -497,108 +599,31 @@ def sync_single(project_id: str) -> dict:
     if not server:
         return {"error": f"Server {server_id} not found"}
 
-    print(f"[sync] {project['name']} @ {server['name']} ({server['host']})...")
-    start = time.time()
-    remote_data = ssh_read_files(server, project)
-    
-    # 应用 LLM 分析（如果启用）
-    remote_data = apply_llm_analysis(project['name'], remote_data, config)
-    
-    elapsed = round(time.time() - start, 2)
+    # 若没有其它同步正在进行，则由本次调用掌管进度生命周期；否则只更新当前项目状态
+    own = not sync_progress.running
+    if own:
+        pv = dict(project)
+        pv["server_name"] = server.get("name", "")
+        sync_progress.start("selected", [pv])
+    sync_progress.set_current(project_id)
 
-    # LLM 检测到技术栈时，自动更新 config.json
-    llm_tech_stack = remote_data.get("llm_tech_stack", [])
-    if llm_tech_stack:
-        for i, p in enumerate(config["projects"]):
-            if p["id"] == project_id:
-                config["projects"][i]["tech_stack"] = llm_tech_stack
-                save_config(config)
-                print(f"[sync] 已更新 {project['name']} 的技术栈: {', '.join(llm_tech_stack)}")
-                break
-
-    project_entry = {
-        "id": project["id"],
-        "name": project["name"],
-        "server": server_id,
-        "server_name": server["name"],
-        "tech_stack": llm_tech_stack or project.get("tech_stack", []),
-        "agent": project.get("agent", "-"),
-        "synced_at": datetime.now().isoformat(),
-        "sync_duration_sec": elapsed,
-        "sync_error": remote_data["error"],
-        "todos": remote_data["todos"],
-        "progress": remote_data["progress"],
-        "issues": remote_data["issues"],
-        "md_files": remote_data.get("md_files", []),
-        "summaries": remote_data.get("summaries", {}),
-        "remote_mtime": remote_data.get("remote_mtime"),
-        # LLM 分析结果
-        "llm_features": remote_data.get("llm_features", []),
-        "llm_architecture": remote_data.get("llm_architecture", {}),
-        "llm_routes": remote_data.get("llm_routes", []),
-        "llm_tech_stack": llm_tech_stack,
-        "llm_summary": remote_data.get("llm_summary", ""),
-        "llm_analyzed": remote_data.get("llm_analyzed", False),
-        "llm_status": remote_data.get("llm_status", "disabled"),
-    }
-
-    if OUTPUT_PATH.exists():
-        with open(OUTPUT_PATH, "r", encoding="utf-8") as f:
-            output = json.load(f)
-    else:
-        output = {"projects": []}
-
-    projects = output.get("projects", [])
-    replaced = False
-    for index, existing in enumerate(projects):
-        if existing.get("id") == project_id:
-            projects[index] = project_entry
-            replaced = True
-            break
-    if not replaced:
-        projects.append(project_entry)
-
-    DATA_DIR.mkdir(parents=True, exist_ok=True)
-    output["projects"] = projects
-    output["synced_at"] = datetime.now().isoformat()
-    output["project_count"] = len(projects)
-    output["server_count"] = len(set(p["server"] for p in projects if p.get("server")))
-    with _write_lock:
-        atomic_write_json(OUTPUT_PATH, output)
-
-    status = "OK" if not remote_data["error"] else f"ERROR: {remote_data['error']}"
-    llm_status = " +LLM" if remote_data.get("llm_analyzed") else ""
-    print(f"  -> {status}{llm_status} ({elapsed}s)")
-    return project_entry
-
-
-def sync_all():
-    """同步所有服务器上的所有项目"""
-    config = load_config()
-    servers = {s["id"]: s for s in config["servers"]}
-    projects_data = []
-
-    for project in config["projects"]:
-        server_id = project["server"]
-        if server_id not in servers:
-            continue
-
-        server = servers[server_id]
+    try:
         print(f"[sync] {project['name']} @ {server['name']} ({server['host']})...")
-
         start = time.time()
         remote_data = ssh_read_files(server, project)
+
         # 应用 LLM 分析（如果启用）
         remote_data = apply_llm_analysis(project['name'], remote_data, config)
-        
+
         elapsed = round(time.time() - start, 2)
 
-        # LLM 检测到技术栈时，自动更新 config
+        # LLM 检测到技术栈时，自动更新 config.json
         llm_tech_stack = remote_data.get("llm_tech_stack", [])
         if llm_tech_stack:
             for i, p in enumerate(config["projects"]):
-                if p["id"] == project["id"]:
+                if p["id"] == project_id:
                     config["projects"][i]["tech_stack"] = llm_tech_stack
+                    save_config(config)
                     print(f"[sync] 已更新 {project['name']} 的技术栈: {', '.join(llm_tech_stack)}")
                     break
 
@@ -627,11 +652,119 @@ def sync_all():
             "llm_analyzed": remote_data.get("llm_analyzed", False),
             "llm_status": remote_data.get("llm_status", "disabled"),
         }
-        projects_data.append(project_entry)
+
+        if OUTPUT_PATH.exists():
+            with open(OUTPUT_PATH, "r", encoding="utf-8") as f:
+                output = json.load(f)
+        else:
+            output = {"projects": []}
+
+        projects = output.get("projects", [])
+        replaced = False
+        for index, existing in enumerate(projects):
+            if existing.get("id") == project_id:
+                projects[index] = project_entry
+                replaced = True
+                break
+        if not replaced:
+            projects.append(project_entry)
+
+        DATA_DIR.mkdir(parents=True, exist_ok=True)
+        output["projects"] = projects
+        output["synced_at"] = datetime.now().isoformat()
+        output["project_count"] = len(projects)
+        output["server_count"] = len(set(p["server"] for p in projects if p.get("server")))
+        with _write_lock:
+            atomic_write_json(OUTPUT_PATH, output)
 
         status = "OK" if not remote_data["error"] else f"ERROR: {remote_data['error']}"
         llm_status = " +LLM" if remote_data.get("llm_analyzed") else ""
         print(f"  -> {status}{llm_status} ({elapsed}s)")
+        sync_progress.finish_project(project_id, error=remote_data["error"], llm_analyzed=remote_data.get("llm_analyzed", False))
+        return project_entry
+    except Exception as e:
+        sync_progress.finish_project(project_id, error=str(e), llm_analyzed=False)
+        raise
+    finally:
+        if own:
+            sync_progress.done()
+
+
+def sync_all():
+    """同步所有服务器上的所有项目，并实时回报进度到 sync_progress。"""
+    config = load_config()
+    servers = {s["id"]: s for s in config["servers"]}
+    # 构建待同步项目列表（跳过无对应服务器的）
+    pending = []
+    for project in config["projects"]:
+        server_id = project.get("server")
+        if server_id not in servers:
+            continue
+        pv = dict(project)
+        pv["server_name"] = servers[server_id].get("name", "")
+        pending.append(pv)
+
+    sync_progress.start("all", pending)
+    projects_data = []
+    try:
+        for project in pending:
+            server_id = project["server"]
+            server = servers[server_id]
+            sync_progress.set_current(project["id"])
+            print(f"[sync] {project['name']} @ {server['name']} ({server['host']})...")
+
+            start = time.time()
+            remote_data = ssh_read_files(server, project)
+            # 应用 LLM 分析（如果启用）
+            remote_data = apply_llm_analysis(project['name'], remote_data, config)
+
+            elapsed = round(time.time() - start, 2)
+
+            # LLM 检测到技术栈时，自动更新 config
+            llm_tech_stack = remote_data.get("llm_tech_stack", [])
+            if llm_tech_stack:
+                for i, p in enumerate(config["projects"]):
+                    if p["id"] == project["id"]:
+                        config["projects"][i]["tech_stack"] = llm_tech_stack
+                        print(f"[sync] 已更新 {project['name']} 的技术栈: {', '.join(llm_tech_stack)}")
+                        break
+
+            project_entry = {
+                "id": project["id"],
+                "name": project["name"],
+                "server": server_id,
+                "server_name": server["name"],
+                "tech_stack": llm_tech_stack or project.get("tech_stack", []),
+                "agent": project.get("agent", "-"),
+                "synced_at": datetime.now().isoformat(),
+                "sync_duration_sec": elapsed,
+                "sync_error": remote_data["error"],
+                "todos": remote_data["todos"],
+                "progress": remote_data["progress"],
+                "issues": remote_data["issues"],
+                "md_files": remote_data.get("md_files", []),
+                "summaries": remote_data.get("summaries", {}),
+                "remote_mtime": remote_data.get("remote_mtime"),
+                # LLM 分析结果
+                "llm_features": remote_data.get("llm_features", []),
+                "llm_architecture": remote_data.get("llm_architecture", {}),
+                "llm_routes": remote_data.get("llm_routes", []),
+                "llm_tech_stack": llm_tech_stack,
+                "llm_summary": remote_data.get("llm_summary", ""),
+                "llm_analyzed": remote_data.get("llm_analyzed", False),
+                "llm_status": remote_data.get("llm_status", "disabled"),
+            }
+            projects_data.append(project_entry)
+
+            status = "OK" if not remote_data["error"] else f"ERROR: {remote_data['error']}"
+            llm_status = " +LLM" if remote_data.get("llm_analyzed") else ""
+            print(f"  -> {status}{llm_status} ({elapsed}s)")
+            sync_progress.finish_project(
+                project["id"], error=remote_data["error"],
+                llm_analyzed=remote_data.get("llm_analyzed", False),
+            )
+    finally:
+        sync_progress.done()
 
     # 保存可能更新的技术栈到 config.json
     save_config(config)

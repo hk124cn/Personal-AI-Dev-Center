@@ -538,6 +538,23 @@ select.form-input{cursor:pointer;appearance:none;background-image:url("data:imag
 .sync-float-done .msg{font-size:12px;font-weight:500}
 .sync-float-done .msg.ok{color:var(--green)}
 .sync-float-done .msg.err{color:var(--red)}
+/* MD 同步进度浮窗（与文件传输浮窗共用 .sync-float 外观） */
+.md-sync-body{padding:12px 14px;overflow-y:auto;flex:1}
+.md-dir{font-size:11px;color:var(--text-tertiary);margin:2px 0 10px;word-break:break-all}
+.md-dir b{color:var(--text-secondary);font-weight:600}
+.md-proj-list{display:flex;flex-direction:column;gap:3px;max-height:46vh;overflow-y:auto}
+.md-proj{display:flex;align-items:center;gap:7px;font-size:12px;padding:4px 6px;border-radius:6px;line-height:1.3}
+.md-proj .ic{flex:none;width:14px;text-align:center}
+.md-proj .nm{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.md-proj .srv{color:var(--text-tertiary);font-size:10px;flex:none;max-width:90px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.md-proj.done{color:var(--green)}
+.md-proj.error{color:var(--red)}
+.md-proj.running{background:var(--accent-muted);color:var(--text)}
+.md-proj.waiting{color:var(--text-tertiary)}
+.md-proj .err-msg{color:var(--red);font-size:10px;flex:none;max-width:120px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.md-count{font-size:11px;color:var(--text-tertiary);margin-top:8px;padding-top:7px;border-top:1px solid var(--border)}
+@keyframes mdspin{to{transform:rotate(360deg)}}
+.md-spin{display:inline-block;width:13px;height:13px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:mdspin .8s linear infinite;vertical-align:middle}
 /* Resize handles - all 4 edges + 4 corners */
 .sync-float-resize{position:absolute;z-index:10}
 .sync-resize-n{top:-3px;left:8px;right:8px;height:6px;cursor:ns-resize}
@@ -932,6 +949,18 @@ const I18N = {
   ls_err_toggle:{zh:'查看错误',en:'errors'},
   ls_source:{zh:'来源',en:'source'},
   ls_duration:{zh:'耗时',en:'took'},
+  // 实时同步进度浮窗
+  sp_title:{zh:'同步进度',en:'Sync progress'},
+  sp_current:{zh:'正在同步',en:'Syncing'},
+  sp_dir:{zh:'远程目录',en:'Remote dir'},
+  sp_finished:{zh:'同步完成',en:'Done'},
+  sp_preparing:{zh:'准备中…',en:'Preparing…'},
+  sp_done:{zh:'已完成',en:'Done'},
+  sp_fail:{zh:'失败',en:'Failed'},
+  sp_wait:{zh:'等待',en:'Waiting'},
+  sp_min:{zh:'最小化',en:'Minimize'},
+  sp_close:{zh:'关闭',en:'Close'},
+  sch_progress_running:{zh:'同步进行中，请稍候',en:'Sync in progress'},
   sch_sync_allok:{zh:'同步完成：{n} 个项目全部成功，耗时 {sec}s',en:'All {n} synced ({sec}s)'},
   sch_sync_summary:{zh:'同步完成：{ok} 成功 / {bad} 失败，耗时 {sec}s',en:'Synced: {ok} ok / {bad} failed ({sec}s)'},
   sch_sync_fail:{zh:'同步失败：{bad} 个项目出错',en:'Sync failed: {bad} errors'},
@@ -3614,15 +3643,13 @@ async function deleteSchedule(id){
 
 async function runScheduleNow(id,btn){
   try{
-    if(btn){btn.disabled=true;btn.innerHTML=icon('loader-2');}
-    const res=await fetch(API_BASE+'/api/schedules/'+id+'/run',{method:'POST',signal:AbortSignal.timeout(120000)});
+    const res=await fetch(API_BASE+'/api/schedules/'+id+'/run',{method:'POST',signal:AbortSignal.timeout(8000)});
     const data=await res.json().catch(()=>({}));
+    if(data.conflict){ showToast(t('sch_progress_running'),'alert-circle'); return; }
     if(!res.ok) throw new Error(data.detail||'运行失败');
-    const ls=data.result&&data.result.last_sync;
-    if(ls){ showToast((ls.failed>0?t('sch_sync_summary'):t('sch_sync_allok')).replace('{ok}',ls.success||0).replace('{bad}',ls.failed||0).replace('{sec}',ls.duration_sec||0).replace('{n}',ls.total||0), ls.failed>0?'alert-circle':'check-circle'); }
-    else showToast(t('sch_ran'));
-    refreshSchedules();
-  }catch(e){showToast(e.message||'运行失败','alert-circle');}
+    // 进度由实时浮窗展示
+    pollMDSyncProgress();
+  }catch(e){ showToast(e.message||'运行失败','alert-circle'); }
 }
 
 async function toggleSchedule(id,enabled){
@@ -3634,19 +3661,123 @@ async function toggleSchedule(id,enabled){
 
 async function syncNow(btn){
   try{
-    if(btn){btn.disabled=true;btn.innerHTML=icon('loader-2')+' '+t('sch_syncing');}
-    const res=await fetch(API_BASE+'/api/sync-now',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({scope:'all',project_ids:[]}),signal:AbortSignal.timeout(120000)});
-    if(!res.ok){const e=await res.json().catch(()=>({}));throw new Error(e.detail||'同步失败');}
+    const res=await fetch(API_BASE+'/api/sync-now',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({scope:'all',project_ids:[]}),signal:AbortSignal.timeout(8000)});
     const data=await res.json().catch(()=>({}));
-    const ls=data.result&&data.result.last_sync;
-    if(ls){
-      if(ls.failed>0 && ls.success===0) showToast(t('sch_sync_fail').replace('{bad}',ls.failed),'alert-circle');
-      else if(ls.failed>0) showToast(t('sch_sync_summary').replace('{ok}',ls.success).replace('{bad}',ls.failed).replace('{sec}',ls.duration_sec),'alert-circle');
-      else showToast(t('sch_sync_allok').replace('{n}',ls.total).replace('{sec}',ls.duration_sec),'check-circle');
-    } else showToast(t('sch_ran'));
-    await fetchAPIData();
-    refreshSchedules();
-  }catch(e){showToast(e.message||'同步失败','alert-circle');}
+    if(data.conflict){ showToast(t('sch_progress_running'),'alert-circle'); return; }
+    if(!res.ok) throw new Error(data.detail||'同步失败');
+    // 进度由实时浮窗展示，无需在此阻塞等待
+    pollMDSyncProgress();
+  }catch(e){ showToast(e.message||'同步失败','alert-circle'); }
+}
+
+// ==================== 实时同步进度浮窗 ====================
+// 轮询 /api/sync-progress：展示「正在同步哪个项目 / 哪个目录 / 哪些已完成 / 哪些等待」。
+// 既能捕获手动触发的同步，也能捕获定时任务自动触发的同步。
+let _mdSyncTimer=null, _mdActive=false, _mdClosed=true, _mdHideTimer=null;
+
+function openMDSyncFloat(){
+  if(document.getElementById('md-sync-float')) return;
+  const el=document.createElement('div');
+  el.id='md-sync-float';
+  el.className='sync-float';
+  el.style.bottom='20px';
+  el.style.right='20px';
+  el.innerHTML=
+    '<div class="sync-float-head">'+
+      '<span class="md-spin"></span>'+
+      '<span class="title">'+t('sp_title')+'</span>'+
+      '<button class="btn-ctrl" onclick="event.stopPropagation();toggleMDSyncFloat()" title="'+t('sp_min')+'">—</button>'+
+      '<button class="btn-ctrl" onclick="event.stopPropagation();closeMDSyncProgress()" title="'+t('sp_close')+'">×</button>'+
+    '</div>'+
+    '<div class="md-sync-body" id="md-sync-body"></div>';
+  document.body.appendChild(el);
+}
+
+function closeMDSyncProgress(){
+  const el=document.getElementById('md-sync-float');
+  if(el) el.remove();
+  if(_mdHideTimer){clearTimeout(_mdHideTimer);_mdHideTimer=null;}
+  _mdClosed=true;
+}
+
+function toggleMDSyncFloat(){
+  const el=document.getElementById('md-sync-float');
+  if(el) el.classList.toggle('minimized');
+}
+
+function mdProjItem(x,cls){
+  const ic = cls==='done'?'✓' : cls==='running'?'<span class="md-spin" style="width:11px;height:11px"></span>' : '○';
+  const srv = x.server_name?`<span class="srv">${escapeHtml(x.server_name)}</span>`:'';
+  const err = cls==='error'&&x.error?`<span class="err-msg" title="${escapeHtml(x.error)}">${escapeHtml((x.error||'').slice(0,30))}</span>`:'';
+  return `<div class="md-proj ${cls}"><span class="ic">${ic}</span><span class="nm">${escapeHtml(x.name)}</span>${srv}${err}</div>`;
+}
+
+function renderMDSyncProgress(p){
+  if(!p || !p.projects || !p.projects.length){ closeMDSyncProgress(); return; }
+  openMDSyncFloat();
+  const el=document.getElementById('md-sync-float');
+  const body=document.getElementById('md-sync-body');
+  if(!el||!body) return;
+  const projs=p.projects||[];
+  const doneN=projs.filter(x=>x.status==='done').length;
+  const errN=projs.filter(x=>x.status==='error').length;
+  const total=p.total||projs.length;
+  const pct= total? Math.round((doneN+errN)/total*100):0;
+  const cur=projs.find(x=>x.status==='running');
+  let headHtml;
+  if(p.running){
+    if(cur){
+      headHtml=`<div class="sync-phase">${t('sp_current')}：<b>${escapeHtml(cur.name)}</b> @ ${escapeHtml(cur.server_name||'')}</div>`+
+        `<div class="md-dir">${t('sp_dir')}：<b>${escapeHtml(cur.remote_path||'-')}</b></div>`;
+    } else {
+      headHtml=`<div class="sync-phase"><span class="md-spin"></span> ${t('sp_preparing')}</div>`;
+    }
+  } else {
+    const sec=p.duration_sec||0;
+    headHtml=`<div class="sync-phase">${icon('check-circle')} ${t('sp_finished')}：${doneN} ${t('ls_success')}${errN?(' / '+errN+' '+t('ls_failed')):''} · ${sec}s</div>`;
+  }
+  const bar=`<div class="sync-bar-wrap"><div class="sync-bar" style="width:${pct}%"></div></div>`;
+  const running=projs.filter(x=>x.status==='running').map(x=>mdProjItem(x,'running')).join('');
+  const done=projs.filter(x=>x.status==='done').map(x=>mdProjItem(x,'done')).join('');
+  const err=projs.filter(x=>x.status==='error').map(x=>mdProjItem(x,'error')).join('');
+  const wait=projs.filter(x=>x.status==='pending').map(x=>mdProjItem(x,'waiting')).join('');
+  const count=`<div class="md-count">${t('sp_done')} ${doneN} · ${t('sp_fail')} ${errN} · ${t('sp_wait')} ${projs.filter(x=>x.status==='pending').length}</div>`;
+  body.innerHTML=headHtml+bar+`<div class="md-proj-list">${running}${done}${err}${wait}</div>`+count;
+  el.style.display='flex';
+}
+
+async function pollMDSyncProgress(){
+  try{
+    const res=await fetch(API_BASE+'/api/sync-progress',{signal:AbortSignal.timeout(4000)});
+    if(!res.ok) return;
+    const p=await res.json().catch(()=>({}));
+    const wasActive=_mdActive;
+    _mdActive=!!(p&&p.running);
+    if(_mdActive) _mdClosed=false; // 新同步开始，允许再次显示
+    if(wasActive && !_mdActive){
+      // 刚结束：刷新数据并弹结果提示
+      await fetchAPIData().catch(()=>{});
+      if(state.view==='schedules') refreshSchedules();
+      if(p&&p.projects){
+        const bad=p.projects.filter(x=>x.status==='error').length;
+        const ok=p.projects.filter(x=>x.status==='done').length;
+        const sec=p.duration_sec||0;
+        if(bad>0&&ok===0) showToast(t('sch_sync_fail').replace('{bad}',bad),'alert-circle');
+        else if(bad>0) showToast(t('sch_sync_summary').replace('{ok}',ok).replace('{bad}',bad).replace('{sec}',sec),'alert-circle');
+        else showToast(t('sch_sync_allok').replace('{n}',p.projects.length).replace('{sec}',sec),'check-circle');
+        if(_mdHideTimer) clearTimeout(_mdHideTimer);
+        _mdHideTimer=setTimeout(closeMDSyncProgress,6000);
+      }
+    }
+    // 仅当正在同步或尚未关闭（完成后的短暂停留窗口）时渲染
+    if(_mdActive || !_mdClosed) renderMDSyncProgress(p);
+  }catch(e){}
+}
+
+function initMDSyncProgress(){
+  if(_mdSyncTimer) return;
+  _mdSyncTimer=setInterval(pollMDSyncProgress, 1500);
+  pollMDSyncProgress();
 }
 
 // 项目选择器：点击面板/框外时收起，只保留已选项
@@ -4539,6 +4670,8 @@ fetchExchangeRates();
 loadLLMConfig();
 // 每 5 分钟自动刷新
 setInterval(fetchAPIData, 5 * 60 * 1000);
+// 启动实时同步进度浮窗轮询（捕获手动 / 定时触发的同步）
+initMDSyncProgress();
 
 async function fetchDomains(){
   try{
