@@ -582,6 +582,19 @@ def list_schedules():
     return config.get("schedules", [])
 
 
+@app.get("/api/sync-progress")
+def get_sync_progress():
+    """实时同步进度快照：当前项目、远程目录、各项目状态(等待/同步中/完成/失败)。
+
+    前端轮询此接口即可展示「正在同步到哪个项目 / 哪个目录 / 哪些已完成 / 哪些等待」。
+    """
+    try:
+        from backend.sync import sync_progress
+    except Exception:
+        return {"running": False, "projects": []}
+    return sync_progress.snapshot()
+
+
 @app.post("/api/schedules")
 def create_schedule(payload: dict):
     """新建一条定时同步规则（自动拉 MD + 强制 LLM 分析）。"""
@@ -687,28 +700,52 @@ def delete_schedule(schedule_id: str):
 
 @app.post("/api/schedules/{schedule_id}/run")
 def run_schedule_now(schedule_id: str):
-    """立即运行一条定时同步规则（用于测试/手动触发）。"""
+    """立即运行一条定时同步规则（用于测试/手动触发）。
+
+    改为后台线程执行并返回 202，前端轮询 /api/sync-progress 查看实时进度；
+    若已有同步进行中则返回 conflict，避免进度状态互相覆盖。
+    """
     from backend import scheduler as sched_mod
+    from backend.sync import sync_progress
+    config = load_json(CONFIG_PATH) or {}
+    schedule = next((s for s in config.get("schedules", []) if s.get("id") == schedule_id), None)
+    if not schedule:
+        raise HTTPException(status_code=404, detail="Schedule not found")
+    if sync_progress.running:
+        return {"success": False, "conflict": True, "message": "同步进行中"}
     try:
-        result = sched_mod.run_schedule_by_id(schedule_id)
-        if "error" in result:
-            raise HTTPException(status_code=404, detail=result["error"])
-        return {"success": True, "result": result}
-    except HTTPException:
-        raise
+        def _bg():
+            try:
+                sched_mod.run_schedule_by_id(schedule_id)
+            except Exception as e:  # noqa: BLE001
+                print(f"[schedule run] error: {e}")
+        threading.Thread(target=_bg, daemon=True).start()
+        return {"success": True, "started": True}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.post("/api/sync-now")
 def sync_now(payload: dict = None):
-    """立即同步一次（独立于定时规则）：全量或指定项目 + 强制 LLM 分析 + 写「最新系统开发情况」。"""
+    """立即同步一次（独立于定时规则）：全量或指定项目 + 强制 LLM 分析 + 写「最新系统开发情况」。
+
+    改为后台线程执行并返回 202，前端轮询 /api/sync-progress 查看实时进度；
+    若已有同步进行中则返回 conflict。
+    """
     payload = payload or {}
     scope = "selected" if payload.get("project_ids") else "all"
     from backend import scheduler as sch
+    from backend.sync import sync_progress
+    if sync_progress.running:
+        return {"success": False, "conflict": True, "message": "同步进行中"}
     try:
-        result = sch.run_sync_now(scope=scope, project_ids=payload.get("project_ids") or [])
-        return {"success": True, "result": result}
+        def _bg():
+            try:
+                sch.run_sync_now(scope=scope, project_ids=payload.get("project_ids") or [])
+            except Exception as e:  # noqa: BLE001
+                print(f"[sync-now] error: {e}")
+        threading.Thread(target=_bg, daemon=True).start()
+        return {"success": True, "started": True}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

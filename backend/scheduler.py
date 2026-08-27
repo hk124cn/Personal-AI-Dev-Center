@@ -125,12 +125,30 @@ def run_schedule(schedule: dict, config: dict = None) -> dict:
     sync_ok = True
     sync_err = None
     try:
-        from backend.sync import sync_all, sync_single
+        from backend.sync import sync_all, sync_single, sync_progress
         if scope == "all" or not schedule.get("project_ids"):
+            # 全量：进度由 sync_all 内部掌管
             sync_all()
         else:
+            # 指定项目：由调度器掌管一次进度生命周期，避免逐个 sync_single 各自重置
+            servers = {s["id"]: s for s in config.get("servers", [])}
+            sel = []
             for pid in schedule.get("project_ids", []):
-                sync_single(pid)
+                p = next((x for x in config.get("projects", []) if x.get("id") == pid), None)
+                if not p:
+                    continue
+                pv = dict(p)
+                srv = servers.get(p.get("server"))
+                pv["server_name"] = srv.get("name", "") if srv else ""
+                sel.append(pv)
+            if sel:
+                sync_progress.start("selected", sel)
+                try:
+                    for pv in sel:
+                        sync_single(pv["id"])
+                finally:
+                    sync_progress.done()
+            # 若没有有效项目，则不产生任何同步（不更新进度）
     except Exception as e:  # noqa: BLE001
         sync_ok = False
         sync_err = str(e)
