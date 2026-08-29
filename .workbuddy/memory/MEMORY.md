@@ -10,6 +10,13 @@
 - 发布：`npm run build`(portable, dist/) 或 `npm run build:setup`(NSIS)。package.json `extraResources` 把 `backend/`、`index.html`、`config.example.json`(脱敏) 复制进 `resources/`；真实 `config.json` 不进包（运行时读 `%APPDATA%/Personal AI Dev Center/config.json`）。
 - ⚠️ **构建坑**：`npm run build` 后 `node.exe`(electron-builder) 易孤儿化并锁 `dist/Personal-AI-Dev-Center.exe`；重建前先 `tasklist`/`taskkill` 清残留 node.exe + 关闭 live app。`dist/` 与 `dist_new/` 两目录并存，清理时只删 `dist_new`。验证打包是否含密钥：解包 `resources/` 查（不要只 grep 压缩的 asar）。
 
+## 启动逻辑硬约束（便携版，2026-08-29 定）
+- **绝不**在启动时按镜像名 `taskkill` 强杀旧实例；便携版进程树＝启动器 `Personal-AI-Dev-Center.exe`(父) → 真实主进程 `Personal AI Dev Center.exe`(子)。按启动器名 `/T` 强杀会顺树杀回自身（自杀根因，已踩坑）。
+- 正确做法：`isAnotherInstanceRunning()` 仅用 `netstat -ano | findstr ":8765"` 检测占用 + `tasklist` 确认镜像名，`dialog.showErrorBox('已在运行')` 提示后 `app.quit()`，把清进程责任交给使用者。**提示框内已附手动关端口命令**：`Stop-Process -Name "devcenter-backend" -Force`。
+- 退出清理（2026-08-30 加，commit 56a0125）：`killBackend()` 改为**同步** `execSync('taskkill /PID <pid> /T /F')` 强杀自己 spawn 的后端进程树，挂到 `before-quit` / `app.on('quit')` / `process.on('exit')` 三处兜底，确保 8765 在程序关闭前一定释放，杜绝「关了界面后端还在占端口」的孤儿问题。
+- **绝不**在启动/退出时按镜像名乱杀其它进程；只杀自己 spawn 的子进程。
+- 用户原话定调："杀进程的功能搞得太复杂了…就启动时检查一下有没有相关检查在跑，已经在跑了弹提示关闭，等使用者自己杀。" 及 "添加退出自动关闭端口的命令"。
+
 ## 架构约定
 - `config.json` = 服务器/项目 source of truth；`backend/data/latest.json` = 同步结果。
 - 同步**手动触发**（`/api/sync`、`/api/sync/{id}`、CLI `sync.py`），无自动调度。过滤：`DEFAULT_SYNC_IGNORE`(目录)+`DEFAULT_SYNC_IGNORE_EXT`(含 .csv/.log/.git)；`sync_all` 参数绕过全部过滤。
