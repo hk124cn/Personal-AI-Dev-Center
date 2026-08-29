@@ -38,58 +38,47 @@ function getResourceDir() {
   return path.join(__dirname, '..');
 }
 
-// 启动前清理旧实例：旧 Electron / portable exe 进程即使没监听 8765，
-// 只要还活着就会持有单实例锁，让新实例 requestSingleInstanceLock 失败、
-// app.quit()，结果只是把焦点交还给那个页面已损坏（显示 CSS 源码）的旧实例。
-// 因此必须按进程名先杀旧 Electron/portable 主进程，再按端口清理残留后端。
-// 关键点：必须在 requestSingleInstanceLock 之前执行。
-function clearStalePort() {
-  if (process.platform !== 'win32') return;
+// 启动前检查：是否已有本程序实例在运行（占用 8765 端口）。
+// 设计原则（2026-08-29 简化，采纳用户意见）：只「检测 + 提示」，绝不替使用者杀进程。
+// 之前按镜像名 taskkill 清理旧实例反复翻车 —— 便携版下会误杀自己的父进程（启动器），
+// 连同自身一起带走，导致「双击便携包毫无反应」。杀进程逻辑全部移除，交给使用者处理。
+const APP_MAIN_IMAGE = 'Personal AI Dev Center.exe';
+
+function isAnotherInstanceRunning() {
+  if (process.platform !== 'win32') return false;
   const { execSync } = require('child_process');
-  const selfPid = process.pid;
-
-  // 1. 直接按镜像名强杀所有同名旧主程序（含子进程树），释放单实例锁。
-  //    taskkill /IM 不会终止调用者自身，无需逐个遍历 PID，启动更快。
-  ['Personal-AI-Dev-Center.exe', 'electron.exe'].forEach((name) => {
-    try {
-      execSync(`taskkill /F /IM "${name}" /T`, { windowsHide: true, stdio: 'ignore' });
-    } catch (e) {
-      // 无同名进程，正常
-    }
-  });
-
-  // 2. 再按端口 8765 清理残留后端（兜底）
   try {
-    const out = execSync(
-      'netstat -ano -p TCP | findstr ":8765"',
-      { windowsHide: true, stdio: ['ignore', 'pipe', 'ignore'] }
-    ).toString();
+    const out = execSync('netstat -ano -p TCP | findstr ":8765"', {
+      windowsHide: true,
+      stdio: ['ignore', 'pipe', 'ignore'],
+    }).toString();
     const pids = new Set();
     out.split(/\r?\n/).forEach((line) => {
-      // 匹配 LISTENING 状态的 8765 监听者，提取其 PID（最后一列）
       const m = line.trim().match(/:8765\b.*?LISTENING\s+(\d+)/i);
       if (m) pids.add(parseInt(m[1], 10));
     });
-    pids.forEach((pid) => {
-      if (pid && pid !== selfPid) {
-        try {
-          execSync(`taskkill /PID ${pid} /T /F`, {
-            windowsHide: true,
-            stdio: 'ignore',
-          });
-        } catch (e) {
-          // 进程已退出或权限不足，忽略
-        }
+    if (pids.size === 0) return false;
+    for (const pid of pids) {
+      if (!pid || pid === process.pid) continue;
+      // 端口被「本程序主进程」占用 -> 确认已有实例在跑
+      try {
+        const img = execSync(`tasklist /FI "PID eq ${pid}" /FO CSV /NH`, {
+          windowsHide: true,
+          stdio: ['ignore', 'pipe', 'ignore'],
+        }).toString();
+        if (img.includes(APP_MAIN_IMAGE)) return true;
+      } catch (e) {
+        // 进程已退出，忽略
       }
-    });
+    }
+    // 端口被其它进程占用（极少见），也视为冲突，提示使用者排查
+    return true;
   } catch (e) {
-    // netstat 无结果时 execSync 抛错，属正常（端口空闲）
+    return false; // netstat 无结果 -> 端口空闲
   }
 }
 
 function startBackend() {
-  // 先清理占用 8765 的旧进程树，释放端口
-  clearStalePort();
   const resourceDir = getResourceDir();
   // R5: 打包后优先用内置 exe（自包含 Python，目标机无需安装 Python）
   const bundledExe = path.join(resourceDir, 'backend', 'devcenter-backend.exe');
@@ -325,22 +314,25 @@ const menuTemplate = [
 
 // --- App lifecycle ---
 
-// 关键：先按端口杀掉占用 8765 的旧进程树（含旧 Electron 父进程），
-// 再申请单实例锁。否则若旧实例仍活着并持有锁，新实例会直接退出、
-// 把焦点交还给那个页面已损坏（显示为 CSS 源码）的旧实例。
-clearStalePort();
-
-// 单实例锁：防止重复双击启动多个 Electron 实例互相抢占 8765 端口
-if (!app.requestSingleInstanceLock()) {
+// 启动前检查：已有实例在跑则提示使用者关闭、自己退出（绝不替他杀进程）
+if (isAnotherInstanceRunning()) {
+  dialog.showErrorBox(
+    '已在运行 / Already Running',
+    'Personal AI Dev Center 已经在运行中（端口 8765 被占用）。\n\n请先关闭已运行的实例，再重新打开本程序。'
+  );
   app.quit();
-}
-app.on('second-instance', () => {
-  if (mainWindow) {
-    if (mainWindow.isMinimized()) mainWindow.restore();
-    mainWindow.focus();
-    mainWindow.reload();
+} else {
+  // 单实例锁：再次兜底，防止极快连点产生多个窗口
+  if (!app.requestSingleInstanceLock()) {
+    app.quit();
   }
-});
+  app.on('second-instance', () => {
+    if (mainWindow) {
+      if (mainWindow.isMinimized()) mainWindow.restore();
+      mainWindow.focus();
+    }
+  });
+}
 
 app.on('ready', async () => {
   Menu.setApplicationMenu(Menu.buildFromTemplate(menuTemplate));
