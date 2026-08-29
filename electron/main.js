@@ -1,5 +1,5 @@
 const { app, BrowserWindow, dialog, ipcMain, Menu } = require('electron');
-const { spawn } = require('child_process');
+const { spawn, execSync } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
@@ -17,6 +17,7 @@ const MAX_LOG_LINES = 5000;
 
 let mainWindow = null;
 let backendProcess = null;
+let isShuttingDown = false;
 
 // Log buffer: array of {ts, level, text}
 const logBuffer = [];
@@ -46,7 +47,6 @@ const APP_MAIN_IMAGE = 'Personal AI Dev Center.exe';
 
 function isAnotherInstanceRunning() {
   if (process.platform !== 'win32') return false;
-  const { execSync } = require('child_process');
   try {
     const out = execSync('netstat -ano -p TCP | findstr ":8765"', {
       windowsHide: true,
@@ -149,6 +149,7 @@ function startBackend() {
   backendProcess.on('exit', (code) => {
     console.log(`[Electron] Backend exited with code: ${code}`);
     addLog('info', `[Electron] Backend exited with code: ${code}`);
+    if (isShuttingDown) return; // 主动关闭，不弹窗
     if (mainWindow && !mainWindow.isDestroyed()) {
       dialog.showMessageBox(mainWindow, {
         type: 'warning',
@@ -216,18 +217,28 @@ function createWindow() {
   });
 }
 
+// 退出时同步强杀后端进程树，确保端口 8765 在程序关闭前释放（避免残留孤儿后端占用端口）
 function killBackend() {
-  if (backendProcess && !backendProcess.killed) {
-    console.log('[Electron] Killing backend process...');
-    addLog('info', '[Electron] Killing backend process...');
+  if (!backendProcess) return;
+  const pid = backendProcess.pid;
+  const alreadyKilled = backendProcess.killed;
+  backendProcess = null;
+  if (alreadyKilled) return;
+  isShuttingDown = true;
+  console.log(`[Electron] Killing backend process (pid ${pid})...`);
+  addLog('info', `[Electron] Killing backend process (pid ${pid})...`);
+  try {
     if (process.platform === 'win32') {
-      spawn('taskkill', ['/pid', String(backendProcess.pid), '/T', '/F'], {
+      // 同步执行：必须等后端真正退出再继续，否则 electron 先走完退出流程会留下孤儿
+      execSync(`taskkill /PID ${pid} /T /F`, {
         windowsHide: true,
+        stdio: ['ignore', 'ignore', 'ignore'],
       });
     } else {
-      backendProcess.kill('SIGTERM');
+      process.kill(pid, 'SIGTERM');
     }
-    backendProcess = null;
+  } catch (e) {
+    // 多数情况是进程已退出，忽略
   }
 }
 
@@ -318,7 +329,11 @@ const menuTemplate = [
 if (isAnotherInstanceRunning()) {
   dialog.showErrorBox(
     '已在运行 / Already Running',
-    'Personal AI Dev Center 已经在运行中（端口 8765 被占用）。\n\n请先关闭已运行的实例，再重新打开本程序。'
+    'Personal AI Dev Center 已经在运行中（端口 8765 被占用）。\n\n' +
+    '请先关闭已运行的实例，再重新打开本程序。\n\n' +
+    '若端口被上一次残留的后端进程占用（无界面窗口），可在 PowerShell 执行：\n' +
+    '    Stop-Process -Name "devcenter-backend" -Force\n' +
+    '释放端口后再双击本程序即可。'
   );
   app.quit();
 } else {
@@ -364,4 +379,16 @@ app.on('window-all-closed', () => {
 
 app.on('before-quit', () => {
   killBackend();
+});
+
+// 兜底：任何退出路径都再确保一次后端已杀（含 window-all-closed 之外的异常退出）
+app.on('quit', () => {
+  killBackend();
+});
+
+// 终极兜底：主进程被强杀时也尽量同步终结后端，释放 8765
+process.on('exit', () => {
+  if (backendProcess && !backendProcess.killed) {
+    try { backendProcess.kill('SIGKILL'); } catch (e) {}
+  }
 });
