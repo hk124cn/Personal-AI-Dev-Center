@@ -30,6 +30,8 @@ if sys.stdout and hasattr(sys.stdout, 'reconfigure'):
     except Exception:
         pass
 
+import socket
+
 import paramiko
 
 # Import LLM analyzer（优先按正式包导入，回退到脚本同目录导入，兼容两种运行方式）
@@ -367,8 +369,69 @@ PARSERS = {
 }
 
 
+# 连接类（可重试）异常集合：网络抖动 / 会话失效 / 超时 / 拒绝连接等
+_RETRYABLE_SSH_EXC = (
+    paramiko.SSHException,
+    socket.timeout,
+    socket.error,
+    ConnectionError,
+    EOFError,
+)
+# 明确不可重试的错误关键词（鉴权 / 密钥 / host key 等配置问题）
+_NON_RETRYABLE_SSH_KEYWORDS = (
+    "authentication", "auth fail", "permission denied", "invalid key",
+    "not a valid key", "key cannot be loaded", "host key", "known hosts",
+)
+# SSH 连接重试次数（首次 + 重试，指数退避 3s / 6s）
+_SSH_RETRY_MAX = 3
+
+
 def ssh_read_files(server: dict, project: dict) -> dict:
-    """SSH 到服务器读取项目 MD 文件（自动发现所有 .md 文件）"""
+    """SSH 到服务器读取项目 MD 文件（自动发现所有 .md 文件）。
+
+    对连接类错误（网络抖动 / 会话失效 / 超时 / 拒绝连接）做指数退避重试，
+    最多 _SSH_RETRY_MAX 次；鉴权失败等非连接类错误不重试，直接返回失败。
+    """
+    last_exc = None
+    for attempt in range(1, _SSH_RETRY_MAX + 1):
+        try:
+            result = _ssh_read_once(server, project)
+            result["ssh_attempts"] = attempt
+            result["ssh_retried"] = attempt > 1
+            return result
+        except _RETRYABLE_SSH_EXC as e:
+            last_exc = e
+            msg = str(e).lower()
+            # 鉴权等明确不可重试的错误：直接返回失败，不浪费重试
+            if any(k in msg for k in _NON_RETRYABLE_SSH_KEYWORDS):
+                return {
+                    "todos": None, "progress": None, "issues": None,
+                    "md_files": [], "summaries": {}, "raw_files": {},
+                    "error": str(e), "auth_error": True,
+                    "ssh_attempts": attempt, "ssh_retried": attempt > 1,
+                }
+            if attempt < _SSH_RETRY_MAX:
+                wait = 3 * attempt  # 3s, 6s 指数退避
+                print(f"[sync] SSH 连接失败（第 {attempt} 次尝试），{wait}s 后重试: {e}")
+                time.sleep(wait)
+            else:
+                print(f"[sync] SSH 连接失败，已重试 {_SSH_RETRY_MAX} 次: {e}")
+
+    return {
+        "todos": None, "progress": None, "issues": None,
+        "md_files": [], "summaries": {}, "raw_files": {},
+        "error": str(last_exc) if last_exc else "unknown ssh error",
+        "ssh_attempts": _SSH_RETRY_MAX, "ssh_retried": True,
+    }
+
+
+def _ssh_read_once(server: dict, project: dict) -> dict:
+    """单次 SSH 读取项目 MD 文件（自动发现所有 .md 文件）。
+
+    约定：连接类错误（网络抖动 / 会话失效 / 超时 / 拒绝连接）直接 raise，
+    由 ssh_read_files 决定是否重试；鉴权失败、文件解析等非连接类错误写入
+    result["error"] 后正常返回，不重试。
+    """
     result = {
         "todos": None,
         "progress": None,
@@ -492,6 +555,13 @@ def ssh_read_files(server: dict, project: dict) -> dict:
 
         client.close()
 
+    except paramiko.AuthenticationException as e:
+        # 鉴权失败属于配置问题，不应重试
+        result["error"] = str(e)
+        result["auth_error"] = True
+    except _RETRYABLE_SSH_EXC as e:
+        # 连接类错误向上抛，由 ssh_read_files 做退避重试
+        raise
     except Exception as e:
         result["error"] = str(e)
 
