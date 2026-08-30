@@ -683,6 +683,18 @@ select.form-input{cursor:pointer;appearance:none;background-image:url("data:imag
 .last-sync-bar .lsb-err-btn{font-size:11px;color:var(--red,#dc2626);cursor:pointer;text-decoration:underline;margin-left:6px}
 .last-sync-bar .lsb-errors{width:100%;margin-top:8px;font-size:11px;color:var(--red,#dc2626);background:var(--red-muted,#fff1f1);border-radius:8px;padding:8px 10px}
 .last-sync-bar .lsb-errors div{padding:2px 0;word-break:break-all}
+.last-sync-bar.lsb-allok{border-color:var(--green,#16a34a)}
+.last-sync-bar.lsb-haserr{border-color:var(--red,#dc2626);background:var(--red-muted,#fff7f7)}
+.last-sync-bar .lsb-hint{width:100%;font-size:11px;color:var(--text-secondary);margin-top:6px;display:flex;align-items:center;gap:5px;line-height:1.5}
+.last-sync-bar .lsb-hint.lsb-hint-bad{color:var(--red,#dc2626)}
+/* 项目同步状态徽标（区分「内容更新时间」与「同步刷新时间」） */
+.sync-badge{display:inline-flex;align-items:center;gap:4px;font-size:10.5px;font-weight:600;padding:1px 7px;border-radius:20px;white-space:nowrap}
+.sync-badge.sync-ok{background:var(--green-muted,#dcfce7);color:var(--green,#16a34a)}
+.sync-badge.sync-bad{background:var(--red-muted,#fee2e2);color:var(--red,#dc2626)}
+.sync-badge.sync-none{background:var(--gray-muted,#eef2f6);color:var(--text-tertiary)}
+.li-sub2{font-size:10.5px;color:var(--text-tertiary);margin-top:3px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.li-sub2 .content-update{color:var(--text-tertiary)}
+.pd-sync-line{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:12px;color:var(--text-secondary);margin-top:4px}
 .tag-red{background:var(--red-muted,#fee2e2);color:var(--red,#dc2626);border:1px solid var(--red-muted,#fee2e2)}
 .dev-status-banner .dsb-icon{color:var(--accent);flex-shrink:0;margin-top:2px}
 .dev-status-banner .dsb-icon svg{width:20px;height:20px;stroke-width:1.8}
@@ -949,6 +961,8 @@ const I18N = {
   ls_err_toggle:{zh:'查看错误',en:'errors'},
   ls_source:{zh:'来源',en:'source'},
   ls_duration:{zh:'耗时',en:'took'},
+  ls_all_ok_hint:{zh:'全部同步成功 · 各项目卡片上的「同步 X」即本次刷新时间',en:'All synced · the "synced X" on each project card is this refresh time'},
+  ls_failed_hint:{zh:'个项目同步失败（已自动重试仍失败，多为瞬时网络问题，可手动重试）',en:'projects failed sync (retried automatically, still failing — usually transient, retry manually)'},
   // 实时同步进度浮窗
   sp_title:{zh:'同步进度',en:'Sync progress'},
   sp_current:{zh:'正在同步',en:'Syncing'},
@@ -1369,6 +1383,16 @@ function relativeFuture(iso){
   return Math.floor(dy/30)+' '+t('rt_month_later');
 }
 function statusText(s){return{active:t('st_active'),dev:t('st_dev'),planned:t('st_planned'),paused:t('st_paused'),online:t('st_online'),offline:t('st_offline')}[s]||s}
+// 同步刷新时间徽标（与「内容更新时间」区分，避免用户误以为「未同步」）
+function syncBadgeHTML(p){
+  if(p._syncError) return `<span class="sync-badge sync-bad">${icon('alert-triangle')} 同步失败</span>`;
+  if(p._syncedAt) return `<span class="sync-badge sync-ok">${icon('check-circle')} 同步 ${relativeTime(p._syncedAt)}</span>`;
+  return `<span class="sync-badge sync-none">${icon('minus')} 未同步</span>`;
+}
+function contentUpdateHTML(p){
+  if(!p.lastUpdate) return `<span class="content-update">内容未标注更新时间</span>`;
+  return `<span class="content-update">内容更新 ${relativeTime(p.lastUpdate)}</span>`;
+}
 
 // ==================== STATS HISTORY (localStorage) ====================
 const STATS_KEY='dev-center-stats';
@@ -1378,7 +1402,7 @@ function getTrend(current,key){const h=getStatsHistory(),dates=Object.keys(h).so
 function trendHTML(tr){if(!tr)return'';const arrow=tr.dir==='up'?'arrow-up':tr.dir==='down'?'arrow-down':'minus';const sign=tr.dir==='up'?'+':tr.dir==='down'?'-':'';const text=tr.dir==='flat'?t('trend_no_change'):`${sign}${tr.pct}% ${t('trend_vs_yesterday')}`;return`<div class="stat-trend ${tr.dir}">${icon(arrow)} ${text}</div>`}
 
 // ==================== ALERTS ====================
-function computeAlerts(){const a=[];state.servers.filter(s=>s.id!=='future'&&s.status!=='planned').forEach(s=>{const d=daysUntil(s.expiry);if(d!==null&&d>0&&d<=30)a.push({level:d<=7?'high':'medium',icon:'clock',name:s.name,sub:`${d} ${t('alert_days_expire_tpl')}`,action:`openServerDetail('${s.id}')`})});state.projects.filter(p=>p.status==='active'||p.status==='dev').forEach(p=>{const dy=Math.floor((Date.now()-new Date(p.lastUpdate).getTime())/864e5);if(dy>=7)a.push({level:dy>=30?'high':'medium',icon:'alert-triangle',name:p.name,sub:`${dy} ${t('alert_days_no_update_tpl')}`,action:`openProjectDetail('${p.id}')`})});return a}
+function computeAlerts(){const a=[];state.servers.filter(s=>s.id!=='future'&&s.status!=='planned').forEach(s=>{const d=daysUntil(s.expiry);if(d!==null&&d>0&&d<=30)a.push({level:d<=7?'high':'medium',icon:'clock',name:s.name,sub:`${d} ${t('alert_days_expire_tpl')}`,action:`openServerDetail('${s.id}')`})});state.projects.filter(p=>p.status==='active'||p.status==='dev').forEach(p=>{const dy=Math.floor((Date.now()-new Date(p.lastUpdate).getTime())/864e5);if(dy>=7)a.push({level:dy>=30?'high':'medium',icon:'alert-triangle',name:p.name,sub:`内容 ${dy} ${t('alert_days_no_update_tpl')}`,action:`openProjectDetail('${p.id}')`})});return a}
 function toggleAlerts(){state.alertsCollapsed=!state.alertsCollapsed;render()}
 function alertsHTML(){const a=computeAlerts();if(!a.length)return'';const c=state.alertsCollapsed,hasHigh=a.some(x=>x.level==='high');return`<div class="sidebar-alerts"><div class="sidebar-alerts-head" onclick="toggleAlerts()"><div class="sidebar-alerts-chevron">${icon(c?'chevron-right':'chevron-down')}</div><span class="sidebar-alerts-title">${t('alert_title')}</span><span class="sidebar-alerts-count ${hasHigh?'high':''}">${a.length}</span></div>${c?'':`<div class="sidebar-alerts-items">${a.map(x=>`<div class="sidebar-alert-item ${x.level}" onclick="${x.action}"><div class="sidebar-alert-icon">${icon(x.icon)}</div><div class="sidebar-alert-text"><div class="sidebar-alert-name">${x.name}</div><div class="sidebar-alert-sub">${x.sub}</div></div></div>`).join('')}</div>`}</div>`}
 function dotClass(s){return{active:'dot-green dot-pulse',dev:'dot-amber',planned:'dot-blue',paused:'dot-gray',online:'dot-green dot-pulse',offline:'dot-gray'}[s]||'dot-gray'}
@@ -1443,7 +1467,7 @@ function viewDashboard(){
     <div class="panel-body" id="dash-mon-panel-body">${state.dashMonMode==='ring'?renderDashMonRingGrid():renderDashMonBarList()}</div>
   </div>
   <div class="panel"><div class="panel-head"><h3>${icon('bot')} ${t('panel_agent_dist')}</h3></div><div class="panel-body">${state.agents.map(a=>`<div class="li"><div class="li-icon" style="background:${a.bg}">${icon(a.icon)}</div><div class="li-body"><div class="li-title">${a.name}</div><div class="li-sub">${a.servers.map(sid=>{const s=getServer(sid);return s?s.name:sid}).join(' · ')}</div></div></div>`).join('')}</div></div>
-  <div class="panel" style="margin-bottom:16px"><div class="panel-head"><h3>${icon('folder-kanban')} ${t('panel_project_overview')}</h3><button class="btn btn-sm" onclick="navigate('projects')">${t('view_all')} ${icon('arrow-right')}</button></div><div class="panel-body">${state.projects.map(p=>{const srv=getServer(p.server);return`<div class="li" style="cursor:pointer" onclick="openProjectDetail('${p.id}')"><div class="li-icon" style="background:${p.status==='active'?'var(--green-muted)':p.status==='dev'?'var(--amber-muted)':'var(--blue-muted)'}"><div class="dot ${dotClass(p.status)}"></div></div><div class="li-body"><div class="li-title">${p.name}</div><div class="li-sub">${statusText(p.status)} · ${srv?srv.name:'-'} · ${relativeTime(p.lastUpdate)}</div></div><div style="display:flex;align-items:center;gap:6px">${srv&&srv.sshUser?`<button class="btn btn-sm" onclick="event.stopPropagation();sshLogin('${srv.ip}',${srv.sshPort},'${srv.sshUser}','${srv.sshKey}')" title="${t('pd_ssh_login')}">${icon('terminal')} SSH</button>`:''}<div style="width:80px"><div class="progress"><div class="bar" style="width:${p.progress}%"></div></div><div style="font-size:10px;color:var(--text-tertiary);text-align:right;margin-top:2px">${p.progress}%</div></div></div></div>`}).join('')}</div></div>`}
+  <div class="panel" style="margin-bottom:16px"><div class="panel-head"><h3>${icon('folder-kanban')} ${t('panel_project_overview')}</h3><button class="btn btn-sm" onclick="navigate('projects')">${t('view_all')} ${icon('arrow-right')}</button></div><div class="panel-body">${state.projects.map(p=>{const srv=getServer(p.server);return`<div class="li" style="cursor:pointer" onclick="openProjectDetail('${p.id}')"><div class="li-icon" style="background:${p.status==='active'?'var(--green-muted)':p.status==='dev'?'var(--amber-muted)':'var(--blue-muted)'}"><div class="dot ${dotClass(p.status)}"></div></div><div class="li-body"><div class="li-title">${p.name}</div><div class="li-sub">${statusText(p.status)} · ${srv?srv.name:'-'}</div><div class="li-sub2">${syncBadgeHTML(p)} ${contentUpdateHTML(p)}</div></div><div style="display:flex;align-items:center;gap:6px">${srv&&srv.sshUser?`<button class="btn btn-sm" onclick="event.stopPropagation();sshLogin('${srv.ip}',${srv.sshPort},'${srv.sshUser}','${srv.sshKey}')" title="${t('pd_ssh_login')}">${icon('terminal')} SSH</button>`:''}<div style="width:80px"><div class="progress"><div class="bar" style="width:${p.progress}%"></div></div><div style="font-size:10px;color:var(--text-tertiary);text-align:right;margin-top:2px">${p.progress}%</div></div></div></div>`}).join('')}</div></div>`}
 
 // ==================== DASHBOARD MONITOR ====================
 function renderDashMonRingGrid(){
@@ -1610,7 +1634,7 @@ function projectCardHTML(p,inG){
   const srv=getServer(p.server);
   const features=Array.isArray(p.features)?p.features.filter(f=>f&&typeof f==='object'&&'name' in f):[];
   const doneF=features.filter(f=>f.done).length;
-  return`<div class="project-card" onclick="openProjectDetail('${p.id}')"><div class="card-top"><div><h4>${escapeHtml(p.name)}</h4><div style="margin-top:5px;display:flex;gap:5px;flex-wrap:wrap">${priorityTag(p.priority)}<span class="tag ${p.status==='active'?'tag-green':p.status==='dev'?'tag-amber':'tag-blue'}">${statusText(p.status)}</span>${p._syncedAt?`<span class="tag tag-accent">${t('synced')}</span>`:''}</div></div><div style="display:flex;gap:4px">${p.localPath?`<button class="btn btn-sm" onclick="event.stopPropagation();syncDownload('${p.id}')" title="${t('download_sync')}">${icon('download')}</button><button class="btn btn-sm" onclick="event.stopPropagation();openUploadModal('${p.id}')" title="${t('upload_sync')}">${icon('upload')}</button><button class="btn btn-sm" onclick="event.stopPropagation();analyzeLocal('${p.id}')" title="${t('analyze_only')}">${icon('sparkles')}</button>`:''}</div></div><div class="desc">${escapeHtml(p.desc)}</div><div class="progress"><div class="bar" style="width:${p.progress}%"></div></div><div class="progress-info"><span>${t('progress_label')} ${p.progress}%</span><span>${t('features_label')} ${doneF}/${features.length}</span></div>${syncResultHTML(p)}<div class="card-actions">${srv&&srv.sshUser?`<button class="btn btn-sm" onclick="event.stopPropagation();sshLogin('${srv.ip}',${srv.sshPort},'${srv.sshUser}','${srv.sshKey}')">${icon('terminal')} SSH</button>`:''}${p.url?`<button class="btn btn-sm" onclick="event.stopPropagation();window.open('${p.url}','_blank')">${icon('globe')} ${t('visit_web')}</button>`:''}</div><div class="card-foot"><div class="server-info">${icon('server')} ${srv?escapeHtml(srv.name):'-'}</div>${p.localPath?`<span style="font-size:11px;color:var(--text-tertiary)">${escapeHtml(p.localPath)}</span>`:`<span class="time">${relativeTime(p.lastUpdate)}</span>`}</div></div>`}
+  return`<div class="project-card" onclick="openProjectDetail('${p.id}')"><div class="card-top"><div><h4>${escapeHtml(p.name)}</h4><div style="margin-top:5px;display:flex;gap:5px;flex-wrap:wrap">${priorityTag(p.priority)}<span class="tag ${p.status==='active'?'tag-green':p.status==='dev'?'tag-amber':'tag-blue'}">${statusText(p.status)}</span>${p._syncedAt?`<span class="tag tag-accent">${t('synced')}</span>`:''}</div></div><div style="display:flex;gap:4px">${p.localPath?`<button class="btn btn-sm" onclick="event.stopPropagation();syncDownload('${p.id}')" title="${t('download_sync')}">${icon('download')}</button><button class="btn btn-sm" onclick="event.stopPropagation();openUploadModal('${p.id}')" title="${t('upload_sync')}">${icon('upload')}</button><button class="btn btn-sm" onclick="event.stopPropagation();analyzeLocal('${p.id}')" title="${t('analyze_only')}">${icon('sparkles')}</button>`:''}</div></div><div class="desc">${escapeHtml(p.desc)}</div><div class="progress"><div class="bar" style="width:${p.progress}%"></div></div><div class="progress-info"><span>${t('progress_label')} ${p.progress}%</span><span>${t('features_label')} ${doneF}/${features.length}</span></div>${syncResultHTML(p)}<div class="card-actions">${srv&&srv.sshUser?`<button class="btn btn-sm" onclick="event.stopPropagation();sshLogin('${srv.ip}',${srv.sshPort},'${srv.sshUser}','${srv.sshKey}')">${icon('terminal')} SSH</button>`:''}${p.url?`<button class="btn btn-sm" onclick="event.stopPropagation();window.open('${p.url}','_blank')">${icon('globe')} ${t('visit_web')}</button>`:''}</div><div class="card-foot"><div class="server-info">${icon('server')} ${srv?escapeHtml(srv.name):'-'}</div>${p.localPath?`<span style="font-size:11px;color:var(--text-tertiary)">${escapeHtml(p.localPath)}</span>`:`<span class="time">${p._syncedAt?('同步 '+relativeTime(p._syncedAt)+' · '):''}${contentUpdateHTML(p)}</span>`}</div></div>`}
 
 function toggleGroup(id){state.collapsedGroups[id]=!state.collapsedGroups[id];render()}
 
@@ -2468,7 +2492,9 @@ function openProjectDetail(id){
       <div class="info-divider"></div>
       <div class="info-item">${icon('trending-up')} <strong>${p.progress}%</strong></div>
       <div class="info-divider"></div>
-      <div class="info-item">${icon('clock')} ${relativeTime(p.lastUpdate)}</div>
+      <div class="info-item">${icon('file-text')} 内容更新 <strong>${p.lastUpdate?relativeTime(p.lastUpdate):'-'}</strong></div>
+      <div class="info-divider"></div>
+      <div class="info-item">${icon('refresh-cw')} 同步 <strong>${p._syncedAt?relativeTime(p._syncedAt):'未同步'}</strong>${p._syncError?` <span class="sync-badge sync-bad" style="margin-left:4px">${icon('alert-triangle')} 失败</span>`:''}</div>
       ${p._llmAnalyzed?`<div class="info-divider"></div><div class="info-item">${icon('sparkles')} <strong>${t('pd_llm_analyzed')}</strong></div>`:(p._llmStatus?`<div class="info-divider"></div><div class="info-item">${icon('alert-circle')} ${t('pd_llm_not_run')}：${escapeHtml(p._llmStatus)}</div>`:'')}
     </div>
 
@@ -3469,13 +3495,18 @@ function renderLastSyncBar(ls){
   const when=relativeTime(ls.finished_at||ls.started_at);
   const ok=ls.success||0, bad=ls.failed||0, ana=ls.llm_analyzed||0, total=ls.total||0;
   const allOk = bad===0;
-  const errHtml = (ls.errors&&ls.errors.length)?`<div class="lsb-errors" id="lsb-errors" style="display:none">${ls.errors.map(e=>`<div>${escapeHtml(e.name||'?')}：${escapeHtml(e.error||'')}</div>`).join('')}</div>`:'';
-  const errBtn = (ls.errors&&ls.errors.length)?`<span class="lsb-err-btn" onclick="const el=document.getElementById('lsb-errors');el.style.display=(el.style.display==='none'?'block':'none')">${t('ls_err_toggle')} (${ls.errors.length})</span>`:'';
-  return `<div class="last-sync-bar">
+  const hasErr = !!(ls.errors&&ls.errors.length);
+  const errHtml = hasErr?`<div class="lsb-errors" id="lsb-errors" style="display:${allOk?'none':'block'}">${ls.errors.map(e=>`<div><b>${escapeHtml(e.name||'?')}</b>：${escapeHtml(e.error||'')}</div>`).join('')}</div>`:'';
+  const errBtn = hasErr?`<span class="lsb-err-btn" onclick="const el=document.getElementById('lsb-errors');el.style.display=(el.style.display==='none'?'block':'none')">${t('ls_err_toggle')} (${ls.errors.length})</span>`:'';
+  const hint = allOk
+    ? `<div class="lsb-hint">${icon('check-circle')} ${t('ls_all_ok_hint')}</div>`
+    : `<div class="lsb-hint lsb-hint-bad">${icon('alert-triangle')} ${bad} ${t('ls_failed_hint')}</div>`;
+  return `<div class="last-sync-bar ${allOk?'lsb-allok':'lsb-haserr'}">
     <div class="lsb-icon">${icon('refresh-cw')}</div>
     <div class="lsb-body">
       <div class="lsb-title">${t('ls_bar_title')} · ${escapeHtml(ls.source||'')} <span class="lsb-tag ${allOk?'lsb-ok':'lsb-bad'}">${allOk?t('ls_success'):(bad+' '+t('ls_failed'))}</span>${ana?`<span class="lsb-tag lsb-llm">${ana} ${t('ls_analyzed')}</span>`:''}</div>
       <div class="lsb-meta">${when} · ${ok} ${t('ls_success')} / ${bad} ${t('ls_failed')} · ${t('ls_duration')} ${ls.duration_sec}s ${total?('· '+total+' 项目'):''} ${errBtn}</div>
+      ${hint}
       ${errHtml}
     </div>
   </div>`;
