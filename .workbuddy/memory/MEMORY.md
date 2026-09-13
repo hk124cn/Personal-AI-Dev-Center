@@ -4,6 +4,13 @@
 - 本地「多服务器 / 多项目管理面板」：Electron 外壳 + FastAPI(127.0.0.1:8765) + 纯静态 SPA(index.html，无构建) + Paramiko SSH 同步(tar-over-SSH) + 可选 LLM(商汤 SenseNova，OpenAI 兼容)。
 - owner=千问老大(qw_20)，2026-07-26 由 WorkBuddy 接手（前任 Qorder）。
 
+## ⚠️ 记忆文件是入库的，禁止写真实基础设施信息
+- `.workbuddy/memory/*.md` **被 git 跟踪**，远程仓库 `hk124cn/Personal-AI-Dev-Center` 是 **public**。
+- 因此严禁在这些文件里写：**真实服务器 IP、SSH 用户名、私钥路径、API Key、密码**。
+- 服务器一律用别名指代（如「腾讯云_上海」「首尔」）；确需写 IP 时用掩码 `47.xx.xx.xx`。
+- 2026-09-13 踩坑：把 4 台真实 IP + 用户名写进了记忆并推送到公开仓库，
+  最终靠「脱敏 + filter-branch 重写历史 + force push」才清掉。**别再犯**。
+
 ## 开发 / 发布 / 推送
 - **推送规则（用户明确）**：不主动推 GitHub，仅用户要求才推；本地 commit 照常做、做完告知即可。远程 `git@github.com:hk124cn/Personal-AI-Dev-Center.git`(public, main)。
 - 本地跑：`pip install -r backend/requirements.txt` → `python backend/app.py`。Electron 启动时**优先 spawn 内置 `resources/backend/devcenter-backend.exe`**（PyInstaller 自包含 Python，目标机无需装 Python），找不到该 exe 才回退 `python backend/app.py`。
