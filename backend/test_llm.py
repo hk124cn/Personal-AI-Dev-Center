@@ -50,7 +50,7 @@ def test_llm_connection():
     test_prompt = "请用 JSON 格式返回：{\"status\": \"ok\", \"message\": \"connection successful\"}"
     
     try:
-        result = call_llm_api(test_prompt, llm_config)
+        result, _err = call_llm_api(test_prompt, llm_config)
         if result and result.get("status") == "ok":
             print(f"✓ API 连接成功")
             print(f"  Response: {result}")
@@ -142,8 +142,8 @@ def test_project_analysis():
     print(f"\n发送分析请求...")
     
     try:
-        result = call_llm_api(prompt, llm_config)
-        
+        result, _err = call_llm_api(prompt, llm_config)
+
         if result:
             print("✓ 分析成功！")
             print("\n分析结果:")

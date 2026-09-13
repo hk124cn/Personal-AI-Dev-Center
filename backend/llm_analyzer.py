@@ -8,6 +8,10 @@ import os
 import sys
 from typing import Optional, Dict, Any
 
+# LLM 单次 HTTP 请求超时（秒）。商汤 SenseNova 6.8 属推理型模型，多文件 prompt 下
+# 30s 偏紧、易被误判为超时（表现为 api_failed），故放宽到 120s；可用环境变量覆盖。
+LLM_HTTP_TIMEOUT = int(os.environ.get("DEV_CENTER_LLM_TIMEOUT", "120"))
+
 # Windows 控制台 GBK 编码无法打印 emoji 等 Unicode 字符，强制使用 UTF-8
 if sys.stdout and hasattr(sys.stdout, 'reconfigure'):
     try:
@@ -16,26 +20,26 @@ if sys.stdout and hasattr(sys.stdout, 'reconfigure'):
         pass
 
 
-def call_llm_api(prompt: str, config: dict) -> Optional[dict]:
+def call_llm_api(prompt: str, config: dict):
     """
     调用 LLM API 进行分析
-    
+
     Args:
         prompt: 发送给 LLM 的提示词
         config: LLM 配置字典
-        
+
     Returns:
-        解析后的 JSON 结果，失败返回 None
+        (解析后的 JSON 结果 dict|None, 错误原因 str|None)
     """
     provider = config.get("provider", "anthropic")
     api_key = config.get("api_key", "")
     model = config.get("model", "claude-3-5-sonnet-20241022")
     base_url = config.get("base_url", "")
-    
+
     if not api_key:
         print("[LLM] Warning: No API key configured, skipping LLM analysis")
-        return None
-    
+        return None, "未配置 API Key"
+
     print(f"\n[LLM] === 请求开始 ===")
     print(f"[LLM] 提供商: {provider} | 模型: {model} | Base URL: {base_url or '(default)'}")
     print(f"[LLM] Prompt 长度: {len(prompt)} 字符")
@@ -48,15 +52,15 @@ def call_llm_api(prompt: str, config: dict) -> Optional[dict]:
     else:
         print(prompt)
     print("-" * 60)
-    
+
     try:
         if provider == "anthropic":
-            result = _call_anthropic(prompt, api_key, model)
+            result, err = _call_anthropic(prompt, api_key, model)
         elif provider == "qwen":
-            result = _call_qwen(prompt, api_key, model)
+            result, err = _call_qwen(prompt, api_key, model)
         else:
-            result = _call_openai(prompt, api_key, model, base_url)
-        
+            result, err = _call_openai(prompt, api_key, model, base_url)
+
         print(f"[LLM] 返回结果:")
         print("-" * 60)
         if result:
@@ -67,27 +71,27 @@ def call_llm_api(prompt: str, config: dict) -> Optional[dict]:
             else:
                 print(result_str)
         else:
-            print("(解析失败，无有效 JSON)")
+            print(f"(解析失败: {err or '无有效 JSON'})")
         print("-" * 60)
         print(f"[LLM] === 请求结束 ===\n")
-        return result
+        return result, err
     except Exception as e:
         print(f"[LLM] Error calling API: {str(e)}")
         print(f"[LLM] === 请求失败 ===\n")
-        return None
+        return None, f"调用异常: {type(e).__name__}: {str(e)[:200]}"
 
 
-def _call_anthropic(prompt: str, api_key: str, model: str) -> Optional[dict]:
-    """调用 Anthropic Claude API"""
+def _call_anthropic(prompt: str, api_key: str, model: str):
+    """调用 Anthropic Claude API，返回 (dict|None, 错误原因|None)"""
     import requests
-    
+
     url = "https://api.anthropic.com/v1/messages"
     headers = {
         "x-api-key": api_key,
         "anthropic-version": "2023-06-01",
         "content-type": "application/json"
     }
-    
+
     payload = {
         "model": model,
         "max_tokens": 2000,
@@ -95,19 +99,30 @@ def _call_anthropic(prompt: str, api_key: str, model: str) -> Optional[dict]:
             {"role": "user", "content": prompt}
         ]
     }
-    
-    response = requests.post(url, headers=headers, json=payload, timeout=30)
-    response.raise_for_status()
-    
-    result = response.json()
-    content = result["content"][0]["text"]
-    
+
+    try:
+        response = requests.post(url, headers=headers, json=payload, timeout=LLM_HTTP_TIMEOUT)
+        response.raise_for_status()
+        result = response.json()
+        content = result["content"][0]["text"]
+    except requests.exceptions.HTTPError as e:
+        resp = getattr(e, "response", None)
+        status = resp.status_code if resp is not None else "?"
+        body = resp.text[:800] if resp is not None else ""
+        return None, f"HTTP {status} {body}"
+    except requests.exceptions.Timeout:
+        return None, "请求超时 (30s)"
+    except requests.exceptions.ConnectionError as e:
+        return None, f"网络连接失败: {str(e)[:200]}"
+    except Exception as e:
+        return None, f"异常 {type(e).__name__}: {str(e)[:200]}"
+
     # 尝试从响应中提取 JSON
     return _extract_json_from_text(content)
 
 
-def _call_openai(prompt: str, api_key: str, model: str, base_url: Optional[str] = None) -> Optional[dict]:
-    """调用 OpenAI 兼容 API"""
+def _call_openai(prompt: str, api_key: str, model: str, base_url: Optional[str] = None):
+    """调用 OpenAI 兼容 API，返回 (dict|None, 错误原因|None)"""
     import requests
 
     url = (base_url or "https://api.openai.com/v1").rstrip("/") + "/chat/completions"
@@ -115,7 +130,7 @@ def _call_openai(prompt: str, api_key: str, model: str, base_url: Optional[str] 
         "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json"
     }
-    
+
     payload = {
         "model": model,
         "messages": [
@@ -123,26 +138,39 @@ def _call_openai(prompt: str, api_key: str, model: str, base_url: Optional[str] 
         ],
         "temperature": 0.3
     }
-    
-    response = requests.post(url, headers=headers, json=payload, timeout=30)
-    response.raise_for_status()
-    
-    result = response.json()
-    content = result["choices"][0]["message"]["content"]
-    
+
+    try:
+        response = requests.post(url, headers=headers, json=payload, timeout=LLM_HTTP_TIMEOUT)
+        response.raise_for_status()
+        result = response.json()
+        content = result["choices"][0]["message"]["content"]
+    except requests.exceptions.HTTPError as e:
+        resp = getattr(e, "response", None)
+        status = resp.status_code if resp is not None else "?"
+        body = resp.text[:800] if resp is not None else ""
+        return None, f"HTTP {status} {body}"
+    except requests.exceptions.Timeout:
+        return None, "请求超时 (30s)"
+    except requests.exceptions.ConnectionError as e:
+        return None, f"网络连接失败: {str(e)[:200]}"
+    except (KeyError, IndexError, TypeError) as e:
+        return None, f"响应结构异常: {type(e).__name__}: {str(e)[:200]}"
+    except Exception as e:
+        return None, f"异常 {type(e).__name__}: {str(e)[:200]}"
+
     return _extract_json_from_text(content)
 
 
-def _call_qwen(prompt: str, api_key: str, model: str) -> Optional[dict]:
-    """调用通义千问 API"""
+def _call_qwen(prompt: str, api_key: str, model: str):
+    """调用通义千问 API，返回 (dict|None, 错误原因|None)"""
     import requests
-    
+
     url = "https://dashscope.aliyuncs.com/api/v1/services/aigc/text-generation/generation"
     headers = {
         "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json"
     }
-    
+
     payload = {
         "model": model,
         "input": {
@@ -154,44 +182,61 @@ def _call_qwen(prompt: str, api_key: str, model: str) -> Optional[dict]:
             "result_format": "text"
         }
     }
-    
-    response = requests.post(url, headers=headers, json=payload, timeout=30)
-    response.raise_for_status()
-    
-    result = response.json()
-    content = result["output"]["text"]
-    
+
+    try:
+        response = requests.post(url, headers=headers, json=payload, timeout=LLM_HTTP_TIMEOUT)
+        response.raise_for_status()
+        result = response.json()
+        content = result["output"]["text"]
+    except requests.exceptions.HTTPError as e:
+        resp = getattr(e, "response", None)
+        status = resp.status_code if resp is not None else "?"
+        body = resp.text[:800] if resp is not None else ""
+        return None, f"HTTP {status} {body}"
+    except requests.exceptions.Timeout:
+        return None, "请求超时 (30s)"
+    except requests.exceptions.ConnectionError as e:
+        return None, f"网络连接失败: {str(e)[:200]}"
+    except (KeyError, IndexError, TypeError) as e:
+        return None, f"响应结构异常: {type(e).__name__}: {str(e)[:200]}"
+    except Exception as e:
+        return None, f"异常 {type(e).__name__}: {str(e)[:200]}"
+
     return _extract_json_from_text(content)
 
 
-def _extract_json_from_text(text: str) -> Optional[dict]:
-    """从文本中提取 JSON 对象"""
+def _extract_json_from_text(text: str):
+    """从文本中提取 JSON 对象，返回 (dict|None, 错误原因|None)"""
     import re
-    
+
+    if not text or not str(text).strip():
+        return None, "响应内容为空"
+
     # 尝试直接解析
     try:
-        return json.loads(text)
+        return json.loads(text), None
     except json.JSONDecodeError:
         pass
-    
+
     # 尝试查找 JSON 代码块
     json_match = re.search(r'```json\s*([\s\S]*?)\s*```', text)
     if json_match:
         try:
-            return json.loads(json_match.group(1))
+            return json.loads(json_match.group(1)), None
         except json.JSONDecodeError:
             pass
-    
+
     # 尝试查找花括号包裹的内容
     brace_match = re.search(r'\{[\s\S]*\}', text)
     if brace_match:
         try:
-            return json.loads(brace_match.group(0))
+            return json.loads(brace_match.group(0)), None
         except json.JSONDecodeError:
             pass
-    
-    print(f"[LLM] Failed to extract JSON from response: {text[:200]}...")
-    return None
+
+    reason = f"响应无法解析为 JSON（前200字符）: {str(text)[:200]}"
+    print(f"[LLM] {reason}")
+    return None, reason
 
 
 def build_analysis_prompt(project_name: str, md_contents: Dict[str, str]) -> str:
@@ -270,30 +315,30 @@ def build_analysis_prompt(project_name: str, md_contents: Dict[str, str]) -> str
     return prompt
 
 
-def analyze_project(project_name: str, md_contents: Dict[str, str], llm_config: dict) -> Optional[Dict[str, Any]]:
+def analyze_project(project_name: str, md_contents: Dict[str, str], llm_config: dict):
     """
     使用 LLM 分析项目内容
-    
+
     Args:
         project_name: 项目名称
         md_contents: MD 文件内容字典
         llm_config: LLM 配置
-        
+
     Returns:
-        分析结果字典，失败返回 None
+        (分析结果 dict|None, 错误原因 str|None)
     """
     if not llm_config.get("enabled", False):
-        return None
-    
+        return None, "LLM 未启用"
+
     prompt = build_analysis_prompt(project_name, md_contents)
-    result = call_llm_api(prompt, llm_config)
-    
+    result, err = call_llm_api(prompt, llm_config)
+
     if result:
         print(f"[LLM] Successfully analyzed project: {project_name}")
-        return result
+        return result, None
     else:
-        print(f"[LLM] Failed to analyze project: {project_name}")
-        return None
+        print(f"[LLM] Failed to analyze project: {project_name} | 原因: {err}")
+        return None, err or "未知原因"
 
 
 def test_connection(config: dict) -> dict:
@@ -334,7 +379,7 @@ def test_connection(config: dict) -> dict:
         payload = {"model": model, "messages": [{"role": "user", "content": test_prompt}], "temperature": 0.3}
 
     try:
-        resp = req.post(url, headers=headers, json=payload, timeout=30)
+        resp = req.post(url, headers=headers, json=payload, timeout=LLM_HTTP_TIMEOUT)
         if resp.status_code != 200:
             return {
                 "success": False,
