@@ -9,6 +9,12 @@
 - 本地跑：`pip install -r backend/requirements.txt` → `python backend/app.py`。Electron 启动时**优先 spawn 内置 `resources/backend/devcenter-backend.exe`**（PyInstaller 自包含 Python，目标机无需装 Python），找不到该 exe 才回退 `python backend/app.py`。
 - 发布：`npm run build`(portable, dist/) 或 `npm run build:setup`(NSIS)。package.json `extraResources` 把 `backend/`、`index.html`、`config.example.json`(脱敏) 复制进 `resources/`；真实 `config.json` 不进包（运行时读 `%APPDATA%/Personal AI Dev Center/config.json`）。
 - ⚠️ **构建坑**：`npm run build` 后 `node.exe`(electron-builder) 易孤儿化并锁 `dist/Personal-AI-Dev-Center.exe`；重建前先 `tasklist`/`taskkill` 清残留 node.exe + 关闭 live app。`dist/` 与 `dist_new/` 两目录并存，清理时只删 `dist_new`。验证打包是否含密钥：解包 `resources/` 查（不要只 grep 压缩的 asar）。
+- **运行中 app 会锁 `dist/`**：改 `package.json` 的 `build.directories.output` 为 `dist_new` 输出，构建后**务必还原为 `dist`**。electron-builder portable 全程约 **2.5~3 分钟**（杀软不拖时）。可用 `node node_modules/electron-builder/out/cli/cli.js --win portable` 直跑，绕开 bash PATH 丢失。
+- **本机 shell 事实**：bash 的 PATH 偶发丢失（`ls/git/tail` command not found）→ 一切命令用**绝对路径**（python/node/git: `/c/Program Files/Git/cmd/git.exe`）。`wmic` 不存在，查进程路径用 toolhelp32 + `QueryFullProcessImageNameW`。
+- **仓库根 `nul` 文件删不掉**：git-bash 误写 `2>nul` 生成 0 字节文件，因 Windows 保留设备名，`rm`/`DeleteFileW(\\?\...)`/`MoveFileExW` 全 ACCESS_DENIED（疑安全软件拦截）⇒ 已在 `.gitignore` 忽略 `nul/con/aux/prn`。
+- 产物校验要点：`dist_new/win-unpacked/resources/` 是未压缩真源（asar 未压缩可直接搜字节），逐项核对 index.html 新代码、backend exe **MD5 与 `backend/dist/` 一致**、**无真实 config.json / backend/data 泄漏**。
+- **正常进程树（勿当残留杀）**：`Personal-AI-Dev-Center.exe`(dist 启动器) → `Personal AI Dev Center.exe`(主) → 子进程；主又 spawn `devcenter-backend.exe`(**onefile 引导父**) → `devcenter-backend.exe`(**真实后端**，LISTENING 8765)。两个同名属 PyInstaller onefile 正常两段式。
+
 
 ## 启动逻辑硬约束（便携版，2026-08-29 定）
 - **绝不**在启动时按镜像名 `taskkill` 强杀旧实例；便携版进程树＝启动器 `Personal-AI-Dev-Center.exe`(父) → 真实主进程 `Personal AI Dev Center.exe`(子)。按启动器名 `/T` 强杀会顺树杀回自身（自杀根因，已踩坑）。
