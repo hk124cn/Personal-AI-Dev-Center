@@ -13,6 +13,7 @@
 
 import os
 import re
+import shlex
 import time
 
 # ---- 时间字段校验：允许 *、*/n、a、a-b、a-b/n、逗号组合、?(部分实现) ----
@@ -132,7 +133,12 @@ class CronManager:
 
     # ---------- 来源解析 ----------
     def _spool_users(self):
-        """列出拥有 crontab 的用户（来自 spool 目录），返回用户名列表"""
+        """列出拥有 crontab 的用户（来自 spool 目录），返回用户名列表
+
+        坑：Debian 系 `/var/spool/cron/` 下只有 `crontabs/atjobs/atspool` 等**子目录**，
+        直接 `ls -1` 会把目录名当成用户名（真机验证时 UI 出现了假的「用户 crontabs」来源）。
+        因此拿到候选名后统一用 `id -u` 复核是否为真实系统用户。
+        """
         users = []
         for base in ("/var/spool/cron/crontabs", "/var/spool/cron"):
             out, _, rc = self._run(f"ls -1 {base} 2>/dev/null")
@@ -141,7 +147,19 @@ class CronManager:
                     u = u.strip()
                     if u and u not in users:
                         users.append(u)
-        return users
+        if not users:
+            return []
+        # 单次往返批量复核。用哨兵判断命令是否真的跑完：
+        # 收尾的 `echo 哨兵` 保证退出码为 0，若连接中途断了则不会出现哨兵，此时才退回原候选列表。
+        # 注意：哨兵存在时必须**完全信任**过滤结果，哪怕结果为空 ——
+        # 曾经写成「结果为空就退回未过滤列表」，等于把假用户名又放回来了（真机复测抓到的）。
+        sentinel = "__DEVCENTER_SPOOL_DONE__"
+        cmd = ("for u in " + " ".join(shlex.quote(u) for u in users) +
+               '; do id -u "$u" >/dev/null 2>&1 && echo "$u"; done; echo ' + sentinel)
+        out, _, _ = self._run(cmd)
+        if sentinel not in out:
+            return users
+        return [x.strip() for x in out.splitlines() if x.strip() and x.strip() != sentinel]
 
     def _read_file(self, path: str) -> str:
         cmd = self._sp(f"cat {path} 2>/dev/null")

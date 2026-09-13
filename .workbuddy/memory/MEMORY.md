@@ -55,3 +55,9 @@
 - **资产**：四类 sim/credit_card/email/membership，存 `config.json.assets`；跨类关联 `linked_phone_id`/`linked_email_id`(主键-外键，删时清悬空)；统计卡按汇率折¥；点击出 `viewAsset` 详情卡而非直接编辑。
 - **下载引擎**：`_remote_stat_tree_fast`(远程 `find` 只读) + tar stdin 清单 + `tarfile` 流式 + stderr 后台排空防死锁 + `_DOWNLOAD_CANCEL` 取消。
 - **上传引擎**：`_local_stat_tree` 比对 + 流式 tar 写 SSH stdin + `shlex.quote` + `_UPLOAD_CANCEL` 取消；支持 force/selected_files/sync_all。
+- **cron/计划任务**：`backend/cron_manager.py` 持有一个已连接的 SSHClient；来源三类（root 用户级 / 其它用户级 / 系统级 `/etc/crontab`+`/etc/cron.d/*` 含 USER 字段）；写回护栏＝备份→校验→回写→读回验证→失败回滚；非 root 需 `sudo -n true` 探测 NOPASSWD。路由 `/api/cron/{id}/list|get|save|backup`；前端入口在**服务器详情卡**的「计划任务」按钮（`openServerCron`）。
+  - ⚠️ **`_spool_users` 必须用 `id -u` 复核**：Debian 的 `/var/spool/cron` 下只有 `crontabs/atjobs/atspool` 子目录，直接 `ls` 会造出假用户来源。且过滤后**只要哨兵在就必须完全信任结果（哪怕为空）**——写成「空就退回」会让 bug 复发。
+- **前端两个固定坑**：① `escapeHtml` 把 `'` 转成 `&#39;`，HTML 属性里的 onclick 会把它解析回 `'` 从而截断 JS 字符串 → 文本类参数**不要**塞进 onclick；② lucide 图标由 `createIcons()` 运行时替换 `<i data-lucide>`，覆写 `innerHTML` 恢复按钮会让图标消失 → 只改内部 `<span>` 文字。
+- **自有工具**：`tools/verify_build.py`（打包后校验：源码↔产物 MD5、版本号一致、无 config.json 泄漏、启动 exe 探 openapi 路由、PyInstaller 字节码关键字；**前后端关键字必须分开传** `--html-needle`/`--exe-needle`）；`tools/test_cron_realmachine.py`（真机 cron 全链路，用 `/tmp` 探针文件走写入分支，不碰真实 crontab）。两个都需 `backend/build_venv`（含 paramiko/PyInstaller）。
+- **服务器连接特性**：`腾讯云_上海 124.xx.xx.xx` 曾全端口超时、后恢复正常，但 **SSH 握手偏慢（4~12s）**且偶发 `AuthenticationException` —— 判定为**连接稳定性一般**，非程序 bug。
+- `build_backend.bat` 的 cwd 坑已修（原 `cd /d %~dp0..` 会跳到项目根上级）。

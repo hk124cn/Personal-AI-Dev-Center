@@ -60,6 +60,11 @@ class FakeSSHClient:
             '/etc/crontab': "SHELL=/bin/bash\n* * * * * root /sys/job.sh\n",
             '/etc/cron.d/backup': "*/10 * * * * root /backup.sh\n",
         }
+        # Debian 系 /var/spool/cron 下是子目录而非用户名（模拟真实机器的坑）
+        self.plain_spool = []
+        self.crontab_spool = ['alice', 'bob']
+        # 真实存在的系统用户，供批量 `id -u` 复核使用
+        self.real_users = ['root', 'alice', 'bob']
 
     def open_sftp(self): return FakeSFTP(self)
 
@@ -79,7 +84,14 @@ class FakeSSHClient:
         if c == 'id -u; id -un':
             return ('0\nroot', '', 0)
         if c.startswith('ls -1 /var/spool/cron/crontabs'):
-            return ('alice\nbob', '', 0)
+            return ('\n'.join(self.crontab_spool), '', 0)
+        if c.startswith('ls -1 /var/spool/cron'):
+            return ('\n'.join(self.plain_spool), '', 0)
+        # 批量复核真实用户：for u in a b; do id -u "$u" ...; done; echo __DEVCENTER_SPOOL_DONE__
+        if c.startswith('for u in '):
+            names = c[len('for u in '):].split(';')[0].split()
+            kept = [n for n in names if n in self.real_users]
+            return ('\n'.join(kept + ['__DEVCENTER_SPOOL_DONE__']), '', 0)
         if c.startswith('test -f /etc/crontab'):
             return ('yes', '', 0)
         if c.startswith('ls -1 /etc/cron.d'):
@@ -170,6 +182,37 @@ def test_get():
     print("  ✔ get 各来源取内容正确")
 
 
+def test_spool_dir_names_filtered():
+    """真机发现的坑：Debian 的 /var/spool/cron 下只有 crontabs/atjobs/atspool 子目录，
+    不能被当成用户名，否则 UI 会出现假的「用户 crontabs」来源。"""
+    client = FakeSSHClient()
+    client.plain_spool = ['crontabs', 'atjobs', 'atspool']
+    mgr = CronManager(client)
+    users = mgr._spool_users()
+    assert 'crontabs' not in users, users
+    assert 'atjobs' not in users, users
+    assert 'atspool' not in users, users
+    assert 'alice' in users and 'bob' in users, users
+    data = mgr.list_sources()
+    scopes = [s['scope'] for s in data['sources']]
+    assert 'user:crontabs' not in scopes, scopes
+    assert 'user:alice' in scopes
+    # 所有候选都不是真实用户时必须返回空，而不是退回未过滤列表
+    # （首尔/GCP 真机上 spool 里只有 crontabs 一个候选，退回就等于 bug 复发）
+    client2 = FakeSSHClient()
+    client2.crontab_spool = []
+    client2.plain_spool = ['crontabs']
+    assert CronManager(client2)._spool_users() == [], CronManager(client2)._spool_users()
+    # 连接中断（拿不到哨兵）时退回原候选列表，不静默丢用户
+    class BrokenClient(FakeSSHClient):
+        def _respond(self, cmd):
+            if cmd.strip().startswith('for u in '):
+                return ('', 'connection reset', 255)
+            return super()._respond(cmd)
+    assert set(CronManager(BrokenClient())._spool_users()) >= {'alice', 'bob'}
+    print("  ✔ spool 目录名(如 crontabs)被 id -u 过滤，不产生假用户来源")
+
+
 def test_save_success():
     client = FakeSSHClient()
     mgr = CronManager(client)
@@ -223,6 +266,7 @@ if __name__ == '__main__':
     test_validate()
     test_list_sources()
     test_get()
+    test_spool_dir_names_filtered()
     test_save_success()
     test_save_invalid()
     test_save_rollback()
