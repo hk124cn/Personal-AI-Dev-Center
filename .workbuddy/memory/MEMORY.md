@@ -10,6 +10,10 @@
 - 服务器一律用别名指代（如「腾讯云_上海」「首尔」）；确需写 IP 时用掩码 `47.xx.xx.xx`。
 - 2026-09-13 踩坑：把 4 台真实 IP + 用户名写进了记忆并推送到公开仓库，
   最终靠「脱敏 + filter-branch 重写历史 + force push」才清掉。**别再犯**。
+- 改历史后**别以为就干净了**：GitHub 仍会保留未引用对象，实测旧 SHA 的 commit API 与
+  raw 文件仍可访问。要彻底清除需找 GitHub Support 跑 GC、或删库重建。
+- 改历史前先 `cp -r .git` 备份；改完必须核对「非记忆文件的所有历史版本逐字节未变」
+  （按对象类型过滤出 blob 再比，树哈希变了是正常的）。
 
 ## 开发 / 发布 / 推送
 - **推送规则（用户明确）**：不主动推 GitHub，仅用户要求才推；本地 commit 照常做、做完告知即可。远程 `git@github.com:hk124cn/Personal-AI-Dev-Center.git`(public, main)。
