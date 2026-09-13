@@ -1078,12 +1078,12 @@ def analyze_local_project(project_id: str):
         try:
             prompt = build_analysis_prompt(project.get("name", project_id), md_contents)
             yield sse({"step": "llm", "message": f"提示词 {len(prompt)} 字符，等待响应...", "status": "progress"})
-            llm_result = call_llm_api(prompt, llm_config)
+            llm_result, llm_error = call_llm_api(prompt, llm_config)
         except Exception as e:
             yield sse({"step": "error", "message": f"LLM 异常: {type(e).__name__}: {e}", "status": "error"}); return
 
         if not llm_result:
-            yield sse({"step": "error", "message": "LLM 返回为空或解析失败", "status": "error"}); return
+            yield sse({"step": "error", "message": f"LLM 返回为空或解析失败: {llm_error or ''}", "status": "error"}); return
 
         # 写入结果
         try:
@@ -1100,6 +1100,7 @@ def analyze_local_project(project_id: str):
                 "llm_architecture": llm_result.get("architecture", {}),
                 "llm_routes": llm_result.get("routes", []),
                 "llm_summary": llm_result.get("summary", ""),
+                "llm_error": llm_error,
                 "synced_at": datetime.now().isoformat(),
             }
             if llm_result.get("issues"):
@@ -1353,6 +1354,8 @@ def monitor_server(server_id: str):
             "cpu_percent": metrics["cpu_percent"],
             "mem_percent": metrics.get("mem_percent"),
             "disk_percent": metrics.get("disk_percent"),
+            # 采样时间戳：前端趋势图 X 轴需要显示「日期+时间」
+            "ts": datetime.now().isoformat(timespec="seconds"),
         })
         if len(hist) > _MONITOR_HISTORY_MAX:
             hist[:] = hist[-_MONITOR_HISTORY_MAX:]
@@ -1363,6 +1366,99 @@ def monitor_server(server_id: str):
 @app.get("/api/monitor/{server_id}/history")
 def monitor_history(server_id: str):
     return {"server_id": server_id, "history": _MONITOR_HISTORY.get(server_id, [])}
+
+
+# ==================== 计划任务 / Cron 管理 (docs/1panel-analysis.md §5.3.2) ====================
+from backend.cron_manager import CronManager
+
+
+def _cron_manager(server_id: str):
+    """按 server_id 找服务器并建连，返回 (manager, error)"""
+    config = load_json(CONFIG_PATH) or {"servers": []}
+    server = next((s for s in config.get("servers", []) if s.get("id") == server_id), None)
+    if not server:
+        return None, "服务器不存在"
+    try:
+        client = _connect_ssh_monitor(server)
+    except Exception as e:
+        return None, f"SSH 连接失败: {e}"
+    return CronManager(client), None
+
+
+@app.get("/api/cron/{server_id}/list")
+def cron_list(server_id: str):
+    mgr, err = _cron_manager(server_id)
+    if err:
+        return {"status": "error", "error": err, "server_id": server_id}
+    try:
+        data = mgr.list_sources()
+    except Exception as e:
+        return {"status": "error", "error": f"枚举 cron 来源失败: {e}", "server_id": server_id}
+    finally:
+        try:
+            mgr.client.close()
+        except Exception:
+            pass
+    data["status"] = "ok"
+    data["server_id"] = server_id
+    return data
+
+
+@app.get("/api/cron/{server_id}/get")
+def cron_get(server_id: str, scope: str = ""):
+    mgr, err = _cron_manager(server_id)
+    if err:
+        return {"status": "error", "error": err, "server_id": server_id}
+    try:
+        item = mgr.get(scope)
+    except Exception as e:
+        return {"status": "error", "error": f"读取失败: {e}", "server_id": server_id}
+    finally:
+        try:
+            mgr.client.close()
+        except Exception:
+            pass
+    item["status"] = "ok"
+    return item
+
+
+@app.post("/api/cron/{server_id}/save")
+def cron_save(server_id: str, body: dict):
+    scope = body.get("scope", "")
+    content = body.get("content", "")
+    mgr, err = _cron_manager(server_id)
+    if err:
+        return {"status": "error", "error": err, "server_id": server_id}
+    try:
+        res = mgr.save(scope, content)
+    except Exception as e:
+        return {"status": "error", "error": f"保存失败: {e}", "server_id": server_id}
+    finally:
+        try:
+            mgr.client.close()
+        except Exception:
+            pass
+    res["status"] = "ok" if res.get("ok") else "error"
+    return res
+
+
+@app.post("/api/cron/{server_id}/backup")
+def cron_backup(server_id: str, body: dict):
+    scope = body.get("scope", "")
+    mgr, err = _cron_manager(server_id)
+    if err:
+        return {"status": "error", "error": err, "server_id": server_id}
+    try:
+        res = mgr.backup(scope)
+    except Exception as e:
+        return {"status": "error", "error": f"备份失败: {e}", "server_id": server_id}
+    finally:
+        try:
+            mgr.client.close()
+        except Exception:
+            pass
+    res["status"] = "ok" if res.get("ok") else "error"
+    return res
 
 
 @app.get("/api/health")

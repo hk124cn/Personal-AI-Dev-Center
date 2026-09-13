@@ -5,6 +5,15 @@ config.json
 dist/
 dist_new/
 *.exe
+build_*.log
+
+# ===== Windows 保留设备名 =====
+# git-bash 下误写 `2>nul` 会生成同名字节文件，且因是保留设备名而无法删除，
+# 这里直接忽略，避免污染 git status。
+nul
+con
+aux
+prn
 
 # ===== Node =====
 node_modules/

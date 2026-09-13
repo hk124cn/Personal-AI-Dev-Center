@@ -620,8 +620,8 @@ def apply_llm_analysis(project_name: str, remote_data: dict, config: dict) -> di
         return remote_data
 
     # 调用 LLM 分析
-    llm_result = analyze_project(project_name, md_contents, llm_config)
-    
+    llm_result, llm_error = analyze_project(project_name, md_contents, llm_config)
+
     if llm_result:
         if llm_result.get("issues"):
             issues = llm_result["issues"]
@@ -644,6 +644,7 @@ def apply_llm_analysis(project_name: str, remote_data: dict, config: dict) -> di
         remote_data["llm_tech_stack"] = arch.get("tech_stack", []) if isinstance(arch, dict) else []
         remote_data["llm_analyzed"] = True
         remote_data["llm_status"] = "analyzed"
+        remote_data["llm_error"] = None
 
         if remote_data["llm_tech_stack"]:
             print(f"[LLM] 识别到技术栈: {', '.join(remote_data['llm_tech_stack'])}")
@@ -652,7 +653,8 @@ def apply_llm_analysis(project_name: str, remote_data: dict, config: dict) -> di
     else:
         remote_data["llm_analyzed"] = False
         remote_data["llm_status"] = "api_failed"
-    
+        remote_data["llm_error"] = llm_error or "未知原因"
+
     return remote_data
 
 
@@ -697,6 +699,17 @@ def sync_single(project_id: str) -> dict:
                     print(f"[sync] 已更新 {project['name']} 的技术栈: {', '.join(llm_tech_stack)}")
                     break
 
+        # LLM 摘要回写到项目简介 desc（仅当 desc 为空时自动填充，避免覆盖手动内容）
+        llm_summary = remote_data.get("llm_summary", "")
+        if llm_summary:
+            for i, p in enumerate(config["projects"]):
+                if p["id"] == project_id:
+                    if not p.get("desc"):
+                        config["projects"][i]["desc"] = llm_summary
+                        save_config(config)
+                        print(f"[sync] 已用 LLM 摘要填充 {project['name']} 的简介")
+                    break
+
         project_entry = {
             "id": project["id"],
             "name": project["name"],
@@ -721,6 +734,7 @@ def sync_single(project_id: str) -> dict:
             "llm_summary": remote_data.get("llm_summary", ""),
             "llm_analyzed": remote_data.get("llm_analyzed", False),
             "llm_status": remote_data.get("llm_status", "disabled"),
+            "llm_error": remote_data.get("llm_error"),
         }
 
         if OUTPUT_PATH.exists():
@@ -797,6 +811,16 @@ def sync_all():
                     if p["id"] == project["id"]:
                         config["projects"][i]["tech_stack"] = llm_tech_stack
                         print(f"[sync] 已更新 {project['name']} 的技术栈: {', '.join(llm_tech_stack)}")
+                        break
+
+            # LLM 摘要回写到项目简介 desc（仅当 desc 为空时自动填充，sync_all 末尾统一 save_config）
+            llm_summary = remote_data.get("llm_summary", "")
+            if llm_summary:
+                for i, p in enumerate(config["projects"]):
+                    if p["id"] == project["id"]:
+                        if not p.get("desc"):
+                            config["projects"][i]["desc"] = llm_summary
+                            print(f"[sync] 已用 LLM 摘要填充 {project['name']} 的简介")
                         break
 
             project_entry = {

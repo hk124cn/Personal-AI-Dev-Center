@@ -22,10 +22,76 @@ let isShuttingDown = false;
 // Log buffer: array of {ts, level, text}
 const logBuffer = [];
 
+// ---------- 日志落盘（排查定时同步/LLM 失败必需）----------
+// 之前的日志只存在内存 logBuffer 里，程序一关就没了，事后无法复盘失败原因。
+// 现在同时追加写到 <userData>/logs/backend-YYYY-MM-DD.log，保留 LOG_KEEP_DAYS 天。
+const LOG_KEEP_DAYS = 14;
+const LOG_FILE_RE = /^backend-\d{4}-\d{2}-\d{2}\.log$/;
+let logStream = null;
+let logStreamDate = null;
+
+function getLogDir() {
+  return path.join(app.getPath('userData'), 'logs');
+}
+
+function todayStr() {
+  const d = new Date();
+  const p = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+}
+
+function cleanupOldLogs(dir) {
+  try {
+    const cutoff = Date.now() - LOG_KEEP_DAYS * 24 * 3600 * 1000;
+    for (const f of fs.readdirSync(dir)) {
+      if (!LOG_FILE_RE.test(f)) continue;
+      const fp = path.join(dir, f);
+      try {
+        if (fs.statSync(fp).mtimeMs < cutoff) fs.unlinkSync(fp);
+      } catch (e) { /* 单个文件删除失败忽略 */ }
+    }
+  } catch (e) { /* 目录不存在等忽略 */ }
+}
+
+function getLogStream() {
+  const day = todayStr();
+  if (logStream && logStreamDate === day) return logStream;
+  try {
+    if (logStream) { try { logStream.end(); } catch (e) {} logStream = null; }
+    const dir = getLogDir();
+    fs.mkdirSync(dir, { recursive: true });
+    logStream = fs.createWriteStream(path.join(dir, `backend-${day}.log`), { flags: 'a' });
+    logStreamDate = day;
+    cleanupOldLogs(dir);
+  } catch (e) {
+    logStream = null; // 落盘失败不影响主流程
+  }
+  return logStream;
+}
+
+function writeLogFile(level, text) {
+  const s = getLogStream();
+  if (!s) return;
+  try {
+    const ts = new Date().toISOString();
+    const body = String(text).split('\n').map((l) => `[${ts}] [${level}] ${l}`).join('\n');
+    s.write(body + '\n');
+  } catch (e) { /* 忽略写失败 */ }
+}
+
+function closeLogFile() {
+  if (logStream) {
+    try { logStream.end(); } catch (e) {}
+    logStream = null;
+    logStreamDate = null;
+  }
+}
+
 function addLog(level, text) {
   const line = { ts: new Date().toISOString(), level, text };
   logBuffer.push(line);
   if (logBuffer.length > MAX_LOG_LINES) logBuffer.shift();
+  writeLogFile(level, text);
   if (mainWindow && !mainWindow.isDestroyed()) {
     mainWindow.webContents.send('log-line', line);
   }
@@ -351,6 +417,10 @@ if (isAnotherInstanceRunning()) {
 
 app.on('ready', async () => {
   Menu.setApplicationMenu(Menu.buildFromTemplate(menuTemplate));
+  addLog('info', `[Electron] === 会话开始 (v${APP_VERSION}) ===`);
+  try {
+    addLog('info', `[Electron] 日志文件: ${path.join(getLogDir(), `backend-${todayStr()}.log`)}`);
+  } catch (e) { /* 忽略 */ }
   startBackend();
 
   try {
@@ -384,6 +454,8 @@ app.on('before-quit', () => {
 // 兜底：任何退出路径都再确保一次后端已杀（含 window-all-closed 之外的异常退出）
 app.on('quit', () => {
   killBackend();
+  addLog('info', `[Electron] === 会话结束 ===`);
+  closeLogFile();
 });
 
 // 终极兜底：主进程被强杀时也尽量同步终结后端，释放 8765
@@ -391,4 +463,5 @@ process.on('exit', () => {
   if (backendProcess && !backendProcess.killed) {
     try { backendProcess.kill('SIGKILL'); } catch (e) {}
   }
+  closeLogFile();
 });

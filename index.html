@@ -103,6 +103,22 @@ body{font-family:var(--font);background:var(--bg-deep);color:var(--text);height:
 .kb-input:focus{border-color:var(--accent)}
 .kb-edit-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;height:340px}
 .kb-textarea{background:var(--bg-input);border:1px solid var(--border);border-radius:8px;padding:10px;color:var(--text);font-size:13px;font-family:monospace;resize:none;outline:none;line-height:1.6}
+/* ===== CRON 计划任务管理 ===== */
+.cron-loading,.cron-err{padding:24px;text-align:center;color:var(--text-tertiary)}
+.cron-err{color:var(--red)}
+.cron-banner{display:flex;align-items:center;gap:10px;padding:10px 14px;background:var(--bg-input);border:1px solid var(--border);border-radius:8px;font-size:13px;margin-bottom:10px}
+.cron-hint{padding:8px 14px;font-size:12px;color:var(--text-tertiary);background:var(--bg-muted);border-radius:8px;margin-bottom:14px;line-height:1.6}
+.cron-badge{display:inline-flex;align-items:center;gap:4px;font-size:12px;font-weight:600;padding:2px 8px;border-radius:20px}
+.cron-badge.ok{color:var(--green);background:var(--green-muted)}
+.cron-badge.bad{color:var(--red);background:var(--red-muted)}
+.cron-card{margin-bottom:14px}
+.cron-count{font-size:12px;font-weight:600;color:var(--text-tertiary);margin-left:6px}
+.cron-ta{width:100%;margin-bottom:10px}
+.cron-actions{display:flex;gap:8px}
+.cron-dirs .cron-dir{padding:6px 0;font-size:13px;border-bottom:1px dashed var(--border)}
+.cron-dirs .cron-dir:last-child{border-bottom:none}
+.cron-dirs code{background:var(--bg-muted);padding:1px 6px;border-radius:4px;font-family:var(--mono);margin-right:6px}
+.muted{color:var(--text-tertiary)}
 .kb-preview{background:var(--bg-input);border:1px solid var(--border);border-radius:8px;padding:10px;overflow-y:auto;font-size:13px;line-height:1.7}
 .kb-preview pre{background:var(--bg-deep);padding:10px;border-radius:6px;overflow-x:auto;color:var(--text)}
 .kb-preview code{font-family:monospace}
@@ -598,7 +614,7 @@ select.form-input{cursor:pointer;appearance:none;background-image:url("data:imag
 .mon-chart-card h4{font-size:13px;font-weight:600;margin-bottom:4px;display:flex;align-items:center;gap:6px}
 .mon-chart-card h4 svg{width:14px;height:14px;stroke-width:1.8;color:var(--accent)}
 .mon-chart-sub{font-size:11px;color:var(--text-tertiary);margin-bottom:6px}
-.mon-chart{width:100%;height:90px;display:block}
+.mon-chart{width:100%;height:112px;display:block;cursor:crosshair}
 .mon-net{display:grid;grid-template-columns:1fr 1fr;gap:12px}
 .mon-net .mn{background:var(--bg-elevated);border-radius:8px;padding:12px 14px;display:flex;align-items:center;gap:12px}
 .mon-net .mn svg{width:22px;height:22px;stroke-width:1.8;flex-shrink:0}
@@ -746,7 +762,7 @@ select.form-input{cursor:pointer;appearance:none;background-image:url("data:imag
 <div id="app" class="app"></div>
 
 <script>
-const APP_VERSION = '1.4.17';
+const APP_VERSION = '1.4.18';
 // ==================== THEMES ====================
 const themes = {
   violet: {
@@ -2495,7 +2511,7 @@ function openProjectDetail(id){
       <div class="info-item">${icon('file-text')} 内容更新 <strong>${p.lastUpdate?relativeTime(p.lastUpdate):'-'}</strong></div>
       <div class="info-divider"></div>
       <div class="info-item">${icon('refresh-cw')} 同步 <strong>${p._syncedAt?relativeTime(p._syncedAt):'未同步'}</strong>${p._syncError?` <span class="sync-badge sync-bad" style="margin-left:4px">${icon('alert-triangle')} 失败</span>`:''}</div>
-      ${p._llmAnalyzed?`<div class="info-divider"></div><div class="info-item">${icon('sparkles')} <strong>${t('pd_llm_analyzed')}</strong></div>`:(p._llmStatus?`<div class="info-divider"></div><div class="info-item">${icon('alert-circle')} ${t('pd_llm_not_run')}：${escapeHtml(p._llmStatus)}</div>`:'')}
+      ${p._llmAnalyzed?`<div class="info-divider"></div><div class="info-item">${icon('sparkles')} <strong>${t('pd_llm_analyzed')}</strong></div>`:(p._llmStatus?`<div class="info-divider"></div><div class="info-item">${icon('alert-circle')} ${t('pd_llm_not_run')}：${escapeHtml(p._llmStatus)}${p._llmError?(' — '+escapeHtml(p._llmError)):''}</div>`:'')}
     </div>
 
     ${p._llmSummary?`<div class="detail-section"><h4>${icon('sparkles')} ${t('pd_llm_summary')}</h4><div style="font-size:13px;color:var(--text-secondary);line-height:1.7">${escapeHtml(p._llmSummary)}</div></div>`:''}
@@ -2686,7 +2702,7 @@ function openServerDetail(id){
     </div>
     <div class="detail-section"><h4>${icon('package')} ${t('sd_tools')}</h4><div style="display:flex;flex-wrap:wrap;gap:5px">${s.tools.map(tool=>`<span class="tag tag-accent">${tool}</span>`).join('')}</div></div>
     ${projs.length?`<div class="detail-section"><h4>${icon('folder-kanban')} ${t('sd_running_projects')} (${projs.length})</h4>${projs.map(p=>`<div class="li" style="cursor:pointer" onclick="closeModal();setTimeout(()=>openProjectDetail('${p.id}'),200)"><div class="li-icon" style="background:${p.status==='active'?'var(--green-muted)':'var(--amber-muted)'}"><div class="dot ${dotClass(p.status)}"></div></div><div class="li-body"><div class="li-title">${p.name}</div><div class="li-sub">${statusText(p.status)} · ${p.progress}%</div></div></div>`).join('')}</div>`:''}
-    ${s.sshUser?`<div class="detail-section"><h4>${icon('terminal')} ${t('sd_ssh')}</h4><div class="ssh-block"><div>$ ssh ${s.sshUser}@${s.ip} -p ${s.sshPort}${s.sshKey?' -i '+s.sshKey:''}</div><div class="comment"># ${t('sd_key')}: ${s.sshKey}</div></div><div style="margin-top:10px;display:flex;gap:8px"><button class="btn btn-sm" onclick="sshLogin('${s.ip}',${s.sshPort},'${s.sshUser}','${s.sshKey}')">${icon('terminal')} ${t('pd_ssh_login')}</button><button class="btn btn-sm btn-primary" onclick="openServerMonitor('${s.id}')">${icon('activity')} 实时监控</button></div></div>`:''}
+    ${s.sshUser?`<div class="detail-section"><h4>${icon('terminal')} ${t('sd_ssh')}</h4><div class="ssh-block"><div>$ ssh ${s.sshUser}@${s.ip} -p ${s.sshPort}${s.sshKey?' -i '+s.sshKey:''}</div><div class="comment"># ${t('sd_key')}: ${s.sshKey}</div></div><div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap"><button class="btn btn-sm" onclick="sshLogin('${s.ip}',${s.sshPort},'${s.sshUser}','${s.sshKey}')">${icon('terminal')} ${t('pd_ssh_login')}</button><button class="btn btn-sm btn-primary" onclick="openServerMonitor('${s.id}')">${icon('activity')} 实时监控</button><button class="btn btn-sm" onclick="openServerCron('${s.id}')">${icon('calendar-clock')} 计划任务</button></div></div>`:''}
     <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:20px;padding-top:16px;border-top:1px solid var(--border)">
       <button class="btn btn-sm" onclick="cloneServer('${s.id}')">${icon('copy')} ${t('sd_clone')}</button>
       <button class="btn btn-sm" onclick="editServer('${s.id}')">${icon('pencil')} ${t('sd_edit')}</button>
@@ -2727,12 +2743,25 @@ function pctColor(p){
   if(p<90) return 'var(--amber)';
   return 'var(--red)';
 }
+// --- CPU 趋势图 X 轴时间支持 ---
+let _monHistory = [];   // 与 _monData 一一对应的采样记录（含 ts）
+let _monHover = null;   // 鼠标悬停命中的采样点下标
+// 取第 i 个采样点的时间：优先用后端 ts；缺失时按「每分钟一点、最后一点=现在」回退估算
+function monTimeAt(i, n){
+  const h=_monHistory[i];
+  if(h && h.ts){ const d=new Date(h.ts); if(!isNaN(d.getTime())) return d; }
+  return new Date(Date.now() - (n-1-i)*60000);
+}
+function fmtMonStamp(dt){
+  const p=x=>String(x).padStart(2,'0');
+  return `${p(dt.getMonth()+1)}-${p(dt.getDate())} ${p(dt.getHours())}:${p(dt.getMinutes())}`;
+}
 function openServerMonitor(id){
   const s=getServer(id); if(!s) return;
   state.modal={title:'📊 实时监控 · '+s.name, body: monitorHTML(s), size:'modal-xl'};
   render();
   if(window.lucide) lucide.createIcons();
-  _monData=[]; _monLive=true;
+  _monData=[]; _monHistory=[]; _monHover=null; _monLive=true;
   initMonitor(id);
 }
 function monitorHTML(s){
@@ -2769,7 +2798,7 @@ function monitorHTML(s){
     </div>
     <div class="mon-chart-card">
       <h4>${icon('line-chart')} CPU 使用率趋势</h4>
-      <div class="mon-chart-sub">每分钟采样一次 · 最近 60 个采样点（约 1 小时）</div>
+      <div class="mon-chart-sub">每分钟采样一次 · 最近 60 个采样点（约 1 小时） · X 轴为日期+时间，悬停可查看任意采样点</div>
       <canvas class="mon-chart" id="mon-chart"></canvas>
     </div>
     <div class="mon-net">
@@ -2785,6 +2814,79 @@ function monitorHTML(s){
   </div>`;
 }
 function setText(id,v){const el=document.getElementById(id); if(el) el.textContent=v;}
+// ==================== 计划任务 / Cron 管理 (docs/1panel-analysis.md §5.3.2) ====================
+function openServerCron(id){
+  const s=getServer(id); if(!s) return;
+  state.modal={title:'⏰ 计划任务 (Cron) · '+s.name, body:`<div id="cron-wrap"><div class="cron-loading">${icon('loader')} 正在枚举服务器 cron 来源…</div></div>`, size:'modal-xl'};
+  render();
+  if(window.lucide) lucide.createIcons();
+  loadServerCron(id);
+}
+async function loadServerCron(id){
+  const wrap=document.getElementById('cron-wrap'); if(!wrap) return;
+  try{
+    const res=await fetch(API_BASE+'/api/cron/'+encodeURIComponent(id)+'/list',{signal:AbortSignal.timeout(15000)});
+    const data=await res.json();
+    if(data.status==='error'){ wrap.innerHTML=`<div class="cron-err">⚠️ ${escapeHtml(data.error||'加载失败')}</div>`; return; }
+    wrap.innerHTML=cronHTML(data, id);
+    if(window.lucide) lucide.createIcons();
+  }catch(e){
+    wrap.innerHTML=`<div class="cron-err">⚠️ 请求失败: ${escapeHtml(e.message||e)}</div>`;
+  }
+}
+function cronHTML(d, sid){
+  const badge = d.writable
+    ? `<span class="cron-badge ok">${icon('check-circle')} 可写入${d.is_root?'（root）':(d.sudo_available?'（sudo）':'')}</span>`
+    : `<span class="cron-badge bad">${icon('alert-triangle')} 不可写入（非 root 且无 NOPASSWD sudo）</span>`;
+  const srcs=(d.sources||[]).map(s=>{
+    const taId='cron-ta-'+btoa(unescape(encodeURIComponent(s.scope))).replace(/[^a-zA-Z0-9]/g,'');
+    const disabled = s.writable? '' : 'disabled';
+    return `<div class="panel cron-card">
+      <div class="panel-head"><h3>${icon('clock')} ${escapeHtml(s.label)} <span class="cron-count">${s.entries} 条</span></h3>
+        ${s.error?`<span class="cron-badge bad">${escapeHtml(s.error)}</span>`:''}</div>
+      <div class="panel-body">
+        <textarea id="${taId}" class="kb-textarea cron-ta" rows="6" ${disabled}>${escapeHtml(s.content||'')}</textarea>
+        <div class="cron-actions">
+          <button class="btn btn-sm btn-primary" ${disabled} onclick="saveCron('${sid}','${encodeURIComponent(s.scope)}','${taId}')">${icon('save')} 保存</button>
+          <button class="btn btn-sm" onclick="backupCron('${sid}','${encodeURIComponent(s.scope)}')">${icon('archive')} 备份</button>
+        </div>
+      </div></div>`;
+  }).join('');
+  const dirs=d.cron_dirs||{};
+  const dirHTML=Object.keys(dirs).length?`<div class="panel"><div class="panel-head"><h3>${icon('folder')} cron.* 脚本目录（只读）</h3></div><div class="panel-body cron-dirs">`+
+    ['hourly','daily','weekly','monthly'].map(k=>`<div class="cron-dir"><b>/etc/cron.${k}</b>: ${dirs[k]&&dirs[k].length?dirs[k].map(x=>`<code>${escapeHtml(x)}</code>`).join(' '):'<span class="muted">空</span>'}</div>`).join('')+
+    `</div></div>`:'';
+  return `<div class="cron-banner">连接用户 <b>${escapeHtml(d.connection_user||'?')}</b> · ${badge}</div>
+    <div class="cron-hint">提示：保存前会自动备份、校验语法、写回后读回验证；不一致自动回滚。破坏性操作请确认。</div>
+    ${srcs}${dirHTML}`;
+}
+async function saveCron(id, scopeEnc, taId){
+  const scope=decodeURIComponent(scopeEnc);
+  const ta=document.getElementById(taId); if(!ta) return;
+  if(!confirm(`确定保存 ${scope} 的 cron 改动并写回服务器？\n保存前会自动备份，如写回异常将自动回滚。`)) return;
+  const content=ta.value;
+  const btn=event&&event.target?event.target.closest('button'):null;
+  try{
+    const res=await fetch(API_BASE+'/api/cron/'+encodeURIComponent(id)+'/save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({scope,content}),signal:AbortSignal.timeout(20000)});
+    const data=await res.json();
+    if(data.status==='ok' && data.ok){
+      showToast(`已保存 ${scope}（${data.entries||0} 条）`,'check-circle');
+      if(data.backup) console.log('cron backup:',data.backup);
+    }else{
+      const msg=(data.validation_errors&&data.validation_errors.length)?('校验失败:\n'+data.validation_errors.join('\n')):(data.error||'保存失败');
+      showToast(msg,'alert-triangle');
+    }
+  }catch(e){ showToast('请求失败: '+(e.message||e),'alert-triangle'); }
+}
+async function backupCron(id, scopeEnc){
+  const scope=decodeURIComponent(scopeEnc);
+  try{
+    const res=await fetch(API_BASE+'/api/cron/'+encodeURIComponent(id)+'/backup',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({scope}),signal:AbortSignal.timeout(20000)});
+    const data=await res.json();
+    if(data.status==='ok'&&data.ok) showToast('已备份: '+data.backup,'archive');
+    else showToast(data.error||'备份失败','alert-triangle');
+  }catch(e){ showToast('请求失败: '+(e.message||e),'alert-triangle'); }
+}
 function colorLoad(id,v,cores){const el=document.getElementById(id); if(el&&v!=null) el.style.color=loadColor(v,cores);}
 function setMonOk(){
   const p=document.getElementById('mon-pulse'); if(p) p.classList.remove('err');
@@ -2847,20 +2949,25 @@ async function pollMonitor(id){
     setText('mon-cores', d.cpu_cores==null?'—':d.cpu_cores);
     setText('mon-uptime', fmtUptime(d.uptime_seconds));
     setText('mon-kernel', d.kernel||'—');
-    if(Array.isArray(d.history)) _monData=d.history.map(h=>h.cpu_percent).filter(x=>x!=null);
-    if(_monData.length>1) drawMonChart(document.getElementById('mon-chart'), _monData);
+    if(Array.isArray(d.history)){
+      _monHistory=d.history.filter(h=>h && h.cpu_percent!=null);
+      _monData=_monHistory.map(h=>h.cpu_percent);
+    }
+    if(_monData.length>1) drawMonChart(document.getElementById('mon-chart'), _monData, _monHistory, _monHover);
   }catch(e){ setMonError('请求失败: '+e.message); }
 }
-function drawMonChart(canvas, data){
+function drawMonChart(canvas, data, history, hoverIdx){
   if(!canvas) return;
   const dpr=window.devicePixelRatio||1;
   const w=canvas.clientWidth, h=canvas.clientHeight;
   if(w===0) return;
   canvas.width=w*dpr; canvas.height=h*dpr;
   const ctx=canvas.getContext('2d'); ctx.setTransform(dpr,0,0,dpr,0,0); ctx.clearRect(0,0,w,h);
-  const padL=4,padR=4,padT=10,padB=16, cw=w-padL-padR, ch=h-padT-padB, max=100;
-  ctx.strokeStyle='rgba(255,255,255,.06)'; ctx.lineWidth=1; ctx.font='9px sans-serif';
-  for(let i=0;i<=4;i++){const y=padT+ch*i/4; ctx.beginPath();ctx.moveTo(padL,y);ctx.lineTo(padL+cw,y);ctx.stroke();
+  // padB 留给 X 轴「日期+时间」标签
+  const padL=4,padR=4,padT=10,padB=28, cw=w-padL-padR, ch=h-padT-padB, max=100;
+  // 水平网格 + Y 轴刻度
+  ctx.lineWidth=1; ctx.font='9px sans-serif';
+  for(let i=0;i<=4;i++){const y=padT+ch*i/4; ctx.strokeStyle='rgba(255,255,255,.06)'; ctx.beginPath();ctx.moveTo(padL,y);ctx.lineTo(padL+cw,y);ctx.stroke();
     ctx.fillStyle='rgba(150,150,175,.5)';ctx.textAlign='right';ctx.fillText((max-(max*i/4))+'%',padL+cw-2,y-1);}
   if(data.length<2) return;
   const n=data.length, xAt=i=>padL+cw*(i/(n-1)), yAt=v=>padT+ch*(1-v/max);
@@ -2872,8 +2979,58 @@ function drawMonChart(canvas, data){
   ctx.beginPath(); ctx.moveTo(xAt(0),yAt(data[0]));
   for(let i=1;i<n;i++) ctx.lineTo(xAt(i),yAt(data[i]));
   ctx.strokeStyle='#8b5cf6'; ctx.lineWidth=2; ctx.lineJoin='round'; ctx.stroke();
+  // ---- X 轴：每个刻度显示「MM-DD HH:MM」，条数按宽度自适应以防叠字 ----
+  const labelW=68;
+  const maxTicks=Math.max(2, Math.floor(cw/labelW));
+  const step=Math.max(1, Math.ceil((n-1)/(maxTicks-1)));
+  const ticks=[]; for(let i=0;i<n;i+=step) ticks.push(i);
+  if(ticks[ticks.length-1]!==n-1) ticks.push(n-1);
+  // 末尾两个刻度靠太近会叠字，去掉倒数第二个
+  if(ticks.length>2 && (xAt(ticks[ticks.length-1])-xAt(ticks[ticks.length-2]))<labelW) ticks.splice(ticks.length-2,1);
+  ctx.font='9px sans-serif'; ctx.textBaseline='top';
+  ctx.strokeStyle='rgba(255,255,255,.06)';
+  for(const i of ticks){
+    const x=xAt(i);
+    ctx.beginPath(); ctx.moveTo(x,padT); ctx.lineTo(x,padT+ch); ctx.stroke();
+    const txt=fmtMonStamp(monTimeAt(i,n));
+    let tx=x, align='center';
+    if(x-labelW/2<padL){ align='left'; tx=Math.max(padL,x); }
+    else if(x+labelW/2>padL+cw){ align='right'; tx=Math.min(padL+cw,x); }
+    ctx.textAlign=align; ctx.fillStyle='rgba(150,150,175,.85)';
+    ctx.fillText(txt, tx, padT+ch+6);
+  }
+  ctx.textBaseline='alphabetic';
+  // 最新点标记
   const lx=xAt(n-1), ly=yAt(data[n-1]);
   ctx.beginPath(); ctx.arc(lx,ly,3,0,Math.PI*2); ctx.fillStyle='#8b5cf6'; ctx.fill();
+  // ---- 悬停：竖线 + 圆点 + 数值气泡（可精确到每一个采样点）----
+  if(hoverIdx!=null && hoverIdx>=0 && hoverIdx<n){
+    const hx=xAt(hoverIdx), hy=yAt(data[hoverIdx]);
+    ctx.strokeStyle='rgba(139,92,246,.55)'; ctx.lineWidth=1;
+    ctx.beginPath(); ctx.moveTo(hx,padT); ctx.lineTo(hx,padT+ch); ctx.stroke();
+    ctx.beginPath(); ctx.arc(hx,hy,3.5,0,Math.PI*2); ctx.fillStyle='#fff'; ctx.fill();
+    ctx.beginPath(); ctx.arc(hx,hy,2,0,Math.PI*2); ctx.fillStyle='#8b5cf6'; ctx.fill();
+    const txt=fmtMonStamp(monTimeAt(hoverIdx,n))+' · CPU '+data[hoverIdx]+'%';
+    ctx.font='10px sans-serif';
+    const bw=ctx.measureText(txt).width+12, bh=16;
+    let bx=hx+8; if(bx+bw>padL+cw) bx=hx-8-bw; if(bx<padL) bx=padL;
+    const by=Math.max(padT, hy-bh-6);
+    ctx.fillStyle='rgba(26,26,38,.96)'; ctx.strokeStyle='rgb(72,72,90)'; ctx.lineWidth=1;
+    ctx.beginPath();
+    if(ctx.roundRect) ctx.roundRect(bx,by,bw,bh,4); else ctx.rect(bx,by,bw,bh);
+    ctx.fill(); ctx.stroke();
+    ctx.fillStyle='rgb(245,245,250)'; ctx.textAlign='left'; ctx.textBaseline='middle';
+    ctx.fillText(txt, bx+6, by+bh/2);
+    ctx.textBaseline='alphabetic';
+  }
+  // 鼠标交互：命中最近采样点
+  canvas.onmousemove=(ev)=>{
+    const rect=canvas.getBoundingClientRect();
+    let idx=Math.round(((ev.clientX-rect.left)-padL)/(cw/(n-1)));
+    idx=Math.max(0,Math.min(n-1,idx));
+    if(idx!==_monHover){ _monHover=idx; drawMonChart(canvas,data,history,idx); }
+  };
+  canvas.onmouseleave=()=>{ if(_monHover!=null){ _monHover=null; drawMonChart(canvas,data,history,null); } };
 }
 
 function closeModal(){if(_monTimer){clearInterval(_monTimer);_monTimer=null;}_monLive=false;state.modal=null;editMode=null;render()}
@@ -3924,6 +4081,7 @@ function mergeAPIData(apiProjects) {
     local._llmAnalyzed = apiP.llm_analyzed;
     local._llmStatus = apiP.llm_status;
     local._llmSummary = apiP.llm_summary;
+    local._llmError = apiP.llm_error;
     if (apiP.llm_tech_stack && apiP.llm_tech_stack.length > 0) {
       local.techStack = apiP.llm_tech_stack;
     }
@@ -3977,6 +4135,7 @@ async function syncProject(projectId) {
         local._llmAnalyzed = d.llm_analyzed;
         local._llmStatus = d.llm_status;
         local._llmSummary = d.llm_summary;
+        local._llmError = d.llm_error;
         if (d.llm_tech_stack && d.llm_tech_stack.length > 0) {
           local.techStack = d.llm_tech_stack;
         }
@@ -4564,6 +4723,7 @@ async function analyzeLocal(projectId) {
               local._llmAnalyzed = d.llm_analyzed;
               local._llmStatus = d.llm_status;
               local._llmSummary = d.llm_summary;
+              local._llmError = d.llm_error;
               if (d.todos && d.todos.pending) {
                 local.todos = [
                   ...d.todos.pending.map((todo, i) => ({ id: i + 1, name: todo.name, done: false })),
