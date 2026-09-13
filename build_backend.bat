@@ -5,7 +5,10 @@ REM  产物：backend\dist\devcenter-backend.exe（自包含 Python，目标机�
 REM  前置：本机已安装 Python 3.11+ 且在 PATH 中
 REM  用法：双击本文件，或在项目根目录执行 build_backend.bat
 REM ============================================================================
-cd /d %~dp0..
+REM  %~dp0 已经是本脚本所在目录（即项目根，末尾带反斜杠）。
+REM  曾经的写法是 `cd /d %~dp0..`，会跳到项目根的**上级目录**，
+REM  导致在别处新建 build_venv 并因找不到 backend\app.py 而失败。
+cd /d "%~dp0"
 
 if not exist backend\build_venv\Scripts\python.exe (
   echo [build] 创建构建用虚拟环境 backend\build_venv ...

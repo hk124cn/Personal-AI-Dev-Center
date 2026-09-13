@@ -114,7 +114,12 @@ body{font-family:var(--font);background:var(--bg-deep);color:var(--text);height:
 .cron-card{margin-bottom:14px}
 .cron-count{font-size:12px;font-weight:600;color:var(--text-tertiary);margin-left:6px}
 .cron-ta{width:100%;margin-bottom:10px}
-.cron-actions{display:flex;gap:8px}
+.cron-actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.cron-head-right{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.cron-tpl{max-width:210px;font-size:12px;padding:4px 8px}
+.cron-dirty{display:none;font-size:12px;font-weight:600;color:var(--amber)}
+.cron-card.dirty{border-color:var(--amber-border);background:var(--amber-muted)}
+.cron-card.dirty .cron-dirty{display:inline}
 .cron-dirs .cron-dir{padding:6px 0;font-size:13px;border-bottom:1px dashed var(--border)}
 .cron-dirs .cron-dir:last-child{border-bottom:none}
 .cron-dirs code{background:var(--bg-muted);padding:1px 6px;border-radius:4px;font-family:var(--mono);margin-right:6px}
@@ -762,7 +767,7 @@ select.form-input{cursor:pointer;appearance:none;background-image:url("data:imag
 <div id="app" class="app"></div>
 
 <script>
-const APP_VERSION = '1.4.18';
+const APP_VERSION = '1.4.19';
 // ==================== THEMES ====================
 const themes = {
   violet: {
@@ -2838,17 +2843,24 @@ function cronHTML(d, sid){
   const badge = d.writable
     ? `<span class="cron-badge ok">${icon('check-circle')} 可写入${d.is_root?'（root）':(d.sudo_available?'（sudo）':'')}</span>`
     : `<span class="cron-badge bad">${icon('alert-triangle')} 不可写入（非 root 且无 NOPASSWD sudo）</span>`;
-  const srcs=(d.sources||[]).map(s=>{
-    const taId='cron-ta-'+btoa(unescape(encodeURIComponent(s.scope))).replace(/[^a-zA-Z0-9]/g,'');
+  const srcs=(d.sources||[]).map((s,si)=>{
+    // 用下标做 id：原先把 scope 做 btoa 再剥掉非字母数字字符，理论上存在碰撞风险
+    const taId='cron-ta-'+si;
     const disabled = s.writable? '' : 'disabled';
+    const enc=encodeURIComponent(s.scope);
     return `<div class="panel cron-card">
-      <div class="panel-head"><h3>${icon('clock')} ${escapeHtml(s.label)} <span class="cron-count">${s.entries} 条</span></h3>
-        ${s.error?`<span class="cron-badge bad">${escapeHtml(s.error)}</span>`:''}</div>
+      <div class="panel-head"><h3>${icon('clock')} ${escapeHtml(s.label)} <span class="cron-count" id="${taId}-cnt">${s.entries} 条</span></h3>
+        <div class="cron-head-right">
+          ${s.error?`<span class="cron-badge bad">${escapeHtml(s.error)}</span>`:''}
+          <span class="cron-dirty">● 未保存</span>
+          <button class="btn btn-sm" onclick="cronReload('${sid}','${taId}','${enc}')">${icon('refresh-cw')} 重新读取</button>
+        </div></div>
       <div class="panel-body">
-        <textarea id="${taId}" class="kb-textarea cron-ta" rows="6" ${disabled}>${escapeHtml(s.content||'')}</textarea>
+        <textarea id="${taId}" class="kb-textarea cron-ta" rows="6" spellcheck="false" oninput="cronMarkDirty(this)" ${disabled}>${escapeHtml(s.content||'')}</textarea>
         <div class="cron-actions">
-          <button class="btn btn-sm btn-primary" ${disabled} onclick="saveCron('${sid}','${encodeURIComponent(s.scope)}','${taId}')">${icon('save')} 保存</button>
-          <button class="btn btn-sm" onclick="backupCron('${sid}','${encodeURIComponent(s.scope)}')">${icon('archive')} 备份</button>
+          <select class="cron-tpl" ${disabled} onchange="cronInsertTpl(this,'${taId}')">${cronTplOptions()}</select>
+          <button class="btn btn-sm btn-primary cron-save" ${disabled} onclick="saveCron('${sid}','${enc}','${taId}',this)">${icon('save')} <span class="cron-save-label">保存</span></button>
+          <button class="btn btn-sm" onclick="backupCron('${sid}','${enc}',this)">${icon('archive')} 备份</button>
         </div>
       </div></div>`;
   }).join('');
@@ -2856,36 +2868,106 @@ function cronHTML(d, sid){
   const dirHTML=Object.keys(dirs).length?`<div class="panel"><div class="panel-head"><h3>${icon('folder')} cron.* 脚本目录（只读）</h3></div><div class="panel-body cron-dirs">`+
     ['hourly','daily','weekly','monthly'].map(k=>`<div class="cron-dir"><b>/etc/cron.${k}</b>: ${dirs[k]&&dirs[k].length?dirs[k].map(x=>`<code>${escapeHtml(x)}</code>`).join(' '):'<span class="muted">空</span>'}</div>`).join('')+
     `</div></div>`:'';
-  return `<div class="cron-banner">连接用户 <b>${escapeHtml(d.connection_user||'?')}</b> · ${badge}</div>
-    <div class="cron-hint">提示：保存前会自动备份、校验语法、写回后读回验证；不一致自动回滚。破坏性操作请确认。</div>
+  return `<div class="cron-banner">连接用户 <b>${escapeHtml(d.connection_user||'?')}</b> · ${badge}
+    <span style="flex:1"></span>
+    <button class="btn btn-sm" onclick="loadServerCron('${sid}')">${icon('refresh-cw')} 全部刷新</button></div>
+    <div class="cron-hint">提示：保存前会自动备份、校验语法、写回后读回验证；不一致自动回滚。破坏性操作请确认。命令行里的 <b>%</b> 在 crontab 中需写成 <b>\\%</b>（否则会被当作换行）。</div>
     ${srcs}${dirHTML}`;
 }
-async function saveCron(id, scopeEnc, taId){
+// ---- 常用模板（插入后请按实际路径改好再保存）----
+const CRON_TEMPLATES=[
+  {n:'每天 03:00 备份网站目录',t:'# 每天 03:00 备份网站目录\n0 3 * * * /usr/bin/tar -czf /backup/site-$(date +\\%F).tar.gz /www/wwwroot/site'},
+  {n:'每 5 分钟保活 nginx',t:'# 每 5 分钟检查 nginx，挂了自动拉起\n*/5 * * * * /usr/bin/systemctl is-active --quiet nginx || /usr/bin/systemctl restart nginx'},
+  {n:'每小时清理 7 天前日志',t:'# 每小时清理 7 天前的日志\n0 * * * * /usr/bin/find /var/log/myapp -name "*.log" -mtime +7 -delete'},
+  {n:'每周一 04:00 重载 nginx',t:'# 每周一 04:00 重载 nginx\n0 4 * * 1 /usr/bin/systemctl reload nginx'},
+  {n:'每月 1 日 02:30 清理临时文件',t:'# 每月 1 日 02:30 清理 30 天前的临时文件\n30 2 1 * * /usr/bin/find /tmp -type f -mtime +30 -delete'},
+  {n:'每天 05:00 续期 SSL 证书',t:'# 每天 05:00 尝试续期证书\n0 5 * * * /usr/bin/certbot renew --quiet'},
+  {n:'@reboot 开机启动脚本',t:'# 开机自启\n@reboot /usr/bin/bash /root/startup.sh'}
+];
+function cronTplOptions(){
+  return `<option value="">＋ 插入常用模板…</option>`+CRON_TEMPLATES.map((t,i)=>`<option value="${i}">${escapeHtml(t.n)}</option>`).join('');
+}
+function cronCardOf(el){ return (el&&el.closest)?el.closest('.cron-card'):null; }
+// 只改文字不动 lucide 图标：图标是 createIcons() 运行时替换成 svg 的，
+// 直接覆写 button.innerHTML 会让图标变成一个空的 <i>
+function cronLabel(btn,txt){ if(!btn) return; const s=btn.querySelector('.cron-save-label'); if(s) s.textContent=txt; }
+function cronMarkDirty(ta){
+  const card=cronCardOf(ta); if(!card) return;
+  card.classList.add('dirty');
+  cronLabel(card.querySelector('.cron-save'),'保存 *');
+}
+function cronClearDirty(card){
+  if(!card) return;
+  card.classList.remove('dirty');
+  cronLabel(card.querySelector('.cron-save'),'保存');
+}
+function cronCountOf(text){
+  return (text||'').split('\n').filter(l=>l.trim()&&!l.trim().startsWith('#')).length;
+}
+function cronSetCount(taId,n){ const el=document.getElementById(taId+'-cnt'); if(el) el.textContent=n+' 条'; }
+function cronInsertTpl(sel, taId){
+  const raw=sel.value; sel.value='';
+  if(raw==='') return;
+  const ta=document.getElementById(taId), tpl=CRON_TEMPLATES[+raw];
+  if(!ta||!tpl) return;
+  const cur=ta.value.replace(/\s*$/,'');
+  ta.value=(cur?cur+'\n':'')+tpl.t+'\n';
+  ta.scrollTop=ta.scrollHeight;
+  cronMarkDirty(ta);
+  showToast('已插入模板，改好路径再点保存','plus');
+}
+async function cronReload(id, taId, scopeEnc){
+  const scope=decodeURIComponent(scopeEnc);
+  const ta=document.getElementById(taId); if(!ta) return;
+  const card=cronCardOf(ta);
+  if(card&&card.classList.contains('dirty')){
+    if(!confirm(`「${scope}」有未保存的修改，重新读取将丢弃它们，继续？`)) return;
+  }
+  try{
+    const res=await fetch(API_BASE+'/api/cron/'+encodeURIComponent(id)+'/get?scope='+encodeURIComponent(scope),{signal:AbortSignal.timeout(15000)});
+    const data=await res.json();
+    if(data.status==='error'){ showToast(data.error||'读取失败','alert-triangle'); return; }
+    ta.value=data.content||'';
+    cronClearDirty(card);
+    cronSetCount(taId, cronCountOf(ta.value));
+    showToast('已重新读取 '+scope,'refresh-cw');
+  }catch(e){ showToast('请求失败: '+(e.message||e),'alert-triangle'); }
+}
+async function saveCron(id, scopeEnc, taId, btn){
   const scope=decodeURIComponent(scopeEnc);
   const ta=document.getElementById(taId); if(!ta) return;
   if(!confirm(`确定保存 ${scope} 的 cron 改动并写回服务器？\n保存前会自动备份，如写回异常将自动回滚。`)) return;
   const content=ta.value;
-  const btn=event&&event.target?event.target.closest('button'):null;
+  const card=cronCardOf(ta);
+  const wasDirty=!!(card&&card.classList.contains('dirty'));
+  if(btn){ btn.disabled=true; cronLabel(btn,'保存中…'); }
   try{
-    const res=await fetch(API_BASE+'/api/cron/'+encodeURIComponent(id)+'/save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({scope,content}),signal:AbortSignal.timeout(20000)});
+    const res=await fetch(API_BASE+'/api/cron/'+encodeURIComponent(id)+'/save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({scope,content}),signal:AbortSignal.timeout(30000)});
     const data=await res.json();
     if(data.status==='ok' && data.ok){
       showToast(`已保存 ${scope}（${data.entries||0} 条）`,'check-circle');
       if(data.backup) console.log('cron backup:',data.backup);
+      cronClearDirty(card);
+      cronSetCount(taId, data.entries||0);
     }else{
       const msg=(data.validation_errors&&data.validation_errors.length)?('校验失败:\n'+data.validation_errors.join('\n')):(data.error||'保存失败');
       showToast(msg,'alert-triangle');
     }
   }catch(e){ showToast('请求失败: '+(e.message||e),'alert-triangle'); }
+  finally{
+    if(btn){ btn.disabled=false; cronLabel(btn, (card&&card.classList.contains('dirty'))?'保存 *':(wasDirty?'保存 *':'保存')); }
+  }
 }
-async function backupCron(id, scopeEnc){
+async function backupCron(id, scopeEnc, btn){
   const scope=decodeURIComponent(scopeEnc);
+  if(btn) btn.disabled=true;
   try{
     const res=await fetch(API_BASE+'/api/cron/'+encodeURIComponent(id)+'/backup',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({scope}),signal:AbortSignal.timeout(20000)});
     const data=await res.json();
     if(data.status==='ok'&&data.ok) showToast('已备份: '+data.backup,'archive');
     else showToast(data.error||'备份失败','alert-triangle');
   }catch(e){ showToast('请求失败: '+(e.message||e),'alert-triangle'); }
+  finally{ if(btn) btn.disabled=false; }
 }
 function colorLoad(id,v,cores){const el=document.getElementById(id); if(el&&v!=null) el.style.color=loadColor(v,cores);}
 function setMonOk(){
