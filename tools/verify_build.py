@@ -29,6 +29,10 @@ import time
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
+# 打包输出目录名（默认 dist）。运行中的 app 会锁 dist/，此时构建改输出到 dist_new，
+# 用 --dist dist_new 即可直接校验那批产物（后端 exe 路径不受它影响）。
+DIST = "dist"
+
 # 稳定存在的关键路由：缺任何一条都说明后端没打全
 CORE_ROUTES = [
     "/api/cron/{server_id}/list",
@@ -66,11 +70,11 @@ def verify_static(html_needles):
     ver = pkg["version"]
     print(f"package.json version = {ver}")
 
-    res = os.path.join(ROOT, "dist", "win-unpacked", "resources")
+    res = os.path.join(ROOT, DIST, "win-unpacked", "resources")
     if not os.path.isdir(res):
-        check("dist/win-unpacked/resources 存在", False)
+        check(f"{DIST}/win-unpacked/resources 存在", False)
         return
-    check("dist/win-unpacked/resources 存在", True)
+    check(f"{DIST}/win-unpacked/resources 存在", True)
 
     # index.html
     idx = os.path.join(res, "index.html")
@@ -116,8 +120,8 @@ def verify_static(html_needles):
     check("无真实 config.json / backend/data 泄漏", not leaks, ",".join(leaks))
     check("config.example.json 已随包", os.path.isfile(os.path.join(res, "config.example.json")))
 
-    pexe = os.path.join(ROOT, "dist", "Personal-AI-Dev-Center.exe")
-    check("dist/Personal-AI-Dev-Center.exe 已生成", os.path.isfile(pexe),
+    pexe = os.path.join(ROOT, DIST, "Personal-AI-Dev-Center.exe")
+    check(f"{DIST}/Personal-AI-Dev-Center.exe 已生成", os.path.isfile(pexe),
           f"{os.path.getsize(pexe)} bytes" if os.path.isfile(pexe) else "")
 
 
@@ -227,13 +231,17 @@ def verify_bytecode(needles):
 
 
 def main():
+    global DIST
     ap = argparse.ArgumentParser()
     ap.add_argument("--no-run", action="store_true", help="不启动后端 exe")
+    ap.add_argument("--dist", default="dist",
+                    help="打包输出目录名（默认 dist；app 运行中锁 dist 时构建会输出到 dist_new）")
     ap.add_argument("--html-needle", action="append", default=[],
                     help="本轮前端改动关键字（查 index.html），可重复")
     ap.add_argument("--exe-needle", action="append", default=[],
                     help="本轮后端改动关键字（查 exe 字节码），可重复")
     args = ap.parse_args()
+    DIST = args.dist
 
     verify_static(args.html_needle)
     if not args.no_run:
