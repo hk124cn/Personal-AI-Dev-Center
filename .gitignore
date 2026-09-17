@@ -4,6 +4,8 @@ config.json
 # ===== Build artifacts =====
 dist/
 dist_new/
+# 换包时的旧版本备份（mv dist dist_prev_<版本号>），确认新版可用后再删；绝不能入库（381MB）
+dist_prev_*/
 *.exe
 build_*.log
 
