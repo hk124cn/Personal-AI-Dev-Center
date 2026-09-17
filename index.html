@@ -708,6 +708,23 @@ select.form-input{cursor:pointer;appearance:none;background-image:url("data:imag
 .last-sync-bar.lsb-haserr{border-color:var(--red,#dc2626);background:var(--red-muted,#fff7f7)}
 .last-sync-bar .lsb-hint{width:100%;font-size:11px;color:var(--text-secondary);margin-top:6px;display:flex;align-items:center;gap:5px;line-height:1.5}
 .last-sync-bar .lsb-hint.lsb-hint-bad{color:var(--red,#dc2626)}
+/* ---- 首页精简模式（避免状态条占地方） ---- */
+.last-sync-bar.lsb-compact{padding:5px 10px;gap:8px;flex-wrap:nowrap;margin-bottom:10px;border-radius:var(--radius-sm,8px)}
+.last-sync-bar.lsb-compact .lsb-icon{display:flex;align-items:center}
+.last-sync-bar.lsb-compact .lsb-icon svg{width:14px;height:14px;stroke-width:2.2}
+.last-sync-bar.lsb-compact.lsb-expanded{flex-wrap:wrap;align-items:flex-start;padding:10px 14px;row-gap:0}
+.last-sync-bar.lsb-compact.lsb-expanded .lsb-body{flex:1;min-width:0}
+.lsb-line{flex:1;min-width:0;font-size:12px;color:var(--text-secondary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer;transition:color var(--dur) var(--ease)}
+.lsb-line:hover{color:var(--text)}
+.lsb-line b{font-weight:600}
+.lsb-bad-text{color:var(--red,#dc2626)}
+.lsb-cbtn{display:flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:6px;color:var(--text-tertiary);cursor:pointer;flex-shrink:0;transition:all var(--dur) var(--ease)}
+.lsb-cbtn:hover{background:var(--overlay);color:var(--text)}
+.lsb-cbtn svg{width:13px;height:13px;stroke-width:2.2}
+.last-sync-bar.lsb-compact.lsb-expanded .lsb-cbtn{align-self:flex-start;margin-left:6px}
+.lsb-mini{display:inline-flex;align-items:center;gap:5px;font-size:11px;color:var(--text-tertiary);cursor:pointer;margin-bottom:10px;padding:2px 9px;border-radius:20px;border:1px dashed var(--border);width:fit-content;transition:all var(--dur) var(--ease)}
+.lsb-mini:hover{color:var(--text);border-color:var(--text-tertiary);border-style:solid}
+.lsb-mini svg{width:12px;height:12px}
 /* 项目同步状态徽标（区分「内容更新时间」与「同步刷新时间」） */
 .sync-badge{display:inline-flex;align-items:center;gap:4px;font-size:10.5px;font-weight:600;padding:1px 7px;border-radius:20px;white-space:nowrap}
 .sync-badge.sync-ok{background:var(--green-muted,#dcfce7);color:var(--green,#16a34a)}
@@ -767,7 +784,7 @@ select.form-input{cursor:pointer;appearance:none;background-image:url("data:imag
 <div id="app" class="app"></div>
 
 <script>
-const APP_VERSION = '1.4.19';
+const APP_VERSION = '1.4.20';
 // ==================== THEMES ====================
 const themes = {
   violet: {
@@ -984,6 +1001,10 @@ const I18N = {
   ls_duration:{zh:'耗时',en:'took'},
   ls_all_ok_hint:{zh:'全部同步成功 · 各项目卡片上的「同步 X」即本次刷新时间',en:'All synced · the "synced X" on each project card is this refresh time'},
   ls_failed_hint:{zh:'个项目同步失败（已自动重试仍失败，多为瞬时网络问题，可手动重试）',en:'projects failed sync (retried automatically, still failing — usually transient, retry manually)'},
+  lsb_show:{zh:'显示同步状态',en:'Show sync status'},
+  lsb_hide:{zh:'隐藏（在「定时同步」页仍可查看）',en:'Hide (still visible on Schedules)'},
+  lsb_expand:{zh:'展开详情',en:'Expand details'},
+  lsb_collapse:{zh:'收起',en:'Collapse'},
   // 实时同步进度浮窗
   sp_title:{zh:'同步进度',en:'Sync progress'},
   sp_current:{zh:'正在同步',en:'Syncing'},
@@ -1467,7 +1488,7 @@ function viewDashboard(){
   saveStatsSnapshot({online:onC,active:actP,agents:state.agents.length,progress:avgP});
   const tOnline=getTrend(onC,'online'),tActive=getTrend(actP,'active'),tAgents=getTrend(state.agents.length,'agents'),tProgress=getTrend(avgP,'progress');
   const quickActions=`<div class="quick-actions"><div class="quick-action" onclick="addProject()">${icon('plus')} ${t('qa_new_project')}</div><div class="quick-action" onclick="addServer()">${icon('server')} ${t('qa_add_server')}</div><div style="flex:1"></div><div style="font-size:11px;color:var(--text-tertiary);align-self:center">v${APP_VERSION}</div></div>`;
-  return`${quickActions}${renderLastSyncBar(state.lastSync)}<div class="stats-grid">
+  return`${quickActions}${renderLastSyncBar(state.lastSync,'compact')}<div class="stats-grid">
     <div class="stat"><div class="stat-label">${icon('server')} ${t('stat_online')}</div><div class="stat-val">${onC}<span class="dim"> / ${state.servers.length}</span></div><div class="stat-sub">${state.servers.filter(s=>s.status==='planned').length} ${t('stat_planned')}</div>${trendHTML(tOnline)}</div>
     <div class="stat"><div class="stat-label">${icon('folder-kanban')} ${t('stat_active')}</div><div class="stat-val">${actP}</div><div class="stat-sub">${t('stat_total')} ${state.projects.length} · ${t('stat_avg_progress')} ${avgP}%</div>${trendHTML(tActive)}</div>
     <div class="stat"><div class="stat-label">${icon('bot')} ${t('stat_ai_tools')}</div><div class="stat-val">${state.agents.length}</div><div class="stat-sub">${t('stat_on_servers')} ${agS} ${t('stat_servers_unit')}</div>${trendHTML(tAgents)}</div>
@@ -3727,8 +3748,27 @@ function renderDevStatusBanner(ds){
   </div>`;
 }
 
-function renderLastSyncBar(ls){
+// 首页状态条显示模式：collapsed（默认·单行）/ expanded（展开详情）/ hidden（完全隐藏）
+const SYNCBAR_KEY='dc-syncbar-mode';
+function getSyncBarMode(){try{return localStorage.getItem(SYNCBAR_KEY)||'collapsed'}catch(e){return 'collapsed'}}
+function setSyncBarMode(m){try{localStorage.setItem(SYNCBAR_KEY,m)}catch(e){}render()}
+function toggleSyncBar(){setSyncBarMode(getSyncBarMode()==='expanded'?'collapsed':'expanded')}
+function hideSyncBar(){setSyncBarMode('hidden')}
+
+function renderLastSyncBar(ls, variant){
+  const compact = variant==='compact';
+  const mode = getSyncBarMode();
+  if(compact && mode==='hidden'){
+    return `<div class="lsb-mini" onclick="setSyncBarMode('collapsed')" title="${t('lsb_show')}">${icon('refresh-cw')}<span>${t('lsb_show')}</span></div>`;
+  }
   if(!ls || !ls.finished_at){
+    if(compact){
+      return `<div class="last-sync-bar lsb-compact" style="opacity:.72">
+        <div class="lsb-icon">${icon('clock')}</div>
+        <div class="lsb-line" onclick="toggleSyncBar()">${t('ls_bar_title')} · ${t('ls_none')}</div>
+        <span class="lsb-cbtn" onclick="hideSyncBar()" title="${t('lsb_hide')}">${icon('x')}</span>
+      </div>`;
+    }
     return `<div class="last-sync-bar" style="opacity:.72"><div class="lsb-icon">${icon('clock')}</div><div class="lsb-body"><div class="lsb-title">${t('ls_bar_title')}</div><div class="lsb-meta">${t('ls_none')}</div></div></div>`;
   }
   const when=relativeTime(ls.finished_at||ls.started_at);
@@ -3740,14 +3780,29 @@ function renderLastSyncBar(ls){
   const hint = allOk
     ? `<div class="lsb-hint">${icon('check-circle')} ${t('ls_all_ok_hint')}</div>`
     : `<div class="lsb-hint lsb-hint-bad">${icon('alert-triangle')} ${bad} ${t('ls_failed_hint')}</div>`;
-  return `<div class="last-sync-bar ${allOk?'lsb-allok':'lsb-haserr'}">
-    <div class="lsb-icon">${icon('refresh-cw')}</div>
-    <div class="lsb-body">
+  const body = `<div class="lsb-body">
       <div class="lsb-title">${t('ls_bar_title')} · ${escapeHtml(ls.source||'')} <span class="lsb-tag ${allOk?'lsb-ok':'lsb-bad'}">${allOk?t('ls_success'):(bad+' '+t('ls_failed'))}</span>${ana?`<span class="lsb-tag lsb-llm">${ana} ${t('ls_analyzed')}</span>`:''}</div>
       <div class="lsb-meta">${when} · ${ok} ${t('ls_success')} / ${bad} ${t('ls_failed')} · ${t('ls_duration')} ${ls.duration_sec}s ${total?('· '+total+' 项目'):''} ${errBtn}</div>
       ${hint}
       ${errHtml}
-    </div>
+    </div>`;
+  const cls = allOk?'lsb-allok':'lsb-haserr';
+  // 完整形态：定时同步页始终用它；首页仅在展开时使用
+  if(!compact || mode==='expanded'){
+    return `<div class="last-sync-bar ${compact?'lsb-compact lsb-expanded ':''}${cls}">
+    <div class="lsb-icon">${icon('refresh-cw')}</div>
+    ${body}${compact?`<span class="lsb-cbtn" onclick="toggleSyncBar()" title="${t('lsb_collapse')}">${icon('chevron-up')}</span>`:''}
+  </div>`;
+  }
+  // 首页折叠态：压成一行，只留最关键的「多久前 + 结果」
+  const short = allOk
+    ? `${t('ls_bar_title')} · ${when} · ${ok} ${t('ls_success')}${ana?(' · '+ana+' '+t('ls_analyzed')):''}`
+    : `${t('ls_bar_title')} · ${when} · <b class="lsb-bad-text">${bad} ${t('ls_failed')}</b>`;
+  return `<div class="last-sync-bar lsb-compact ${cls}">
+    <div class="lsb-icon">${icon(allOk?'check-circle':'alert-triangle')}</div>
+    <div class="lsb-line" onclick="toggleSyncBar()" title="${t('lsb_expand')}">${short}</div>
+    <span class="lsb-cbtn" onclick="toggleSyncBar()" title="${t('lsb_expand')}">${icon('chevron-down')}</span>
+    <span class="lsb-cbtn" onclick="hideSyncBar()" title="${t('lsb_hide')}">${icon('x')}</span>
   </div>`;
 }
 
