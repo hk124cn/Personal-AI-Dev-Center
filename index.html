@@ -784,7 +784,7 @@ select.form-input{cursor:pointer;appearance:none;background-image:url("data:imag
 <div id="app" class="app"></div>
 
 <script>
-const APP_VERSION = '1.4.20';
+const APP_VERSION = '1.4.21';
 // ==================== THEMES ====================
 const themes = {
   violet: {
@@ -1488,7 +1488,10 @@ function viewDashboard(){
   saveStatsSnapshot({online:onC,active:actP,agents:state.agents.length,progress:avgP});
   const tOnline=getTrend(onC,'online'),tActive=getTrend(actP,'active'),tAgents=getTrend(state.agents.length,'agents'),tProgress=getTrend(avgP,'progress');
   const quickActions=`<div class="quick-actions"><div class="quick-action" onclick="addProject()">${icon('plus')} ${t('qa_new_project')}</div><div class="quick-action" onclick="addServer()">${icon('server')} ${t('qa_add_server')}</div><div style="flex:1"></div><div style="font-size:11px;color:var(--text-tertiary);align-self:center">v${APP_VERSION}</div></div>`;
-  return`${quickActions}${renderLastSyncBar(state.lastSync,'compact')}<div class="stats-grid">
+  // 首页不再展示「最近同步」状态条（用户要求：删掉显示，后台查询照旧）。
+  // 后台仍在拉取并写入 state.lastSync（见 refreshData），「定时同步」页也照常显示完整形态。
+  // 需要恢复首页显示时，把 renderLastSyncBar(state.lastSync,'compact') 加回下面这行即可。
+  return`${quickActions}<div class="stats-grid">
     <div class="stat"><div class="stat-label">${icon('server')} ${t('stat_online')}</div><div class="stat-val">${onC}<span class="dim"> / ${state.servers.length}</span></div><div class="stat-sub">${state.servers.filter(s=>s.status==='planned').length} ${t('stat_planned')}</div>${trendHTML(tOnline)}</div>
     <div class="stat"><div class="stat-label">${icon('folder-kanban')} ${t('stat_active')}</div><div class="stat-val">${actP}</div><div class="stat-sub">${t('stat_total')} ${state.projects.length} · ${t('stat_avg_progress')} ${avgP}%</div>${trendHTML(tActive)}</div>
     <div class="stat"><div class="stat-label">${icon('bot')} ${t('stat_ai_tools')}</div><div class="stat-val">${state.agents.length}</div><div class="stat-sub">${t('stat_on_servers')} ${agS} ${t('stat_servers_unit')}</div>${trendHTML(tAgents)}</div>
