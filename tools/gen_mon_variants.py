@@ -2,18 +2,19 @@
 """生成「服务器实时监控」弹窗的截图变体页，供系统 Chrome 无头截图做视觉回归。
 
 为什么不用 Electron：本机沙箱里 Electron 跑不起来（GPU 进程崩 + file:// 被拒），
-所以走「变体页 + Chrome 无头」路线。详见 .workbuddy/memory/MEMORY.md。
+所以走「变体页 + Chrome 无头」路线。详见 .workbuddy/memory/MEMORY.md 与 AGENTS.md §8。
 
 用法：
-    python tools/gen_mon_variants.py                 # 用当前 index.html
-    python tools/gen_mon_variants.py --source old.html   # 传旧稿做「改动前」对照
+    python tools/gen_mon_variants.py                       # 用当前 index.html
+    python tools/gen_mon_variants.py --source old.html --prefix old-
+                                                           # 传旧稿做「改动前」对照
+
+脚本会自动识别新旧两代图表实现：
+  - 新版（有 updateMonChart / _monSeriesOn）：支持多曲线，变体含「三线全开」
+  - 旧版（只有 drawMonChart(canvas, data, history, hoverIdx) 单曲线）：自动降级
 
 输出目录：%TEMP%/padc_variants/*.html
-截图（示例，路径按实际 Chrome 位置调整）：
-    chrome.exe --headless=new --disable-gpu --no-sandbox \
-      --allow-file-access-from-files --force-device-scale-factor=1.5 \
-      --virtual-time-budget=9000 --window-size=1400,1100 \
-      --screenshot=out.png file:///.../mon-light.html
+截图：python tools/shot_variants.py <变体名…>
 """
 import argparse
 import io
@@ -60,7 +61,7 @@ setTimeout(function () {
     document.querySelectorAll('.fade-in').forEach(function (n) { n.classList.remove('fade-in'); });
     document.querySelectorAll('.toast, #toast-el').forEach(function (n) { n.remove(); });
     if (window.lucide) lucide.createIcons();
-    if (typeof updateMonChart === 'function') updateMonChart();
+    __DRAW__
     document.title = 'READY-MON';
   } catch (e) {
     document.title = 'INJECT_ERR: ' + (e && e.message);
@@ -69,13 +70,24 @@ setTimeout(function () {
 </script>
 '''
 
-# name, theme, 额外注入（在图例/画布就绪前执行）
-VARIANTS = [
-    ('mon-dark',        "'violet'", ''),
-    ('mon-light',       "'light'",  ''),
-    ('mon-all3',        "'violet'", "_monSeriesOn = { cpu:true, mem:true, disk:true };"),
-    ('mon-light-hover', "'light'",  "_monSeriesOn = { cpu:true, mem:true, disk:true }; _monHover = 26;"),
-    ('mon-hover',       "'violet'", "_monHover = 26;"),
+DRAW_MODERN = "if (typeof updateMonChart === 'function') updateMonChart();"
+# 旧版只有单曲线 drawMonChart(canvas, data, history, hoverIdx)
+DRAW_LEGACY = ("drawMonChart(document.getElementById('mon-chart'), _monData, _monHistory, _monHover);")
+
+# name, theme, 额外注入
+VARIANTS_MODERN = [
+    ('dark',        "'violet'", ''),
+    ('light',       "'light'",  ''),
+    ('all3',        "'violet'", "_monSeriesOn = { cpu:true, mem:true, disk:true };"),
+    ('light-hover', "'light'",  "_monSeriesOn = { cpu:true, mem:true, disk:true }; _monHover = 26;"),
+    ('hover',       "'violet'", "_monHover = 26;"),
+]
+
+VARIANTS_LEGACY = [
+    ('dark',        "'violet'", ''),
+    ('light',       "'light'",  ''),
+    ('light-hover', "'light'",  '_monHover = 26;'),
+    ('hover',       "'violet'", '_monHover = 26;'),
 ]
 
 
@@ -83,23 +95,32 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--source', default=os.path.join(ROOT, 'index.html'),
                     help='源 HTML（默认 index.html；可传旧稿做对照）')
+    ap.add_argument('--prefix', default='', help='输出文件名前缀，便于新旧并存')
     args = ap.parse_args()
 
     src = io.open(args.source, encoding='utf-8').read()
     if '</body>' not in src:
         print('ERROR: 源文件里找不到 </body>', file=sys.stderr)
         return 2
-    if 'function updateMonChart' not in src:
-        print('ERROR: 源文件里没有 updateMonChart（监控图表改造未生效？）', file=sys.stderr)
+
+    modern = 'function updateMonChart' in src
+    if not modern and 'function drawMonChart' not in src:
+        print('ERROR: 源文件里既没有 updateMonChart 也没有 drawMonChart', file=sys.stderr)
         return 2
+    variants = VARIANTS_MODERN if modern else VARIANTS_LEGACY
+    draw = DRAW_MODERN if modern else DRAW_LEGACY
+    print('%s → %s 模式（%d 个变体）' % (os.path.basename(args.source),
+                                        '新版多曲线' if modern else '旧版单曲线', len(variants)))
 
     os.makedirs(OUT, exist_ok=True)
-    for name, theme, extra in VARIANTS:
+    for name, theme, extra in variants:
         html = src.replace(
             '</body>',
-            INJECT.replace('__THEME__', theme).replace('__EXTRA__', extra) + '</body>',
+            INJECT.replace('__THEME__', theme)
+                  .replace('__EXTRA__', extra)
+                  .replace('__DRAW__', draw) + '</body>',
             1)
-        p = os.path.join(OUT, name + '.html')
+        p = os.path.join(OUT, args.prefix + name + '.html')
         io.open(p, 'w', encoding='utf-8').write(html)
         print('wrote', p)
     print('OUT=' + OUT)
