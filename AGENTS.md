@@ -112,6 +112,8 @@ python backend/test_cron_manager.py      # cron 后端单测
 - `shot_variants.py` —— 用系统 Chrome 无头给变体页批量截图。
 - `test_syncbar.mjs` —— 前端同步状态条分支自测（从 `index.html` 抽真实函数执行）。
 - `test_r8_r9.py` / `test_security_robustness.py` —— R6–R10 安全加固的集成测试。
+- `test_asset_modal.py` —— 弹窗草稿回归（Chrome 无头）：复现「后台重绘把资产表单换成『新增项目』、
+  输入全丢」的 bug。带 `--source` 可拿旧稿验证测试本身能失败。
 - `test_cron_realmachine.py` —— 真机 cron 全链路（用 `/tmp` 探针，不碰真实 crontab）。
 - `recreate_repo.py` —— GitHub 删库重建（清未引用对象，需 `GH_TOKEN` + `--confirm-delete`）。
 - `count_md.py` —— 统计某目录下的 Markdown 文件（跟本应用本身无关的通用小工具）。
@@ -211,6 +213,27 @@ Personal-AI-Dev-Center.exe        启动器（便携版外壳）
      **覆写 `innerHTML` 会让图标消失** → 只改内部 `<span>` 的文字。
 - **同步状态条**：首页**已按用户要求不再显示**同步状态条，但 `fetchAPIData()` 仍会写 `state.lastSync`
   （后台查询保留），「定时同步」页仍渲染完整形态。改首页展示时别动管理页的形态。
+
+### 弹窗（modal）三条硬约束 —— 违反任何一条都会「吃掉用户输入」
+
+前端是「整页重绘」式：`render()` 会把 `#app` 的 innerHTML 整个换掉，弹窗内容来自
+`state.modal.body`（一个**HTML 字符串**）。由此有三条必须遵守的规则：
+
+1. **弹窗表单的 HTML 必须同步写回 `state.modal.body`。**
+   两个渲染器（`renderEditModal()` / `renderAssetEditModal()`）都既写 DOM 也写
+   `state.modal.body`。只写 DOM 的后果：`state.modal.body` 停在「载入中…」，
+   之后任何一次 `render()` 都会把用户填好的表单打回空白。
+2. **`renderEditModal()` 只认 `type === 'server' | 'project'`，其它 type 直接 return。**
+   `render()` 里必须按 `editMode.type` 分派（asset → `renderAssetEditModal()`）。
+   ⚠️ 历史事故：`render()` 曾无条件 `if(editMode) renderEditModal()`，而 `renderEditModal()`
+   对 `type='asset'` 会掉进 else 分支 —— 资产弹窗会被整块换成「**新增项目**」表单
+   （标题取 `crud_new_project`），用户输入全丢。回归测试：`tools/test_asset_modal.py`。
+3. **后台轮询不得打断弹窗。** `fetchAPIData()`（每 5 分钟 + 同步结束后）在
+   `state.modal` 非空时**跳过 `render()`**；关弹窗时 `closeModal()` 会补一次 render，不会漏刷新。
+
+另有「表单草稿」兜底：`_formDraft` 通过 document 级 `input`/`change` 委托，按 `name`
+快照弹窗里每个字段，重绘后由 `restoreFormDraft()` 回填；弹窗由「无」变「有」时清空。
+新增弹窗表单时**给 input 加 `name` 属性**即可自动获得这层保护。
 
 ---
 

@@ -12,6 +12,7 @@
   5. R8/R9 集成测试   tools/test_r8_r9.py
   6. R6/R7/R10 集成测试 tools/test_security_robustness.py
   7. 保密自查：config.json 未被 git 跟踪
+  8. 弹窗草稿回归     tools/test_asset_modal.py（需 Chrome 无头）
 
 依赖：5/6 需要 fastapi / paramiko 等，优先用 backend/build_venv 的解释器。
 """
@@ -162,6 +163,9 @@ def main():
                    'tools/test_r8_r9.py (R8/R9)')
         run_script('test_security', [PY, os.path.join(TOOLS, 'test_security_robustness.py')],
                    'tools/test_security_robustness.py (R6/R7/R10)')
+        # 需要 Chrome 无头；没有 Chrome 就跳过而不是判失败
+        run_script('test_asset_modal', [PY, os.path.join(TOOLS, 'test_asset_modal.py')],
+                   'tools/test_asset_modal.py (弹窗草稿不回丢)')
 
     passed = sum(1 for _, ok, _ in RESULTS if ok)
     total = len(RESULTS)

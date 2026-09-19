@@ -1468,12 +1468,44 @@ function showToast(msg, iconName='check-circle'){
   if(window.lucide)lucide.createIcons();
 }
 
+// ==================== 弹窗表单草稿 ====================
+// 后台刷新（每 5 分钟的 fetchAPIData、同步结束后的刷新）会重绘整个界面，
+// 而弹窗表单是「一次性生成的 HTML」，重绘后用户已输入的内容就没了。
+// 这里把弹窗里每个具名字段按 name 快照下来，重绘后自动回填。
+let _formDraft = {};
+let _hadModal = false;
+function _draftCapture(e){
+  const el=e.target;
+  if(!el||!el.name||typeof el.closest!=='function')return;
+  if(!el.closest('.modal-body'))return;      // 只管弹窗里的表单
+  if(el.type==='radio'){ if(el.checked)_formDraft[el.name]=el.value; return; }
+  if(el.type==='checkbox'){ _formDraft[el.name]=el.checked; return; }
+  _formDraft[el.name]=el.value;
+}
+document.addEventListener('input',_draftCapture,true);
+document.addEventListener('change',_draftCapture,true);
+function restoreFormDraft(){
+  const body=document.querySelector('.modal-body'); if(!body)return;
+  body.querySelectorAll('[name]').forEach(el=>{
+    const v=_formDraft[el.name]; if(v===undefined)return;
+    if(el.type==='radio') el.checked=(el.value===v);
+    else if(el.type==='checkbox') el.checked=!!v;
+    else el.value=v;
+  });
+}
+function clearFormDraft(){ _formDraft={}; }
+
 // ==================== RENDER ====================
 function render(){
+  // 弹窗由「无」变「有」时清空草稿，避免上一个表单输入过的值串到新表单
+  const hasModal=!!state.modal;
+  if(hasModal&&!_hadModal) clearFormDraft();
+  _hadModal=hasModal;
   document.getElementById('app').innerHTML=`${sidebarHTML()}<div class="main">${topbarHTML()}<div class="content fade-in">${renderView()}</div></div>${modalHTML()}`;
   applyTheme(currentTheme);
   if(window.lucide)lucide.createIcons();
-  if(editMode) renderEditModal();
+  // 按 editMode.type 分派：资产有独立渲染器，不能塞给 renderEditModal（它只认 server/project）
+  if(editMode){ if(editMode.type==='asset') renderAssetEditModal(); else renderEditModal(); }
   if(state.view==='dashboard'&&state.dashMonLive&&!_dashMonTimer){initDashboardMonitor();}
 }
 
@@ -2075,10 +2107,15 @@ function renderAssetEditModal(){
     <div class="form-row">${renderFormField(t('asset_status'),'asset_status',a.status,'select',[{value:'active',label:'正常'},{value:'suspended',label:'暂停'},{value:'expired',label:'已过期'},{value:'pending',label:'待激活'}])}<div class="form-group"></div></div>
     ${renderFormField(t('asset_note'),'asset_note',a.note,'textarea')}
     <div class="form-actions"><button class="btn btn-danger" onclick="deleteAsset('${editMode.id||''}')">${t('crud_delete')}</button><div style="flex:1"></div><button class="btn" onclick="editMode=null;closeModal()">${t('crud_cancel')}</button><button class="btn btn-success" onclick="saveAsset()">${t('crud_save')}</button></div>`;
+  const bodyHTML='<div class="fade-in">'+formHTML+'</div>';
+  // 同步写回 state.modal：否则 state.modal.body 一直停在「载入中…」，
+  // 之后任何一次 render() 都会把已经填好的资产表单打回空白
+  if(state.modal) state.modal.body=bodyHTML;
   const modalBody=document.querySelector('.modal-body');
-  if(modalBody)modalBody.innerHTML='<div class="fade-in">'+formHTML+'</div>';
+  if(modalBody)modalBody.innerHTML=bodyHTML;
   if(window.lucide)lucide.createIcons();
   renderRegList();
+  restoreFormDraft();
 }
 
 function collectAssetRegs(){
@@ -3537,6 +3574,10 @@ function renderFormField(label, name, value, type='text', options=[]) {
 
 function renderEditModal() {
   if (!editMode) return;
+  // 本函数只会画 server / project 两种表单。资产有独立的 renderAssetEditModal，
+  // 这里必须挡掉，否则 type='asset' 会掉进下面的 else 分支，把资产弹窗
+  // 整块换成「新增项目」表单（标题也会变成 crud_new_project）。
+  if (editMode.type !== 'server' && editMode.type !== 'project') return;
   var isServer = editMode.type === 'server';
   var d = editMode.data;
   var isNew = !editMode.id;
@@ -3568,9 +3609,13 @@ function renderEditModal() {
 
   var modalBody = document.querySelector('.modal-body');
   var modalTitle = document.querySelector('.modal-header h2');
-  if (modalBody) modalBody.innerHTML = '<div class="fade-in">' + formHTML + '<div class="form-actions"><button class="btn btn-danger" onclick="delete' + (isServer ? 'Server' : 'Project') + '(\'' + (editMode.id || '') + '\')">' + t('crud_delete') + '</button><div style="flex:1"></div><button class="btn" onclick="editMode=null;closeModal()">' + t('crud_cancel') + '</button><button class="btn btn-success" onclick="saveEdit()">' + t('crud_save') + '</button></div></div>';
+  var bodyHTML = '<div class="fade-in">' + formHTML + '<div class="form-actions"><button class="btn btn-danger" onclick="delete' + (isServer ? 'Server' : 'Project') + '(\'' + (editMode.id || '') + '\')">' + t('crud_delete') + '</button><div style="flex:1"></div><button class="btn" onclick="editMode=null;closeModal()">' + t('crud_cancel') + '</button><button class="btn btn-success" onclick="saveEdit()">' + t('crud_save') + '</button></div></div>';
+  // 同步写回 state.modal，保证即便后续发生重绘，画出来的也是这个编辑表单
+  if (state.modal) { state.modal.body = bodyHTML; state.modal.title = title; }
+  if (modalBody) modalBody.innerHTML = bodyHTML;
   if (modalTitle) modalTitle.textContent = title;
   if (window.lucide) lucide.createIcons();
+  restoreFormDraft();
 }
 
 async function saveEdit() {
@@ -4304,7 +4349,9 @@ async function fetchAPIData() {
       apiConnected = true;
       lastSyncTime = data.synced_at;
       mergeAPIData(data.projects);
-      render();
+      // 弹窗打开时跳过重绘：这只是后台轮询（每 5 分钟 / 同步结束后），
+      // 没有理由打断用户正在填写的表单。关弹窗时 closeModal() 会 render()，不会漏刷新。
+      if (!state.modal) render();
     }
   } catch(e) {
     apiConnected = false;
