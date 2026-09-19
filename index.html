@@ -20,6 +20,8 @@
   --amber:#eab308;--amber-muted:rgba(234,179,8,.1);--amber-border:rgba(234,179,8,.22);
   --red:#ef4444;--red-muted:rgba(239,68,68,.1);--red-border:rgba(239,68,68,.22);
   --blue:#3b82f6;--blue-muted:rgba(59,130,246,.1);--blue-border:rgba(59,130,246,.22);
+  /* 监控趋势曲线专用色：浅色主题下 --amber 的黄线在白底几乎不可见，单独给一套（见 html[data-theme="light"]） */
+  --mon-cpu:var(--accent);--mon-mem:var(--amber);--mon-disk:var(--blue);
   --radius:12px;--radius-sm:8px;--radius-xs:6px;
   --shadow:0 1px 3px var(--shadow-color),0 8px 24px var(--shadow-color);
   --shadow-lg:0 4px 12px var(--shadow-color-lg),0 16px 40px var(--shadow-color-lg);
@@ -27,6 +29,8 @@
   --font:-apple-system,BlinkMacSystemFont,"SF Pro Display","SF Pro Text","Helvetica Neue","PingFang SC","Microsoft YaHei",sans-serif;
   --mono:"SF Mono","Fira Code","Cascadia Code","JetBrains Mono",monospace;
 }
+/* 浅色主题：黄(#eab308)/亮蓝在白底上对比度不足，换成更深的同色系（html[...] 特指度高于 :root，顺序无关） */
+html[data-theme="light"]{--mon-mem:#b45309;--mon-disk:#2563eb}
 body{font-family:var(--font);background:var(--bg-deep);color:var(--text);height:100vh;overflow:hidden;font-size:14px;line-height:1.5;-webkit-font-smoothing:antialiased}
 ::-webkit-scrollbar{width:4px}::-webkit-scrollbar-track{background:transparent}
 ::-webkit-scrollbar-thumb{background:var(--border);border-radius:4px}
@@ -620,6 +624,13 @@ select.form-input{cursor:pointer;appearance:none;background-image:url("data:imag
 .mon-chart-card h4 svg{width:14px;height:14px;stroke-width:1.8;color:var(--accent)}
 .mon-chart-sub{font-size:11px;color:var(--text-tertiary);margin-bottom:6px}
 .mon-chart{width:100%;height:112px;display:block;cursor:crosshair}
+.mon-chart-legend{display:flex;align-items:center;gap:8px;font-size:11px;color:var(--text-tertiary);margin-bottom:6px;flex-wrap:wrap}
+.mcl{display:inline-flex;align-items:center;gap:5px;cursor:pointer;padding:2px 9px;border-radius:20px;border:1px solid transparent;transition:all var(--dur) var(--ease);user-select:none}
+.mcl:hover{border-color:var(--border)}
+.mcl i{width:8px;height:8px;border-radius:2px;display:inline-block;opacity:.3}
+.mcl.on{color:var(--text);background:var(--overlay)}
+.mcl.on i{opacity:1}
+.mcl-hint{margin-left:auto;opacity:.75}
 .mon-net{display:grid;grid-template-columns:1fr 1fr;gap:12px}
 .mon-net .mn{background:var(--bg-elevated);border-radius:8px;padding:12px 14px;display:flex;align-items:center;gap:12px}
 .mon-net .mn svg{width:22px;height:22px;stroke-width:1.8;flex-shrink:0}
@@ -784,7 +795,7 @@ select.form-input{cursor:pointer;appearance:none;background-image:url("data:imag
 <div id="app" class="app"></div>
 
 <script>
-const APP_VERSION = '1.4.21';
+const APP_VERSION = '1.4.22';
 // ==================== THEMES ====================
 const themes = {
   violet: {
@@ -2826,8 +2837,14 @@ function monitorHTML(s){
       </div>
     </div>
     <div class="mon-chart-card">
-      <h4>${icon('line-chart')} CPU 使用率趋势</h4>
-      <div class="mon-chart-sub">每分钟采样一次 · 最近 60 个采样点（约 1 小时） · X 轴为日期+时间，悬停可查看任意采样点</div>
+      <h4>${icon('line-chart')} 资源趋势</h4>
+      <div class="mon-chart-sub" id="mon-chart-sub">等待采样…</div>
+      <div class="mon-chart-legend">
+        <span class="mcl on" id="mcl-cpu" onclick="toggleMonSeries('cpu')"><i style="background:var(--mon-cpu,var(--accent))"></i>CPU</span>
+        <span class="mcl on" id="mcl-mem" onclick="toggleMonSeries('mem')"><i style="background:var(--mon-mem,var(--amber))"></i>内存</span>
+        <span class="mcl" id="mcl-disk" onclick="toggleMonSeries('disk')"><i style="background:var(--mon-disk,var(--blue))"></i>磁盘</span>
+        <span class="mcl-hint">点图例切换曲线 · 悬停查看任意采样点</span>
+      </div>
       <canvas class="mon-chart" id="mon-chart"></canvas>
     </div>
     <div class="mon-net">
@@ -3059,32 +3076,102 @@ async function pollMonitor(id){
       _monHistory=d.history.filter(h=>h && h.cpu_percent!=null);
       _monData=_monHistory.map(h=>h.cpu_percent);
     }
-    if(_monData.length>1) drawMonChart(document.getElementById('mon-chart'), _monData, _monHistory, _monHover);
+    updateMonChart();
   }catch(e){ setMonError('请求失败: '+e.message); }
 }
-function drawMonChart(canvas, data, history, hoverIdx){
+// ---- 图表通用：从 CSS 变量取色（跟随主题；theme 定义了 --amber/--blue 等） ----
+function cssVar(name, fb){
+  try{
+    const cs=getComputedStyle(document.documentElement);
+    let v=cs.getPropertyValue(name).trim();
+    // 兼容 --mon-cpu:var(--accent) 这类间接引用（多数浏览器会先替换，这里再兜一层）
+    for(let i=0;i<3;i++){
+      const m=/^var\(\s*(--[\w-]+)\s*(?:,\s*([^)]*))?\)$/.exec(v);
+      if(!m) break;
+      v=(cs.getPropertyValue(m[1]).trim())||((m[2]||'').trim());
+    }
+    return v||(fb||'');
+  }catch(e){ return (fb||''); }
+}
+// 把 rgb()/#hex 转成带透明度的 rgba()：渐变填充要跟着主题 accent 走，不能硬编码
+function colorWithAlpha(col, a){
+  if(!col) return 'rgba(139,92,246,'+a+')';
+  let m=/^rgba?\(([^)]+)\)$/.exec(col);
+  if(m){ const p=m[1].split(',').map(s=>s.trim()); return 'rgba('+p[0]+','+p[1]+','+p[2]+','+a+')'; }
+  m=/^#([0-9a-f]{6})$/i.exec(col);
+  if(m){ const n=parseInt(m[1],16); return 'rgba('+((n>>16)&255)+','+((n>>8)&255)+','+(n&255)+','+a+')'; }
+  m=/^#([0-9a-f]{3})$/i.exec(col);
+  if(m){ const s=m[1]; return 'rgba('+parseInt(s[0]+s[0],16)+','+parseInt(s[1]+s[1],16)+','+parseInt(s[2]+s[2],16)+','+a+')'; }
+  return col;
+}
+// 资源趋势图可切换的指标（默认 CPU + 内存；磁盘变化慢，需要时点开）
+let _monSeriesOn = { cpu:true, mem:true, disk:false };
+function toggleMonSeries(k){
+  _monSeriesOn[k]=!_monSeriesOn[k];
+  _monHover=null;
+  updateMonChart();
+}
+// 组装启用中的曲线并重绘；顺带按真实采样点刷新副标题的跨度描述
+function updateMonChart(){
+  const canvas=document.getElementById('mon-chart');
+  const sub=document.getElementById('mon-chart-sub');
+  const n=_monHistory.length;
+  if(sub){
+    if(n<2){ sub.textContent='等待采样…本窗口每 60 秒采一次，最多保留 60 个点'; }
+    else{
+      const mins=Math.max(1, Math.round((monTimeAt(n-1,n)-monTimeAt(0,n))/60000));
+      const span=mins>=90?(mins/60).toFixed(1)+' 小时':mins+' 分钟';
+      sub.textContent=n+' 个采样点 · 覆盖约 '+span+'（首页监控也会写入，跨度随刷新频率变化）';
+    }
+  }
+  // 图例高亮以 _monSeriesOn 为唯一真源（外部改状态后也能自动纠正）
+  ['cpu','mem','disk'].forEach(k=>{
+    const el=document.getElementById('mcl-'+k);
+    if(el) el.classList.toggle('on', !!_monSeriesOn[k]);
+  });
+  if(!canvas) return;
+  const defs=[
+    { k:'cpu',  label:'CPU',  v:'--mon-cpu',  alt:'#8b5cf6', grad:.30, get:h=>h.cpu_percent },
+    { k:'mem',  label:'内存', v:'--mon-mem',  alt:'#eab308', grad:0,   get:h=>h.mem_percent },
+    { k:'disk', label:'磁盘', v:'--mon-disk', alt:'#3b82f6', grad:0,   get:h=>h.disk_percent },
+  ];
+  const series=defs.filter(d=>_monSeriesOn[d.k]).map(d=>{
+    const c=cssVar(d.v)||d.alt;
+    return {
+      key:d.k, label:d.label, color:c,
+      fill:d.grad?colorWithAlpha(c,d.grad):null,
+      values:_monHistory.map(h=>{ const v=d.get(h); return (v==null||isNaN(v))?null:Math.round(v*10)/10; })
+    };
+  }).filter(s=>s.values.some(v=>v!=null));
+  drawMonChart(canvas, series, _monHistory, _monHover);
+}
+
+function drawMonChart(canvas, series, history, hoverIdx){
   if(!canvas) return;
   const dpr=window.devicePixelRatio||1;
   const w=canvas.clientWidth, h=canvas.clientHeight;
   if(w===0) return;
   canvas.width=w*dpr; canvas.height=h*dpr;
   const ctx=canvas.getContext('2d'); ctx.setTransform(dpr,0,0,dpr,0,0); ctx.clearRect(0,0,w,h);
-  // padB 留给 X 轴「日期+时间」标签
-  const padL=4,padR=4,padT=10,padB=28, cw=w-padL-padR, ch=h-padT-padB, max=100;
-  // 水平网格 + Y 轴刻度
-  ctx.lineWidth=1; ctx.font='9px sans-serif';
-  for(let i=0;i<=4;i++){const y=padT+ch*i/4; ctx.strokeStyle='rgba(255,255,255,.06)'; ctx.beginPath();ctx.moveTo(padL,y);ctx.lineTo(padL+cw,y);ctx.stroke();
-    ctx.fillStyle='rgba(150,150,175,.5)';ctx.textAlign='right';ctx.fillText((max-(max*i/4))+'%',padL+cw-2,y-1);}
-  if(data.length<2) return;
-  const n=data.length, xAt=i=>padL+cw*(i/(n-1)), yAt=v=>padT+ch*(1-v/max);
-  const grad=ctx.createLinearGradient(0,padT,0,padT+ch);
-  grad.addColorStop(0,'rgba(139,92,246,.35)'); grad.addColorStop(1,'rgba(139,92,246,0)');
-  ctx.beginPath(); ctx.moveTo(xAt(0),yAt(data[0]));
-  for(let i=1;i<n;i++) ctx.lineTo(xAt(i),yAt(data[i]));
-  ctx.lineTo(xAt(n-1),padT+ch); ctx.lineTo(xAt(0),padT+ch); ctx.closePath(); ctx.fillStyle=grad; ctx.fill();
-  ctx.beginPath(); ctx.moveTo(xAt(0),yAt(data[0]));
-  for(let i=1;i<n;i++) ctx.lineTo(xAt(i),yAt(data[i]));
-  ctx.strokeStyle='#8b5cf6'; ctx.lineWidth=2; ctx.lineJoin='round'; ctx.stroke();
+  // 颜色一律从 CSS 变量取：硬编码的深色值在「明亮白」主题下会看不见
+  const GRID=cssVar('--border','rgba(128,128,145,.2)');
+  const AXIS=cssVar('--text-secondary','rgba(150,150,175,.85)');
+  const BUBBLE_BG=cssVar('--bg-elevated','rgba(26,26,38,.96)');
+  const BUBBLE_BD=cssVar('--border-hover','rgb(90,90,110)');
+  const BUBBLE_FG=cssVar('--text','rgb(245,245,250)');
+  // padL 留出 Y 轴刻度文字的装订线：原来贴在右边缘会和曲线末端叠在一起
+  const padL=30,padR=6,padT=10,padB=28, cw=w-padL-padR, ch=h-padT-padB, max=100;
+  // 水平网格 + Y 轴刻度（左对齐装订线内）
+  ctx.lineWidth=1; ctx.font='9px sans-serif'; ctx.textBaseline='middle';
+  for(let i=0;i<=4;i++){
+    const y=padT+ch*i/4;
+    ctx.strokeStyle=GRID; ctx.beginPath(); ctx.moveTo(padL,y); ctx.lineTo(padL+cw,y); ctx.stroke();
+    ctx.fillStyle=AXIS; ctx.textAlign='right'; ctx.fillText((max-(max*i/4))+'%',padL-5,y);
+  }
+  const list=(series||[]).filter(s=>s&&s.values&&s.values.length);
+  const n=list.length?list[0].values.length:0;
+  if(n<2) return;
+  const xAt=i=>padL+cw*(i/(n-1)), yAt=v=>padT+ch*(1-Math.max(0,Math.min(max,v))/max);
   // ---- X 轴：每个刻度显示「MM-DD HH:MM」，条数按宽度自适应以防叠字 ----
   const labelW=68;
   const maxTicks=Math.max(2, Math.floor(cw/labelW));
@@ -3093,8 +3180,7 @@ function drawMonChart(canvas, data, history, hoverIdx){
   if(ticks[ticks.length-1]!==n-1) ticks.push(n-1);
   // 末尾两个刻度靠太近会叠字，去掉倒数第二个
   if(ticks.length>2 && (xAt(ticks[ticks.length-1])-xAt(ticks[ticks.length-2]))<labelW) ticks.splice(ticks.length-2,1);
-  ctx.font='9px sans-serif'; ctx.textBaseline='top';
-  ctx.strokeStyle='rgba(255,255,255,.06)';
+  ctx.font='9px sans-serif'; ctx.textBaseline='top'; ctx.strokeStyle=GRID;
   for(const i of ticks){
     const x=xAt(i);
     ctx.beginPath(); ctx.moveTo(x,padT); ctx.lineTo(x,padT+ch); ctx.stroke();
@@ -3102,41 +3188,70 @@ function drawMonChart(canvas, data, history, hoverIdx){
     let tx=x, align='center';
     if(x-labelW/2<padL){ align='left'; tx=Math.max(padL,x); }
     else if(x+labelW/2>padL+cw){ align='right'; tx=Math.min(padL+cw,x); }
-    ctx.textAlign=align; ctx.fillStyle='rgba(150,150,175,.85)';
-    ctx.fillText(txt, tx, padT+ch+6);
+    ctx.textAlign=align; ctx.fillStyle=AXIS; ctx.fillText(txt, tx, padT+ch+6);
   }
   ctx.textBaseline='alphabetic';
-  // 最新点标记
-  const lx=xAt(n-1), ly=yAt(data[n-1]);
-  ctx.beginPath(); ctx.arc(lx,ly,3,0,Math.PI*2); ctx.fillStyle='#8b5cf6'; ctx.fill();
-  // ---- 悬停：竖线 + 圆点 + 数值气泡（可精确到每一个采样点）----
+  // ---- 逐条画线：第一条（主指标）带渐变填充，其余只描边 ----
+  list.forEach((s,si)=>{
+    const v=s.values;
+    if(si===0){
+      const grad=ctx.createLinearGradient(0,padT,0,padT+ch);
+      grad.addColorStop(0, s.fill||'rgba(139,92,246,.30)');
+      grad.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.beginPath(); let began=false;
+      for(let i=0;i<n;i++){ if(v[i]==null) continue; const X=xAt(i),Y=yAt(v[i]); began?ctx.lineTo(X,Y):(ctx.moveTo(X,Y),began=true); }
+      if(began){ ctx.lineTo(xAt(n-1),padT+ch); ctx.lineTo(xAt(0),padT+ch); ctx.closePath(); ctx.fillStyle=grad; ctx.fill(); }
+    }
+    ctx.beginPath(); let began=false;
+    for(let i=0;i<n;i++){ if(v[i]==null) continue; const X=xAt(i),Y=yAt(v[i]); began?ctx.lineTo(X,Y):(ctx.moveTo(X,Y),began=true); }
+    ctx.strokeStyle=s.color; ctx.lineWidth=si===0?2:1.6; ctx.lineJoin='round'; ctx.stroke();
+    // 最新采样点标记
+    if(v[n-1]!=null){ ctx.beginPath(); ctx.arc(xAt(n-1),yAt(v[n-1]),2.6,0,Math.PI*2); ctx.fillStyle=s.color; ctx.fill(); }
+  });
+  // ---- 悬停：竖线 + 各曲线圆点 + 多行数值气泡 ----
   if(hoverIdx!=null && hoverIdx>=0 && hoverIdx<n){
-    const hx=xAt(hoverIdx), hy=yAt(data[hoverIdx]);
-    ctx.strokeStyle='rgba(139,92,246,.55)'; ctx.lineWidth=1;
+    const hx=xAt(hoverIdx);
+    ctx.strokeStyle=GRID; ctx.lineWidth=1;
     ctx.beginPath(); ctx.moveTo(hx,padT); ctx.lineTo(hx,padT+ch); ctx.stroke();
-    ctx.beginPath(); ctx.arc(hx,hy,3.5,0,Math.PI*2); ctx.fillStyle='#fff'; ctx.fill();
-    ctx.beginPath(); ctx.arc(hx,hy,2,0,Math.PI*2); ctx.fillStyle='#8b5cf6'; ctx.fill();
-    const txt=fmtMonStamp(monTimeAt(hoverIdx,n))+' · CPU '+data[hoverIdx]+'%';
-    ctx.font='10px sans-serif';
-    const bw=ctx.measureText(txt).width+12, bh=16;
-    let bx=hx+8; if(bx+bw>padL+cw) bx=hx-8-bw; if(bx<padL) bx=padL;
-    const by=Math.max(padT, hy-bh-6);
-    ctx.fillStyle='rgba(26,26,38,.96)'; ctx.strokeStyle='rgb(72,72,90)'; ctx.lineWidth=1;
-    ctx.beginPath();
-    if(ctx.roundRect) ctx.roundRect(bx,by,bw,bh,4); else ctx.rect(bx,by,bw,bh);
-    ctx.fill(); ctx.stroke();
-    ctx.fillStyle='rgb(245,245,250)'; ctx.textAlign='left'; ctx.textBaseline='middle';
-    ctx.fillText(txt, bx+6, by+bh/2);
-    ctx.textBaseline='alphabetic';
+    const rows=[];
+    list.forEach(s=>{
+      const val=s.values[hoverIdx]; if(val==null) return;
+      const Y=yAt(val);
+      ctx.beginPath(); ctx.arc(hx,Y,3.4,0,Math.PI*2); ctx.fillStyle=BUBBLE_BG; ctx.fill();
+      ctx.beginPath(); ctx.arc(hx,Y,2,0,Math.PI*2); ctx.fillStyle=s.color; ctx.fill();
+      rows.push({label:s.label, val:val, color:s.color, y:Y});
+    });
+    if(rows.length){
+      const head=fmtMonStamp(monTimeAt(hoverIdx,n));
+      ctx.font='10px sans-serif';
+      const texts=rows.map(r=>r.label+' '+r.val+'%');
+      const bw=Math.max(ctx.measureText(head).width,...texts.map(x=>ctx.measureText(x).width))+20;
+      const bh=13*(rows.length+1)+8;
+      let bx=hx+8; if(bx+bw>padL+cw) bx=hx-8-bw; if(bx<padL) bx=padL;
+      let by=Math.max(padT, Math.min(...rows.map(r=>r.y))-bh-6);
+      if(by+bh>padT+ch) by=Math.max(padT,padT+ch-bh);
+      ctx.fillStyle=BUBBLE_BG; ctx.strokeStyle=BUBBLE_BD; ctx.lineWidth=1;
+      ctx.beginPath();
+      if(ctx.roundRect) ctx.roundRect(bx,by,bw,bh,4); else ctx.rect(bx,by,bw,bh);
+      ctx.fill(); ctx.stroke();
+      ctx.textAlign='left'; ctx.textBaseline='middle';
+      ctx.fillStyle=BUBBLE_FG; ctx.fillText(head, bx+8, by+10);
+      rows.forEach((r,ri)=>{
+        const ty=by+10+13*(ri+1);
+        ctx.fillStyle=r.color; ctx.fillRect(bx+8, ty-3.5, 7, 7);
+        ctx.fillStyle=BUBBLE_FG; ctx.fillText(r.label+' '+r.val+'%', bx+20, ty);
+      });
+      ctx.textBaseline='alphabetic';
+    }
   }
   // 鼠标交互：命中最近采样点
   canvas.onmousemove=(ev)=>{
     const rect=canvas.getBoundingClientRect();
     let idx=Math.round(((ev.clientX-rect.left)-padL)/(cw/(n-1)));
     idx=Math.max(0,Math.min(n-1,idx));
-    if(idx!==_monHover){ _monHover=idx; drawMonChart(canvas,data,history,idx); }
+    if(idx!==_monHover){ _monHover=idx; updateMonChart(); }
   };
-  canvas.onmouseleave=()=>{ if(_monHover!=null){ _monHover=null; drawMonChart(canvas,data,history,null); } };
+  canvas.onmouseleave=()=>{ if(_monHover!=null){ _monHover=null; updateMonChart(); } };
 }
 
 function closeModal(){if(_monTimer){clearInterval(_monTimer);_monTimer=null;}_monLive=false;state.modal=null;editMode=null;render()}

@@ -3,7 +3,7 @@
 """
 import os, sys, time, subprocess, tempfile, threading, shutil
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))  # 仓库根（本脚本在 tools/ 下）
 
 from backend import app as app_mod
 from backend import sync as sync_mod
