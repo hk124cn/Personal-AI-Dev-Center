@@ -9,12 +9,13 @@
   2. index.html 内联 JS 语法（node --check）
   3. backend/*.py 语法编译
   4. 前端逻辑自测 tools/test_syncbar.mjs（从 index.html 抽真实函数）
-  5. R8/R9 集成测试   tools/test_r8_r9.py
-  6. R6/R7/R10 集成测试 tools/test_security_robustness.py
-  7. 保密自查：config.json 未被 git 跟踪
-  8. 弹窗草稿回归     tools/test_asset_modal.py（需 Chrome 无头）
+  5. 同步合并自测 tools/test_syncmerge.mjs（问题不污染功能清单 / 内容时间换源 / 首页徽标）
+  6. R8/R9 集成测试   tools/test_r8_r9.py
+  7. R6/R7/R10 集成测试 tools/test_security_robustness.py
+  8. 保密自查：config.json 未被 git 跟踪
+  9. 弹窗草稿回归     tools/test_asset_modal.py（需 Chrome 无头）
 
-依赖：5/6 需要 fastapi / paramiko 等，优先用 backend/build_venv 的解释器。
+依赖：6/7 需要 fastapi / paramiko 等，优先用 backend/build_venv 的解释器。
 """
 import argparse
 import glob
@@ -157,6 +158,8 @@ def main():
         if NODE:
             run_script('test_syncbar', [NODE, os.path.join(TOOLS, 'test_syncbar.mjs')],
                        'tools/test_syncbar.mjs')
+            run_script('test_syncmerge', [NODE, os.path.join(TOOLS, 'test_syncmerge.mjs')],
+                       'tools/test_syncmerge.mjs (问题不污染功能清单 / 内容时间换源)')
         else:
             record('tools/test_syncbar.mjs', False, '找不到 node')
         run_script('test_r8_r9', [PY, os.path.join(TOOLS, 'test_r8_r9.py')],

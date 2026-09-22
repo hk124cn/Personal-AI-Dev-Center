@@ -451,6 +451,8 @@ body{font-family:var(--font);background:var(--bg-deep);color:var(--text);height:
 .feat-list{list-style:none}
 .feat-list li{padding:8px 12px;background:var(--bg-elevated);border-radius:var(--radius-xs);margin-bottom:4px;font-size:13px;display:flex;align-items:center;gap:8px}
 .feat-list li svg{width:14px;height:14px;stroke-width:2;flex-shrink:0}
+.issue-list li{align-items:flex-start;color:var(--text-secondary);line-height:1.6}
+.issue-list li svg{color:var(--amber);margin-top:2px}
 .ssh-block{background:var(--bg-deep);border:1px solid var(--border);border-radius:var(--radius-sm);padding:14px 16px;font-family:var(--mono);font-size:12px;color:var(--green);line-height:1.8}
 .ssh-block .comment{color:var(--text-tertiary)}
 
@@ -743,6 +745,9 @@ select.form-input{cursor:pointer;appearance:none;background-image:url("data:imag
 .sync-badge.sync-none{background:var(--gray-muted,#eef2f6);color:var(--text-tertiary)}
 .li-sub2{font-size:10.5px;color:var(--text-tertiary);margin-top:3px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 .li-sub2 .content-update{color:var(--text-tertiary)}
+.li-badge{display:inline-flex;align-items:center;gap:3px;font-size:10.5px;line-height:1.5;padding:0 5px;border-radius:6px;border:1px solid var(--border);color:var(--text-secondary);background:var(--overlay);white-space:nowrap}
+.li-badge svg{width:11px;height:11px;stroke-width:2.2}
+.li-badge.warn{color:var(--amber);border-color:var(--amber-border,var(--border));background:var(--amber-muted)}
 .pd-sync-line{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:12px;color:var(--text-secondary);margin-top:4px}
 .tag-red{background:var(--red-muted,#fee2e2);color:var(--red,#dc2626);border:1px solid var(--red-muted,#fee2e2)}
 .dev-status-banner .dsb-icon{color:var(--accent);flex-shrink:0;margin-top:2px}
@@ -795,7 +800,7 @@ select.form-input{cursor:pointer;appearance:none;background-image:url("data:imag
 <div id="app" class="app"></div>
 
 <script>
-const APP_VERSION = '1.4.22';
+const APP_VERSION = '1.4.23';
 // ==================== THEMES ====================
 const themes = {
   violet: {
@@ -1122,6 +1127,8 @@ const I18N = {
   pd_no_todos:{zh:'暂无待办事项',en:'No todos'},
   pd_features:{zh:'功能清单',en:'Features'},
   pd_no_features:{zh:'暂无功能',en:'No features'},
+  pd_issues:{zh:'当前问题',en:'Open Issues'},
+  pd_no_issues:{zh:'暂无问题',en:'No issues'},
   pd_dev_env:{zh:'开发环境',en:'Dev Environment'},
   pd_tech_stack:{zh:'技术栈',en:'Tech Stack'},
   pd_local_sync:{zh:'本地同步',en:'Local Sync'},
@@ -1446,6 +1453,17 @@ function contentUpdateHTML(p){
   if(!p.lastUpdate) return `<span class="content-update">内容未标注更新时间</span>`;
   return `<span class="content-update">内容更新 ${relativeTime(p.lastUpdate)}</span>`;
 }
+// 首页/卡片上的「待办 done/total」「问题 N」小徽标。
+// 数据来自同步回来的 latest.json（todos / issues），让首页一眼能看出同步干了活。
+function progressBadgesHTML(p){
+  const todos=Array.isArray(p.todos)?p.todos:[];
+  const doneN=todos.filter(x=>x&&x.done).length;
+  const issues=Array.isArray(p._issues)?p._issues:[];
+  let out='';
+  if(todos.length) out+=`<span class="li-badge" title="${t('pd_todos')} ${doneN}/${todos.length}">${icon('list-checks')}${doneN}/${todos.length}</span>`;
+  if(issues.length) out+=`<span class="li-badge warn" title="${t('pd_issues')}">${icon('alert-triangle')}${issues.length}</span>`;
+  return out;
+}
 
 // ==================== STATS HISTORY (localStorage) ====================
 const STATS_KEY='dev-center-stats';
@@ -1555,7 +1573,7 @@ function viewDashboard(){
     <div class="panel-body" id="dash-mon-panel-body">${state.dashMonMode==='ring'?renderDashMonRingGrid():renderDashMonBarList()}</div>
   </div>
   <div class="panel"><div class="panel-head"><h3>${icon('bot')} ${t('panel_agent_dist')}</h3></div><div class="panel-body">${state.agents.map(a=>`<div class="li"><div class="li-icon" style="background:${a.bg}">${icon(a.icon)}</div><div class="li-body"><div class="li-title">${a.name}</div><div class="li-sub">${a.servers.map(sid=>{const s=getServer(sid);return s?s.name:sid}).join(' · ')}</div></div></div>`).join('')}</div></div>
-  <div class="panel" style="margin-bottom:16px"><div class="panel-head"><h3>${icon('folder-kanban')} ${t('panel_project_overview')}</h3><button class="btn btn-sm" onclick="navigate('projects')">${t('view_all')} ${icon('arrow-right')}</button></div><div class="panel-body">${state.projects.map(p=>{const srv=getServer(p.server);return`<div class="li" style="cursor:pointer" onclick="openProjectDetail('${p.id}')"><div class="li-icon" style="background:${p.status==='active'?'var(--green-muted)':p.status==='dev'?'var(--amber-muted)':'var(--blue-muted)'}"><div class="dot ${dotClass(p.status)}"></div></div><div class="li-body"><div class="li-title">${p.name}</div><div class="li-sub">${statusText(p.status)} · ${srv?srv.name:'-'}</div><div class="li-sub2">${syncBadgeHTML(p)} ${contentUpdateHTML(p)}</div></div><div style="display:flex;align-items:center;gap:6px">${srv&&srv.sshUser?`<button class="btn btn-sm" onclick="event.stopPropagation();sshLogin('${srv.ip}',${srv.sshPort},'${srv.sshUser}','${srv.sshKey}')" title="${t('pd_ssh_login')}">${icon('terminal')} SSH</button>`:''}<div style="width:80px"><div class="progress"><div class="bar" style="width:${p.progress}%"></div></div><div style="font-size:10px;color:var(--text-tertiary);text-align:right;margin-top:2px">${p.progress}%</div></div></div></div>`}).join('')}</div></div>`}
+  <div class="panel" style="margin-bottom:16px"><div class="panel-head"><h3>${icon('folder-kanban')} ${t('panel_project_overview')}</h3><button class="btn btn-sm" onclick="navigate('projects')">${t('view_all')} ${icon('arrow-right')}</button></div><div class="panel-body">${state.projects.map(p=>{const srv=getServer(p.server);return`<div class="li" style="cursor:pointer" onclick="openProjectDetail('${p.id}')"><div class="li-icon" style="background:${p.status==='active'?'var(--green-muted)':p.status==='dev'?'var(--amber-muted)':'var(--blue-muted)'}"><div class="dot ${dotClass(p.status)}"></div></div><div class="li-body"><div class="li-title">${p.name}</div><div class="li-sub">${statusText(p.status)} · ${srv?srv.name:'-'}</div><div class="li-sub2">${syncBadgeHTML(p)} ${contentUpdateHTML(p)} ${progressBadgesHTML(p)}</div></div><div style="display:flex;align-items:center;gap:6px">${srv&&srv.sshUser?`<button class="btn btn-sm" onclick="event.stopPropagation();sshLogin('${srv.ip}',${srv.sshPort},'${srv.sshUser}','${srv.sshKey}')" title="${t('pd_ssh_login')}">${icon('terminal')} SSH</button>`:''}<div style="width:80px"><div class="progress"><div class="bar" style="width:${p.progress}%"></div></div><div style="font-size:10px;color:var(--text-tertiary);text-align:right;margin-top:2px">${p.progress}%</div></div></div></div>`}).join('')}</div></div>`}
 
 // ==================== DASHBOARD MONITOR ====================
 function renderDashMonRingGrid(){
@@ -1720,9 +1738,9 @@ function syncResultHTML(p) {
 
 function projectCardHTML(p,inG){
   const srv=getServer(p.server);
-  const features=Array.isArray(p.features)?p.features.filter(f=>f&&typeof f==='object'&&'name' in f):[];
+  const features=sanitizeFeatures(p.features);
   const doneF=features.filter(f=>f.done).length;
-  return`<div class="project-card" onclick="openProjectDetail('${p.id}')"><div class="card-top"><div><h4>${escapeHtml(p.name)}</h4><div style="margin-top:5px;display:flex;gap:5px;flex-wrap:wrap">${priorityTag(p.priority)}<span class="tag ${p.status==='active'?'tag-green':p.status==='dev'?'tag-amber':'tag-blue'}">${statusText(p.status)}</span>${p._syncedAt?`<span class="tag tag-accent">${t('synced')}</span>`:''}</div></div><div style="display:flex;gap:4px">${p.localPath?`<button class="btn btn-sm" onclick="event.stopPropagation();syncDownload('${p.id}')" title="${t('download_sync')}">${icon('download')}</button><button class="btn btn-sm" onclick="event.stopPropagation();openUploadModal('${p.id}')" title="${t('upload_sync')}">${icon('upload')}</button><button class="btn btn-sm" onclick="event.stopPropagation();analyzeLocal('${p.id}')" title="${t('analyze_only')}">${icon('sparkles')}</button>`:''}</div></div><div class="desc">${escapeHtml(p.desc)}</div><div class="progress"><div class="bar" style="width:${p.progress}%"></div></div><div class="progress-info"><span>${t('progress_label')} ${p.progress}%</span><span>${t('features_label')} ${doneF}/${features.length}</span></div>${syncResultHTML(p)}<div class="card-actions">${srv&&srv.sshUser?`<button class="btn btn-sm" onclick="event.stopPropagation();sshLogin('${srv.ip}',${srv.sshPort},'${srv.sshUser}','${srv.sshKey}')">${icon('terminal')} SSH</button>`:''}${p.url?`<button class="btn btn-sm" onclick="event.stopPropagation();window.open('${p.url}','_blank')">${icon('globe')} ${t('visit_web')}</button>`:''}</div><div class="card-foot"><div class="server-info">${icon('server')} ${srv?escapeHtml(srv.name):'-'}</div>${p.localPath?`<span style="font-size:11px;color:var(--text-tertiary)">${escapeHtml(p.localPath)}</span>`:`<span class="time">${p._syncedAt?('同步 '+relativeTime(p._syncedAt)+' · '):''}${contentUpdateHTML(p)}</span>`}</div></div>`}
+  return`<div class="project-card" onclick="openProjectDetail('${p.id}')"><div class="card-top"><div><h4>${escapeHtml(p.name)}</h4><div style="margin-top:5px;display:flex;gap:5px;flex-wrap:wrap">${priorityTag(p.priority)}<span class="tag ${p.status==='active'?'tag-green':p.status==='dev'?'tag-amber':'tag-blue'}">${statusText(p.status)}</span>${p._syncedAt?`<span class="tag tag-accent">${t('synced')}</span>`:''}</div></div><div style="display:flex;gap:4px">${p.localPath?`<button class="btn btn-sm" onclick="event.stopPropagation();syncDownload('${p.id}')" title="${t('download_sync')}">${icon('download')}</button><button class="btn btn-sm" onclick="event.stopPropagation();openUploadModal('${p.id}')" title="${t('upload_sync')}">${icon('upload')}</button><button class="btn btn-sm" onclick="event.stopPropagation();analyzeLocal('${p.id}')" title="${t('analyze_only')}">${icon('sparkles')}</button>`:''}</div></div><div class="desc">${escapeHtml(p.desc)}</div><div class="progress"><div class="bar" style="width:${p.progress}%"></div></div><div class="progress-info"><span>${t('progress_label')} ${p.progress}%</span><span>${t('features_label')} ${doneF}/${features.length}</span></div>${syncResultHTML(p)}<div class="card-actions">${srv&&srv.sshUser?`<button class="btn btn-sm" onclick="event.stopPropagation();sshLogin('${srv.ip}',${srv.sshPort},'${srv.sshUser}','${srv.sshKey}')">${icon('terminal')} SSH</button>`:''}${p.url?`<button class="btn btn-sm" onclick="event.stopPropagation();window.open('${p.url}','_blank')">${icon('globe')} ${t('visit_web')}</button>`:''}</div><div class="card-foot"><div class="server-info">${icon('server')} ${srv?escapeHtml(srv.name):'-'}</div><div style="display:flex;align-items:center;gap:6px">${progressBadgesHTML(p)}${p.localPath?`<span style="font-size:11px;color:var(--text-tertiary)">${escapeHtml(p.localPath)}</span>`:`<span class="time">${p._syncedAt?('同步 '+relativeTime(p._syncedAt)+' · '):''}${contentUpdateHTML(p)}</span>`}</div></div></div>`}
 
 function toggleGroup(id){state.collapsedGroups[id]=!state.collapsedGroups[id];render()}
 
@@ -2565,11 +2583,12 @@ function modalHTML(){
 function openProjectDetail(id){
   const p=state.projects.find(x=>x.id===id);if(!p)return;
   const srv=getServer(p.server);
-  const features=Array.isArray(p.features)?p.features:[];
+  const features=sanitizeFeatures(p.features);
   const doneF=features.filter(f=>f&&f.done).length;
   const sshCmd=srv&&srv.sshUser?`ssh ${srv.sshUser}@${srv.ip} -p ${srv.sshPort}${srv.sshKey?' -i '+srv.sshKey:''}`:null;
   const todos=Array.isArray(p.todos)?p.todos:[];
   const doneTodos=todos.filter(t=>t&&t.done).length;
+  const issues=Array.isArray(p._issues)?p._issues:[];
 
   state.modal={title:p.name,body:`
     <div class="modal-actions">${srv&&srv.sshUser?`<button class="btn btn-sm" onclick="sshLogin('${srv.ip}',${srv.sshPort},'${srv.sshUser}','${srv.sshKey}')">${icon('terminal')} ${t('pd_ssh_login')}</button>`:''}<button class="btn btn-sm" onclick="openAgentFromProject('${p.id}')">${icon('bot')} ${t('pd_agent_task')}</button>${p.url?`<button class="btn btn-sm" onclick="window.open('${p.url}','_blank')">${icon('globe')} ${t('visit_web')}</button>`:''}</div>
@@ -2610,6 +2629,13 @@ function openProjectDetail(id){
         ${todos.length===0?`<div style="font-size:12px;color:var(--text-tertiary);padding:12px 0">${t('pd_no_todos')}</div>`:''}
       </div>
     </div>
+
+    ${issues.length?`<div class="detail-section">
+      <h4>${icon('alert-triangle')} ${t('pd_issues')} (${issues.length})</h4>
+      <ul class="feat-list issue-list">
+        ${issues.map(x=>`<li>${icon('alert-triangle')}<span>${escapeHtml(String(x))}</span></li>`).join('')}
+      </ul>
+    </div>`:''}
 
     <div class="detail-section">
       <h4>${icon('list-checks')} ${t('pd_features')} (${doneF}/${features.length})</h4>
@@ -3657,7 +3683,7 @@ async function saveEdit() {
       priority: document.querySelector('[name="priority"]').value,
       progress: parseInt(document.querySelector('[name="progress"]').value) || 0,
       techStack: document.querySelector('[name="techStack"]').value.split(',').map(function(s){return s.trim()}).filter(Boolean),
-      features: existingProject ? existingProject.features || [] : [],
+      features: sanitizeFeatures(existingProject && existingProject.features),
       todos: existingProject ? existingProject.todos || [] : [],
       lastUpdate: new Date().toISOString(),
       agent: document.querySelector('[name="agent"]').value,
@@ -4315,12 +4341,15 @@ async function fetchConfig() {
     }
     if (config.projects && config.projects.length > 0) {
       config.projects.forEach(apiP => {
+        // 防御：config.json 里可能残留旧版本写入的「[问题] …」功能条目，
+        // 这里统一清洗，避免它们又在管理页的「功能 N/M」里计数。
+        if (Array.isArray(apiP.features)) apiP.features = sanitizeFeatures(apiP.features);
         const localIdx = state.projects.findIndex(p => p.id === apiP.id);
         if (localIdx >= 0) {
           const local = state.projects[localIdx];
           state.projects[localIdx] = Object.assign({}, local, apiP);
         } else {
-          apiP.features = apiP.features || [];
+          apiP.features = sanitizeFeatures(apiP.features);
           apiP.todos = apiP.todos || [];
           if (!apiP.lastUpdate) apiP.lastUpdate = new Date().toISOString();
           state.projects.push(apiP);
@@ -4358,6 +4387,19 @@ async function fetchAPIData() {
   }
 }
 
+// 历史脏数据清理：旧版本把远端「问题」当成功能条目塞进 features
+// （`[问题] xxx`），再被「编辑项目」顺手写回 config.json，把真实功能清单整份覆盖掉
+// （曾污染 9 个项目共 292 条）。现在问题走独立的 _issues 字段，
+// 这里把两代前缀的历史遗留条目从功能清单里剔掉，避免继续显示与计数。
+function isIssueEntry(f){
+  if(!f || typeof f !== 'object') return false;
+  const n = String(f.name || '');
+  return n.startsWith('[问题]') || n.startsWith('[Issue]');
+}
+function sanitizeFeatures(list){
+  return (Array.isArray(list) ? list : []).filter(f => f && typeof f === 'object' && 'name' in f && !isIssueEntry(f));
+}
+
 function mergeAPIData(apiProjects) {
   apiProjects.forEach(apiP => {
     const local = state.projects.find(p => p.id === apiP.id);
@@ -4369,15 +4411,16 @@ function mergeAPIData(apiProjects) {
       ];
     }
     if (apiP.progress) {
+      // 0 视为「远端没解析到进度」，保留项目里手动填的值（历史行为）。
       if (apiP.progress.progress > 0) local.progress = apiP.progress.progress;
-      if (apiP.progress.last_update) local.lastUpdate = apiP.progress.last_update;
     }
-    local.features = (local.features || []).filter(f => !f.name.startsWith('[问题] '));
-    if (apiP.issues && apiP.issues.current.length > 0) {
-      apiP.issues.current.forEach(issue => {
-        local.features.push({ name: '[问题] ' + issue, done: false });
-      });
-    }
+    // 内容更新时间：优先用同步自动探测的「远端内容最新改动时间」，
+    // 其次才回退到远端 md 里手写的「最后更新」，都没有就保留原值。
+    const cu = apiP.content_updated_at || (apiP.progress && apiP.progress.last_update);
+    if (cu) local.lastUpdate = cu;
+    // 问题单独存，不再混进功能清单（见 sanitizeFeatures 注释）
+    local._issues = (apiP.issues && apiP.issues.current) ? apiP.issues.current : [];
+    local.features = sanitizeFeatures(local.features);
     local._syncedAt = apiP.synced_at;
     local._syncError = apiP.sync_error;
     local._llmAnalyzed = apiP.llm_analyzed;
@@ -4425,13 +4468,10 @@ async function syncProject(projectId) {
           ];
         }
         if (d.progress && d.progress.progress > 0) local.progress = d.progress.progress;
-        if (d.progress && d.progress.last_update) local.lastUpdate = d.progress.last_update;
-        local.features = (local.features || []).filter(f => !f.name.startsWith(t('issue_prefix')));
-        if (d.issues && d.issues.current.length > 0) {
-          d.issues.current.forEach(issue => {
-            local.features.push({ name: t('issue_prefix') + issue, done: false });
-          });
-        }
+        const cu = d.content_updated_at || (d.progress && d.progress.last_update);
+        if (cu) local.lastUpdate = cu;
+        local._issues = (d.issues && d.issues.current) ? d.issues.current : [];
+        local.features = sanitizeFeatures(local.features);
         local._syncedAt = d.synced_at;
         local._syncError = d.sync_error;
         local._llmAnalyzed = d.llm_analyzed;
@@ -5032,10 +5072,10 @@ async function analyzeLocal(projectId) {
                   ...d.todos.completed.map((todo, i) => ({ id: 100 + i, name: todo.name, done: true })),
                 ];
               }
-              local.features = (local.features || []).filter(f => !f.name.startsWith(t('issue_prefix')));
-              if (d.issues && d.issues.current) {
-                d.issues.current.forEach(issue => local.features.push({ name: t('issue_prefix') + issue, done: false }));
-              }
+              const cu2 = d.content_updated_at || (d.progress && d.progress.last_update);
+              if (cu2) local.lastUpdate = cu2;
+              local._issues = (d.issues && d.issues.current) ? d.issues.current : [];
+              local.features = sanitizeFeatures(local.features);
             }
           }
         } catch(e) {}

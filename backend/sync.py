@@ -425,6 +425,32 @@ def ssh_read_files(server: dict, project: dict) -> dict:
     }
 
 
+def _shell_path(p: str) -> str:
+    """把远程路径转成可安全嵌入 shell 命令的表达式。
+
+    ⚠️ shlex.quote() 会连 `~` 一起引起来，导致 `~` 不被展开。
+    历史 bug：remote_path 写成 `~/xxx` 的项目，find / cat / stat 全部静默失败
+    （find 返回空、stat 返回 0 → remote_mtime 变成 1970），同步读不到任何内容。
+    这里对行首 `~` 做显式展开。
+    """
+    p = (p or "").strip()
+    if p == "~":
+        return '"$HOME"'
+    if p.startswith("~/"):
+        return '"$HOME"/' + shlex.quote(p[2:])
+    return shlex.quote(p)
+
+
+def _iso_local(ts):
+    """epoch 秒 → 带本地时区偏移的 ISO 字符串（前端 new Date() 可直接解析）。"""
+    if not ts:
+        return None
+    try:
+        return datetime.fromtimestamp(float(ts)).astimezone().isoformat()
+    except (ValueError, OSError, OverflowError):
+        return None
+
+
 def _ssh_read_once(server: dict, project: dict) -> dict:
     """单次 SSH 读取项目 MD 文件（自动发现所有 .md 文件）。
 
@@ -440,6 +466,7 @@ def _ssh_read_once(server: dict, project: dict) -> dict:
         "summaries": {},
         "raw_files": {},
         "error": None,
+        "content_mtime": None,
     }
 
     try:
@@ -461,30 +488,30 @@ def _ssh_read_once(server: dict, project: dict) -> dict:
 
         # --- Step 1: Auto-discover all .md files in project directory ---
         stdin, stdout, stderr = client.exec_command(
-            f"find '{project_dir}' -maxdepth 1 -name '*.md' -type f"
+            f"find {_shell_path(project_dir)} -maxdepth 1 -name '*.md' -type f"
         )
         find_output = stdout.read().decode("utf-8", errors="replace").strip()
         discovered_paths = [p.strip() for p in find_output.splitlines() if p.strip()]
 
-        # Build list of (filename, full_path) pairs
+        # Build list of (filename, shell-ready path) pairs
         md_entries = []
         for fpath in discovered_paths:
             fname = fpath.rsplit("/", 1)[-1]  # basename
-            md_entries.append((fname, fpath))
+            md_entries.append((fname, shlex.quote(fpath)))
 
         # Ensure we also attempt the 3 known files even if find returns nothing
         known_files = {"TODO.md", "PROGRESS.md", "ISSUES.md"}
         discovered_names = {fname for fname, _ in md_entries}
         for kf in known_files:
             if kf not in discovered_names:
-                md_entries.append((kf, f"{project_dir}/{kf}"))
+                md_entries.append((kf, f"{_shell_path(project_dir)}/{shlex.quote(kf)}"))
 
         result["md_files"] = sorted(set(fname for fname, _ in md_entries))
 
         # --- Step 2: Read and parse each MD file ---
         for md_file, remote_path in md_entries:
             try:
-                stdin, stdout, stderr = client.exec_command(f"cat '{remote_path}'")
+                stdin, stdout, stderr = client.exec_command(f"cat {remote_path}")
                 content = stdout.read().decode("utf-8", errors="replace")
                 err = stderr.read().decode("utf-8", errors="replace")
 
@@ -529,7 +556,12 @@ def _ssh_read_once(server: dict, project: dict) -> dict:
                                 "done_count": len(completed),
                             }
                         # Aggregate list items into issues if no ISSUES.md found
-                        if generic["items"] and result["issues"] is None:
+                        # ⚠️ 仅当文件名本身就暗示「问题清单」时才兜底。
+                        # 历史 bug：无条件兜底会把任意文档的 bullet 列表（架构说明、因子清单…）
+                        # 当成「问题」，再被前端写进功能清单并持久化到 config.json，
+                        # 把真实功能列表整份覆盖掉（曾污染 9 个项目共 292 条）。
+                        _issue_like = ("issue" in md_file.lower()) or ("问题" in md_file)
+                        if _issue_like and generic["items"] and result["issues"] is None:
                             result["issues"] = {
                                 "current": generic["items"],
                                 "pending": [],
@@ -544,14 +576,34 @@ def _ssh_read_once(server: dict, project: dict) -> dict:
 
         # 获取目录最后修改时间
         stdin, stdout, stderr = client.exec_command(
-            f"stat -c '%Y' '{project_dir}' 2>/dev/null || echo '0'"
+            f"stat -c '%Y' {_shell_path(project_dir)} 2>/dev/null || echo '0'"
         )
         mtime_str = stdout.read().decode().strip()
         try:
             mtime = int(mtime_str)
-            result["remote_mtime"] = datetime.fromtimestamp(mtime).isoformat()
+            result["remote_mtime"] = datetime.fromtimestamp(mtime).isoformat() if mtime else None
         except (ValueError, OSError):
             result["remote_mtime"] = None
+
+        # 内容最后改动时间：取目录内最新文件的 mtime，过滤规则与「下载」完全一致
+        # （所以口径就是「能下载到的那份内容最近一次变动」）。
+        # 之所以不用目录 mtime：目录 mtime 只在增删/改名文件时变，改已有文件内容不动它。
+        prune = " -o ".join(f"-name {shlex.quote(d)}" for d in sorted(DEFAULT_SYNC_IGNORE))
+        skip_ext = " ".join(
+            f"! -name {shlex.quote('*' + e)}" for e in sorted(DEFAULT_SYNC_IGNORE_EXT)
+        )
+        try:
+            stdin, stdout, stderr = client.exec_command(
+                f"cd {_shell_path(project_dir)} 2>/dev/null && "
+                f"find . \\( {prune} \\) -prune -o -type f {skip_ext} "
+                f"-printf '%T@\\n' 2>/dev/null | sort -rn | head -1",
+                timeout=180,
+            )
+            newest = stdout.read().decode("utf-8", errors="replace").strip()
+            result["content_mtime"] = float(newest.splitlines()[0]) if newest else None
+        except Exception as e:
+            print(f"[sync] 内容时间探测失败（不影响主流程）: {e}")
+            result["content_mtime"] = None
 
         client.close()
 
@@ -726,6 +778,8 @@ def sync_single(project_id: str) -> dict:
             "md_files": remote_data.get("md_files", []),
             "summaries": remote_data.get("summaries", {}),
             "remote_mtime": remote_data.get("remote_mtime"),
+            # 内容最后改动时间（远端最新文件 mtime，过滤规则同下载）
+            "content_updated_at": _iso_local(remote_data.get("content_mtime")),
             # LLM 分析结果
             "llm_features": remote_data.get("llm_features", []),
             "llm_architecture": remote_data.get("llm_architecture", {}),
@@ -839,6 +893,8 @@ def sync_all():
                 "md_files": remote_data.get("md_files", []),
                 "summaries": remote_data.get("summaries", {}),
                 "remote_mtime": remote_data.get("remote_mtime"),
+                # 内容最后改动时间（远端最新文件 mtime，过滤规则同下载）
+                "content_updated_at": _iso_local(remote_data.get("content_mtime")),
                 # LLM 分析结果
                 "llm_features": remote_data.get("llm_features", []),
                 "llm_architecture": remote_data.get("llm_architecture", {}),
