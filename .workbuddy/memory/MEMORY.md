@@ -29,6 +29,7 @@
 
 ## 关键业务约束
 - `config.json` = 服务器/项目 source of truth；`backend/data/latest.json` = 同步结果。同步**手动触发**，无自动调度；`sync_all` 绕过全部过滤。
+- **⚠️ 「定时同步」≠「下载文件」**（两个常被混淆的概念）：`scheduler.run_schedule()` 只调 `sync_all/sync_single`，它们对每个项目**只跑 `find <remote_path> -maxdepth 1 -name '*.md'`** → 解析 TODO/进度/问题 + LLM 分析 → 写 `latest.json` 喂首页卡片与预警；**子目录一个都不进、不产生任何本地文件、也从不写项目的 `lastUpdate`**。文件下载必须**手动**触发 `POST /api/sync-download/{id}`（`all=true` 才不过滤），跑在 daemon 线程 + SSE 推进度，可取消，**不占 `_write_lock`**，流式解包不随包大小吃内存。默认过滤 `DEFAULT_SYNC_IGNORE`(含 .git/node_modules/venv) + `_EXT`(.csv/.log/.pyc/.exe/.zip…) 能砍掉 90%+ 量级。
 - **cron**：`backend/cron_manager.py` 持一个已连接 SSHClient；写回护栏＝备份→校验→回写→读回验证→失败回滚。⚠️ `_spool_users` 必须用 `id -u` 复核（Debian `/var/spool/cron` 只有 crontabs/atjobs/atspool，直接 `ls` 会造出假用户），且**哨兵在就必须完全信任结果（哪怕为空）**，写成「空就退回」bug 会复发。前端入口＝服务器详情卡「计划任务」(`openServerCron`)。
 - **知识库**：`%APPDATA%/…/knowledge/<分类>/<id>.md`，API `/api/kb/*`；AI 可写(`author:"ai"`)，但**绝不自动灌**，经用户点头才写。
 - **资产**：四类存 `config.json.assets`，跨类关联 `linked_phone_id`/`linked_email_id`（删时清悬空）；点击出 `viewAsset` 详情卡而非直接编辑。
