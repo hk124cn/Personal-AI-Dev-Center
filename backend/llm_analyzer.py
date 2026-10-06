@@ -6,11 +6,24 @@ Dev Center - LLM Analyzer Module
 import json
 import os
 import sys
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeout
 from typing import Optional, Dict, Any
 
 # LLM 单次 HTTP 请求超时（秒）。商汤 SenseNova 6.8 属推理型模型，多文件 prompt 下
 # 30s 偏紧、易被误判为超时（表现为 api_failed），故放宽到 120s；可用环境变量覆盖。
 LLM_HTTP_TIMEOUT = int(os.environ.get("DEV_CENTER_LLM_TIMEOUT", "120"))
+
+# LLM 调用的**硬超时**（秒）。
+#
+# 为什么还需要它：`requests.post(timeout=N)` 只限制「连接建立」与「两次读取之间」的间隔，
+# 对 DNS 解析、TLS 握手，以及代理下（本机 v2rayN TUN 全局接管）半开连接造成的长时间挂起
+# **都不生效**。实测：某次定时同步里单项目在 LLM 上挂了 4669 秒（77 分钟）才返回
+# api_failed，整批同步被拖到 114 分钟，而 SSH 侧实际只花 1.4 秒。
+#
+# 这里用一个 worker 线程 + future.result(timeout) 做「可放弃的等待」：超时立即判定失败并
+# 返回，挂起的请求线程用 shutdown(wait=False) 放任其自行结束（Python 无法强杀线程，
+# 但它不会阻塞主流程，也不再占用后续项目的配额）。
+LLM_HARD_TIMEOUT = int(os.environ.get("DEV_CENTER_LLM_HARD_TIMEOUT", "180"))
 
 # Windows 控制台 GBK 编码无法打印 emoji 等 Unicode 字符，强制使用 UTF-8
 if sys.stdout and hasattr(sys.stdout, 'reconfigure'):
@@ -315,7 +328,8 @@ def build_analysis_prompt(project_name: str, md_contents: Dict[str, str]) -> str
     return prompt
 
 
-def analyze_project(project_name: str, md_contents: Dict[str, str], llm_config: dict):
+def analyze_project(project_name: str, md_contents: Dict[str, str], llm_config: dict,
+                    timeout: Optional[int] = None):
     """
     使用 LLM 分析项目内容
 
@@ -323,6 +337,9 @@ def analyze_project(project_name: str, md_contents: Dict[str, str], llm_config: 
         project_name: 项目名称
         md_contents: MD 文件内容字典
         llm_config: LLM 配置
+        timeout: **硬超时**（秒）。None 则取 LLM_HARD_TIMEOUT。
+                 因为 requests 的 timeout 在代理环境下拦不住长时间挂起，
+                 这里用一个 worker 线程做「可放弃的等待」。
 
     Returns:
         (分析结果 dict|None, 错误原因 str|None)
@@ -331,7 +348,21 @@ def analyze_project(project_name: str, md_contents: Dict[str, str], llm_config: 
         return None, "LLM 未启用"
 
     prompt = build_analysis_prompt(project_name, md_contents)
-    result, err = call_llm_api(prompt, llm_config)
+    hard = timeout if timeout else LLM_HARD_TIMEOUT
+
+    pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix="llm-call")
+    try:
+        future = pool.submit(call_llm_api, prompt, llm_config)
+        try:
+            result, err = future.result(timeout=hard)
+        except FuturesTimeout:
+            print(f"[LLM] 硬超时 {hard}s，放弃本次分析: {project_name}")
+            return None, f"硬超时 {hard}s"
+    except Exception as e:
+        return None, f"调用异常: {type(e).__name__}: {str(e)[:200]}"
+    finally:
+        # 关键：不 join。超时/失败后挂起的请求线程自行结束，主流程立刻继续下一个项目。
+        pool.shutdown(wait=False)
 
     if result:
         print(f"[LLM] Successfully analyzed project: {project_name}")

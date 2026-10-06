@@ -14,6 +14,7 @@
   7. R6/R7/R10 集成测试 tools/test_security_robustness.py
   8. 保密自查：config.json 未被 git 跟踪
   9. 弹窗草稿回归     tools/test_asset_modal.py（需 Chrome 无头）
+  10. 同步提速回归    tools/test_llm_speedup.py（LLM 硬超时 / 增量跳过 / 失败熔断）
 
 依赖：6/7 需要 fastapi / paramiko 等，优先用 backend/build_venv 的解释器。
 """
@@ -34,7 +35,10 @@ PY_CANDIDATES = [
     os.path.join(ROOT, 'backend', 'build_venv', 'bin', 'python'),
 ]
 NODE_CANDIDATES = [
-    r'C:\Users\qw_20\.workbuddy\binaries\node\versions\22.22.2-3\node.exe',
+    # 用 current 软链，避免 managed node 升到 22.22.2-6 之类就把写死的旧路径打空
+    os.path.join(os.path.expanduser('~'), '.workbuddy', 'binaries', 'node',
+                 'versions', 'current', 'node.exe'),
+    r'C:\Users\qw_20\.workbuddy\binaries\node\versions\22.22.2-6\node.exe',
     r'C:\Program Files\nodejs\node.exe',
 ]
 
@@ -162,6 +166,9 @@ def main():
                        'tools/test_syncmerge.mjs (问题不污染功能清单 / 内容时间换源)')
         else:
             record('tools/test_syncbar.mjs', False, '找不到 node')
+        run_script('test_llm_speedup',
+                   [PY, os.path.join(TOOLS, 'test_llm_speedup.py')],
+                   'tools/test_llm_speedup.py (LLM 硬超时 / 增量跳过 / 失败熔断)')
         run_script('test_r8_r9', [PY, os.path.join(TOOLS, 'test_r8_r9.py')],
                    'tools/test_r8_r9.py (R8/R9)')
         run_script('test_security', [PY, os.path.join(TOOLS, 'test_security_robustness.py')],

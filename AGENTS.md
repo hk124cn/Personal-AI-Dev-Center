@@ -325,7 +325,7 @@ python tools/run_checks.py
 
 ## 11. 当前状态速览
 
-- 版本：**1.4.23**
+- 版本：**1.4.24**
 - 安全加固 R1–R10 **全部完成**（后端绑 127.0.0.1、流式上传、命令注入防护、
   取消机制、PyInstaller 内置后端、原子写配置、知识库 XSS 消毒、子进程树清理…），
   详见 `docs/system-review.md`。
@@ -334,4 +334,13 @@ python tools/run_checks.py
   （走独立 `_issues`，详情弹窗单独成段），并清洗了历史污染的 292 条；③ 首页项目行加
   「待办 done/total」「问题 N」徽标；④ 修 `remote_path` 以 `~` 开头时不被展开的 bug
   （曾导致 2 个项目同步读不到任何内容、`remote_mtime` 变 1970）。
+- v1.4.24：同步提速三件套 —— ① LLM 调用加**硬超时**（`ThreadPoolExecutor` +
+  `future.result(timeout)`；`requests` 的 timeout 在代理环境下拦不住挂起，实测单项目卡过
+  4669s）；② **增量跳过**（md 内容指纹 + `provider|model|base_url` 签名都没变 → 直接复用
+  上次结果，一个请求都不发，`llm_status='reused'`）；③ **失败熔断**（一次同步内连续失败
+  `LLM_BREAKER_THRESHOLD` 次后本轮不再请求，`skipped_breaker`）。
+  另：LLM 配置表单加 provider 预设下拉（OpenAI / DeepSeek / 智谱 / Kimi / 硅基流动 /
+  商汤 / Claude / 通义 / 自定义），前端把英文 `llm_status` 翻译成人话。
+- 参考数据：15 个项目全量重算一次约 12.7 万 input + 3 万 output token（`$0.15/$0.6`
+  档位约 ¥0.27），工具 `tools/estimate_llm_tokens.py`。
 - 待办与历史：见 `.workbuddy/memory/` 下的日记与 `MEMORY.md`。

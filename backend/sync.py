@@ -15,6 +15,7 @@ import threading
 import time
 import tarfile
 import tempfile
+import hashlib
 from datetime import datetime
 from pathlib import Path
 
@@ -620,6 +621,79 @@ def _ssh_read_once(server: dict, project: dict) -> dict:
     return result
 
 
+# ---------------------------------------------------------------------------
+# LLM 增量分析
+#
+# 每轮同步其实只有少数项目的 md 会变，旧实现却对每个项目都无条件发一次 LLM 请求；
+# 一旦某个请求卡住（实测单项目挂了 77 分钟），整批同步就被拖死。
+# 这里用「md 内容指纹 + 模型签名」判断能否复用上一轮结果：
+#   · md 内容没变 且 用的还是同一个模型 → 直接复用，一个请求都不发
+#   · md 改了 / 换了模型 → 重新分析
+# ---------------------------------------------------------------------------
+_LLM_PREV_CACHE = None
+
+# 一次同步内 LLM 连续失败到此次数就熔断：本轮后续项目不再请求 LLM。
+# 目的同上 —— 别让「卡住的请求」把整批同步拖成小时级。
+LLM_BREAKER_THRESHOLD = int(os.environ.get("DEV_CENTER_LLM_BREAKER", "2"))
+
+
+def _update_llm_breaker(consec_fail: int, breaker_open: bool, status: str):
+    """
+    根据本次 LLM 结果推进熔断状态。
+
+    · api_failed  → 连续失败 +1，达到阈值就打开熔断
+    · analyzed    → 归零（真的发出请求且成功了，说明 provider 正常）
+    · 其它（reused / skipped_breaker / disabled / missing_api_key …）
+                  → 计数不变。特别是 **reused 不算成功**：它压根没发请求，
+                    不能用来证明 provider 已经恢复。
+
+    Returns:
+        (新的连续失败数, 熔断是否打开)
+    """
+    if status == "api_failed":
+        consec_fail += 1
+        if consec_fail >= LLM_BREAKER_THRESHOLD:
+            return consec_fail, True
+    elif status == "analyzed":
+        # 真的发出请求且成功了 → provider 正常：计数归零并撤销熔断
+        return 0, False
+    return consec_fail, breaker_open
+
+
+def _md_fingerprint(md_contents: dict) -> str:
+    """参与 LLM 分析的 md 内容指纹（按文件名排序后拼 name + 正文）。"""
+    h = hashlib.md5()
+    for name in sorted(md_contents or {}):
+        h.update(name.encode("utf-8", errors="replace"))
+        h.update(b"\x00")
+        h.update((md_contents[name] or "").encode("utf-8", errors="replace"))
+        h.update(b"\x01")
+    return h.hexdigest()
+
+
+def _llm_signature(llm_config: dict) -> str:
+    """模型签名：provider / model / base_url 任一变化都必须重新分析。"""
+    return "|".join(str(llm_config.get(k, "")) for k in ("provider", "model", "base_url"))
+
+
+def _prev_llm_entry(project_id: str):
+    """上一轮 latest.json 中该项目的条目（懒加载一次，整轮同步复用）。"""
+    global _LLM_PREV_CACHE
+    if _LLM_PREV_CACHE is None:
+        cache = {}
+        try:
+            if OUTPUT_PATH.exists():
+                with open(OUTPUT_PATH, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                for p in data.get("projects", []):
+                    if p.get("id"):
+                        cache[p["id"]] = p
+        except Exception as e:
+            print(f"[sync] 读取上轮同步结果失败（不影响本次同步）: {e}")
+        _LLM_PREV_CACHE = cache
+    return _LLM_PREV_CACHE.get(project_id)
+
+
 def get_active_llm_config(config: dict) -> dict:
     llm_configs = config.get("llm_configs")
     active_id = config.get("llm_active_id")
@@ -632,7 +706,8 @@ def get_active_llm_config(config: dict) -> dict:
     return config.get("llm", {})
 
 
-def apply_llm_analysis(project_name: str, remote_data: dict, config: dict) -> dict:
+def apply_llm_analysis(project_name: str, remote_data: dict, config: dict,
+                       project_id: str = None) -> dict:
     """
     应用 LLM 分析到远程数据
 
@@ -669,6 +744,31 @@ def apply_llm_analysis(project_name: str, remote_data: dict, config: dict) -> di
     if not md_contents:
         remote_data["llm_status"] = "no_markdown_content"
         print("[LLM] Skipped: no markdown content")
+        return remote_data
+
+    # 增量判断：md 内容指纹 + 模型签名都没变 → 直接复用上一轮结果，一个请求都不发
+    fp = _md_fingerprint(md_contents)
+    sig = _llm_signature(llm_config)
+    remote_data["llm_input_fp"] = fp
+    remote_data["llm_config_sig"] = sig
+
+    prev = _prev_llm_entry(project_id) if project_id else None
+    if (prev and prev.get("llm_analyzed")
+            and prev.get("llm_input_fp") == fp
+            and prev.get("llm_config_sig") == sig):
+        remote_data["llm_features"] = prev.get("llm_features", [])
+        remote_data["llm_architecture"] = prev.get("llm_architecture", {})
+        remote_data["llm_routes"] = prev.get("llm_routes", [])
+        remote_data["llm_summary"] = prev.get("llm_summary", "")
+        remote_data["llm_tech_stack"] = prev.get("llm_tech_stack", [])
+        # 首次分析时 LLM 会顺带结构化出 todos/issues，复用时要一起带回来
+        if prev.get("todos"):
+            remote_data["todos"] = prev["todos"]
+        if prev.get("issues"):
+            remote_data["issues"] = prev["issues"]
+        remote_data["llm_analyzed"] = True
+        remote_data["llm_status"] = "reused"
+        print(f"[LLM] 复用上次结果（md 未变、模型未变）: {project_name}")
         return remote_data
 
     # 调用 LLM 分析
@@ -737,7 +837,7 @@ def sync_single(project_id: str) -> dict:
         remote_data = ssh_read_files(server, project)
 
         # 应用 LLM 分析（如果启用）
-        remote_data = apply_llm_analysis(project['name'], remote_data, config)
+        remote_data = apply_llm_analysis(project['name'], remote_data, config, project['id'])
 
         elapsed = round(time.time() - start, 2)
 
@@ -786,6 +886,8 @@ def sync_single(project_id: str) -> dict:
             "llm_routes": remote_data.get("llm_routes", []),
             "llm_tech_stack": llm_tech_stack,
             "llm_summary": remote_data.get("llm_summary", ""),
+            "llm_input_fp": remote_data.get("llm_input_fp"),
+            "llm_config_sig": remote_data.get("llm_config_sig"),
             "llm_analyzed": remote_data.get("llm_analyzed", False),
             "llm_status": remote_data.get("llm_status", "disabled"),
             "llm_error": remote_data.get("llm_error"),
@@ -844,6 +946,8 @@ def sync_all():
 
     sync_progress.start("all", pending)
     projects_data = []
+    llm_consec_fail = 0      # LLM 连续失败次数（仅 api_failed 计入）
+    llm_breaker_open = False  # 熔断开关：打开后本轮不再请求 LLM
     try:
         for project in pending:
             server_id = project["server"]
@@ -854,7 +958,17 @@ def sync_all():
             start = time.time()
             remote_data = ssh_read_files(server, project)
             # 应用 LLM 分析（如果启用）
-            remote_data = apply_llm_analysis(project['name'], remote_data, config)
+            if llm_breaker_open:
+                remote_data["llm_analyzed"] = False
+                remote_data["llm_status"] = "skipped_breaker"
+                print(f"[LLM] 熔断中，跳过: {project['name']}")
+            else:
+                remote_data = apply_llm_analysis(project['name'], remote_data, config, project['id'])
+                llm_consec_fail, llm_breaker_open = _update_llm_breaker(
+                    llm_consec_fail, llm_breaker_open, remote_data.get("llm_status"))
+                if llm_breaker_open:
+                    print(f"[LLM] 连续失败 {llm_consec_fail} 次 → 打开熔断，"
+                          f"本轮后续项目不再请求 LLM")
 
             elapsed = round(time.time() - start, 2)
 
@@ -901,6 +1015,8 @@ def sync_all():
                 "llm_routes": remote_data.get("llm_routes", []),
                 "llm_tech_stack": llm_tech_stack,
                 "llm_summary": remote_data.get("llm_summary", ""),
+                "llm_input_fp": remote_data.get("llm_input_fp"),
+                "llm_config_sig": remote_data.get("llm_config_sig"),
                 "llm_analyzed": remote_data.get("llm_analyzed", False),
                 "llm_status": remote_data.get("llm_status", "disabled"),
             }

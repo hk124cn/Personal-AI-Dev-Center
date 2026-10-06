@@ -800,7 +800,7 @@ select.form-input{cursor:pointer;appearance:none;background-image:url("data:imag
 <div id="app" class="app"></div>
 
 <script>
-const APP_VERSION = '1.4.23';
+const APP_VERSION = '1.4.24';
 // ==================== THEMES ====================
 const themes = {
   violet: {
@@ -1120,6 +1120,14 @@ const I18N = {
   pd_ssh_login:{zh:'SSH 登录',en:'SSH Login'},
   pd_agent_task:{zh:'下发 Agent 任务',en:'Assign Agent Task'},
   pd_llm_analyzed:{zh:'LLM 已分析',en:'LLM Analyzed'},
+  pd_llm_reused:{zh:'复用上次',en:'reused'},
+  pd_llm_skipped_breaker:{zh:'熔断跳过（前面已连续失败）',en:'skipped (breaker open)'},
+  pd_llm_api_failed:{zh:'API 调用失败',en:'API failed'},
+  pd_llm_timeout:{zh:'硬超时放弃',en:'hard timeout'},
+  pd_llm_no_key:{zh:'未配置 API Key',en:'no API key'},
+  pd_llm_no_md:{zh:'没有可分析的 Markdown',en:'no markdown'},
+  pd_llm_no_module:{zh:'分析模块不可用',en:'module unavailable'},
+  pd_llm_off:{zh:'未启用',en:'disabled'},
   pd_llm_not_run:{zh:'LLM 未运行',en:'LLM Not Run'},
   pd_llm_summary:{zh:'LLM 摘要',en:'LLM Summary'},
   pd_todos:{zh:'待办事项',en:'Todos'},
@@ -1274,6 +1282,7 @@ const I18N = {
   llm_provider:{zh:'LLM 提供商',en:'LLM Provider'},
   llm_provider_ph:{zh:'如 Anthropic、OpenAI、DeepSeek、硅基流动等',en:'e.g. Anthropic, OpenAI, DeepSeek, etc.'},
   llm_base_url_note:{zh:'OpenAI 兼容协议的接口地址',en:'OpenAI-compatible API endpoint'},
+  llm_preset_note:{zh:'选一个预设会自动填好 Base URL 与模型；选「自定义」可手动填写',en:'Pick a preset to auto-fill Base URL and model; choose Custom to type manually'},
   llm_model:{zh:'模型',en:'Model'},
   llm_model_ph:{zh:'如 claude-3-5-sonnet、gpt-4o、deepseek-chat',en:'e.g. claude-3-5-sonnet, gpt-4o, deepseek-chat'},
   llm_back:{zh:'返回',en:'Back'},
@@ -1415,6 +1424,19 @@ const I18N = {
   // LLM test
   llm_test_fail:{zh:'测试失败',en:'Test failed'},
 };
+// LLM 分析状态 → 人话。后端 llm_status 是英文枚举，直接显示用户看不懂。
+function llmStatusLabel(s){
+  const m={
+    reused:t('pd_llm_reused'),
+    skipped_breaker:t('pd_llm_skipped_breaker'),
+    api_failed:t('pd_llm_api_failed'),
+    missing_api_key:t('pd_llm_no_key'),
+    no_markdown_content:t('pd_llm_no_md'),
+    module_unavailable:t('pd_llm_no_module'),
+    disabled:t('pd_llm_off'),
+  };
+  return m[s]||s;
+}
 function t(key){return (I18N[key]&&I18N[key][lang])||I18N[key]&&I18N[key]['zh']||key}
 function toggleLang(){lang=lang==='zh'?'en':'zh';localStorage.setItem('dev-center-lang',lang);render()}
 function langToggleHTML(){return `<button class="btn-ghost" onclick="toggleLang()" style="font-size:11px;padding:3px 8px;border-radius:var(--radius-xs);border:1px solid var(--border);background:var(--bg-elevated);cursor:pointer;color:var(--text-secondary)">${lang==='zh'?'EN':'中'}</button>`}
@@ -2607,7 +2629,7 @@ function openProjectDetail(id){
       <div class="info-item">${icon('file-text')} 内容更新 <strong>${p.lastUpdate?relativeTime(p.lastUpdate):'-'}</strong></div>
       <div class="info-divider"></div>
       <div class="info-item">${icon('refresh-cw')} 同步 <strong>${p._syncedAt?relativeTime(p._syncedAt):'未同步'}</strong>${p._syncError?` <span class="sync-badge sync-bad" style="margin-left:4px">${icon('alert-triangle')} 失败</span>`:''}</div>
-      ${p._llmAnalyzed?`<div class="info-divider"></div><div class="info-item">${icon('sparkles')} <strong>${t('pd_llm_analyzed')}</strong></div>`:(p._llmStatus?`<div class="info-divider"></div><div class="info-item">${icon('alert-circle')} ${t('pd_llm_not_run')}：${escapeHtml(p._llmStatus)}${p._llmError?(' — '+escapeHtml(p._llmError)):''}</div>`:'')}
+      ${p._llmAnalyzed?`<div class="info-divider"></div><div class="info-item">${icon('sparkles')} <strong>${t('pd_llm_analyzed')}</strong>${p._llmStatus==='reused'?`<span class="li-badge">${t('pd_llm_reused')}</span>`:''}</div>`:(p._llmStatus?`<div class="info-divider"></div><div class="info-item">${icon('alert-circle')} ${t('pd_llm_not_run')}：${escapeHtml(llmStatusLabel(p._llmStatus))}${p._llmError?(' — '+escapeHtml(p._llmError)):''}</div>`:'')}
     </div>
 
     ${p._llmSummary?`<div class="detail-section"><h4>${icon('sparkles')} ${t('pd_llm_summary')}</h4><div style="font-size:13px;color:var(--text-secondary);line-height:1.7">${escapeHtml(p._llmSummary)}</div></div>`:''}
@@ -3324,6 +3346,50 @@ let llmConfigs = [];
 let activeConfigId = null;
 let editingConfigId = null; // 当前在编辑的配置ID
 
+// 常见模型的预设：选一个就自动填好 provider / Base URL / 默认模型，
+// 免得对着三个空文本框猜该填什么。
+//
+// 后端分支规则（backend/llm_analyzer.py 的 call_llm_api）：
+//   provider === 'anthropic' → Anthropic 原生协议
+//   provider === 'qwen'      → 阿里云百炼协议
+//   其它任意值               → OpenAI 兼容（base_url.rstrip('/') + '/chat/completions'）
+// 所以下面除 anthropic / qwen 外，provider 名字可以随便起（它只参与「换模型要重算」的签名）。
+const LLM_PRESETS = [
+  {key:'openai',      name:'OpenAI',          provider:'openai',      base_url:'https://api.openai.com/v1',            model:'gpt-4o-mini'},
+  {key:'deepseek',    name:'DeepSeek',        provider:'deepseek',    base_url:'https://api.deepseek.com/v1',          model:'deepseek-chat'},
+  {key:'zhipu',       name:'智谱 GLM',         provider:'zhipu',       base_url:'https://open.bigmodel.cn/api/paas/v4', model:'glm-4-flash'},
+  {key:'moonshot',    name:'月之暗面 Kimi',     provider:'moonshot',    base_url:'https://api.moonshot.cn/v1',           model:'moonshot-v1-8k'},
+  {key:'siliconflow', name:'硅基流动',          provider:'siliconflow', base_url:'https://api.siliconflow.cn/v1',        model:'Qwen/Qwen2.5-7B-Instruct'},
+  {key:'sensenova',   name:'商汤 SenseNova',   provider:'商汤科技',     base_url:'https://token.sensenova.cn/v1',        model:'sensenova-6.8-flash-lite'},
+  {key:'anthropic',   name:'Anthropic Claude',provider:'anthropic',   base_url:'',                                     model:'claude-sonnet-4-6'},
+  {key:'qwen',        name:'阿里通义千问',       provider:'qwen',        base_url:'',                                     model:'qwen-plus'},
+  {key:'custom',      name:'自定义 / 手动填写',  provider:'',            base_url:'',                                     model:''},
+];
+
+function currentPresetKey(c) {
+  if (!c) return 'custom';
+  const hit = LLM_PRESETS.find(p => p.key !== 'custom'
+    && p.provider === (c.provider || '')
+    && (p.base_url || '') === (c.base_url || ''));
+  return hit ? hit.key : 'custom';
+}
+
+function applyLLMPreset(key) {
+  const c = getEditingConfig();
+  if (!c) return;
+  const p = LLM_PRESETS.find(x => x.key === key);
+  if (!p) return;
+  if (p.key !== 'custom') {
+    // 选预设 = 选模板：provider / base_url / model 一起覆盖；
+    // 只有名字还是默认值时才顺手改名，不覆盖用户自己起的名字。
+    c.provider = p.provider;
+    c.base_url = p.base_url;
+    c.model = p.model;
+    if (!c.name || c.name === t('llm_new_name')) c.name = p.name;
+  }
+  renderSettingsForm();
+}
+
 function getActiveLLMConfig() {
   if (!activeConfigId) return null;
   return llmConfigs.find(c => c.id === activeConfigId) || null;
@@ -3474,7 +3540,10 @@ function renderSettingsForm() {
     </div>
     <div class="form-group">
       <label class="form-label">${t('llm_provider')}</label>
-      <input class="form-input" type="text" placeholder="${t('llm_provider_ph')}" value="${c.provider || ''}" oninput="getEditingConfig().provider=this.value">
+      <select class="form-input" onchange="applyLLMPreset(this.value)">
+        ${LLM_PRESETS.map(p=>`<option value="${p.key}"${currentPresetKey(c)===p.key?' selected':''}>${escapeHtml(p.name)}</option>`).join('')}
+      </select>
+      <p style="font-size:11px;color:var(--text-tertiary);margin-top:4px">${t('llm_preset_note')}</p>
     </div>
     <div class="form-group">
       <label class="form-label">Base URL</label>
