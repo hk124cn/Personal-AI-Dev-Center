@@ -11,7 +11,7 @@
 ## 推送 / 构建
 - **推送规则**：不主动推 GitHub，用户明说才推；本地 commit 照常做、做完告知。
 - Electron **优先 spawn `resources/backend/devcenter-backend.exe`**（PyInstaller 自包含，免装 Python），否则回退 `python backend/app.py`。真实 `config.json` 不进包（运行时读 `%APPDATA%/Personal AI Dev Center/config.json`）。
-- **换包姿势（别直接删 dist）**：`mv dist dist_prev_<旧版>` → `mv dist_new dist`（同盘改名，别复制 381MB）→ 跑 `tools/verify_build.py` **完整模式**（真启动 exe 探 `/openapi.json`，46 路由 + 6 核心路由都要在）→ 新版能启动后再删旧备份。
+- **换包姿势（别直接删 dist）**：**直接跑 `python tools/swap_dist.py --yes --keep 1 [--html-needle X --exe-needle Y]`**（v1.4.24 新增，一条龙：守卫 8765+进程名 → 同盘改名 `dist`→`dist_prev_<旧版>`、`dist_new`→`dist` → 清理旧包 → 自动调 `verify_build.py` **完整模式**，真启动 exe 探 `/openapi.json`，46 路由 + 6 核心路由）。app 运行时它**只检测不杀进程**，rc=3 退出。备份目录名带点号：`dist_prev_1.4.23`。
 - **构建坑**：孤儿 `node.exe` 会锁 `dist/*.exe`，重建前清残留 + 关 live app；**app 运行时锁 dist/** → `build.directories.output` 临时改 `dist_new`，**完事必须还原 `dist`**。先独立命令 rm 旧 exe，再单独 `NODE_OPTIONS= npm run build`（`rm && build` 同行会被 safe-delete 拦）。
 - 校验：`win-unpacked/resources/` 是未压缩真源，核对 index.html 新代码、backend exe **MD5 与 `backend/dist/` 一致**、无真实 config.json / data 泄漏。
 - **本机 shell**：bash PATH 偶发整段丢失 → 一律**绝对路径**；构建命令**不接管道**；`wmic` 不存在。
@@ -35,8 +35,12 @@
 - **资产**：四类存 `config.json.assets`，跨类关联 `linked_phone_id`/`linked_email_id`（删时清悬空）；点击出 `viewAsset` 详情卡而非直接编辑。
 - **主机监控**：`_MONITOR_HISTORY[server_id]` 上限 60 点，`/api/monitor/{id}` 带 `history`；v1.4.22 起 `drawMonChart()` 多曲线（CPU/内存默认开、磁盘默认关），颜色走 `cssVar()` 读 CSS 变量以适配浅色主题。
 - R1–R10 风险项**全部完成**（绑定收紧 / 流式 tar / shlex.quote / 上传取消 / 内置 exe / 原子写 / sanitize_html / 超时杀进程树 / 扫描可取消 / 取消表加锁），详见 `docs/system-review.md`。
+- **LLM 同步提速三件套（v1.4.24）**：① `llm_analyzer.analyze_project` 用 `ThreadPoolExecutor` + `future.result(timeout=LLM_HARD_TIMEOUT=180)` 硬超时，`pool.shutdown(wait=False)` **不 join**（join 等于没超时）；`requests` 的 timeout 只管连接建立/两次读取间隔，对 DNS/TLS/代理下半开挂死不生效。② `sync._md_fingerprint`（md 内容 md5）+ `_llm_signature`（`provider|model|base_url`）都没变且上轮 `llm_analyzed` → 复用结果 `llm_status='reused'`，**一个请求都不发**（换模型/改 md 自动重算）。③ `_update_llm_breaker`：一次 `sync_all` 内连续 `api_failed` 达 2 → 熔断，后续 `skipped_breaker`；**`reused` 不算成功**（没发请求不能证明 provider 恢复），只有真 `analyzed` 才归零并撤销熔断。**仅 `sync_all` 熔断，`sync_single` 不熔断。**
+- **LLM provider 分发（`call_llm_api`）**：`anthropic` → 原生协议；`qwen` → 阿里云百炼；**其余任意值 → OpenAI 兼容**（`base_url.rstrip('/') + '/chat/completions'`）→ 接任何付费模型后端早就支持，缺的只是 UI 入口（v1.4.24 加了 `LLM_PRESETS` 预设下拉）。⚠️ 商汤预设的 provider 必须填 `商汤科技`（与现有配置一致），否则签名变了触发一轮全量重算。
+- **LLM token 消耗实测**（`tools/estimate_llm_tokens.py`）：15 个项目全量重算 = **127,434 输入 + 30,000 输出上限** ≈ **¥0.27/次**，每周一次约 ¥1/月；上了增量跳过后常态更低。
 
 ## 验证与工具
 - **截图别用 Electron**（沙箱 GPU 崩、`file://` ERR_FAILED、退出不干净）→ 用**「变体页 + 系统 Chrome 无头」**：`--headless=new --disable-gpu --no-sandbox --allow-file-access-from-files --force-device-scale-factor=1.5 --virtual-time-budget=9000`。注入前必须**冻结页面定时器**、**禁动画**、**清 modal/toast**。
-- `tools/`：`verify_build.py`（打包校验，前后端关键字**分开传**）｜`test_asset_modal.py`、`test_cron_realmachine.py`、`test_syncbar.mjs`｜`gen_*_variants.py`（变体页，`--source` 可传 `git show HEAD:index.html` 对照）｜`run_checks.py`（一键静态+回归）｜`recreate_repo.py`（删库重建）。多数需 `backend/build_venv`。
+- `tools/`：`verify_build.py`（打包校验，前后端关键字**分开传**）｜`swap_dist.py`（**换包一条龙**，守卫+改名+清旧包+调 verify 完整模式）｜`test_asset_modal.py`、`test_cron_realmachine.py`、`test_syncbar.mjs`、`test_llm_speedup.py`（LLM 提速 29 项）｜`probe_sync_timing.py`（只读分段计时，区分 SSH 慢 vs LLM 慢）｜`estimate_llm_tokens.py`｜`gen_*_variants.py`（变体页，`--source` 可传 `git show HEAD:index.html` 对照）｜`run_checks.py`（一键静态+回归，13 项）｜`recreate_repo.py`（删库重建）。多数需 `backend/build_venv`。
+- **managed node 别写死小版本号**（`versions/` 从 `22.22.2-3` 升到 `22.22.2-6` 过）→ 一律用 `versions/current/node.exe` 软链。
 - `腾讯云_上海` SSH 握手偏慢(4~12s) + 偶发 `AuthenticationException` —— 连接稳定性问题，非程序 bug。
