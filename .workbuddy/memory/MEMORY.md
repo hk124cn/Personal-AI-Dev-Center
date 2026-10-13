@@ -14,7 +14,7 @@
 - **换包姿势（别直接删 dist）**：**直接跑 `python tools/swap_dist.py --yes --keep 1 [--html-needle X --exe-needle Y]`**（v1.4.24 新增，一条龙：守卫 8765+进程名 → 同盘改名 `dist`→`dist_prev_<旧版>`、`dist_new`→`dist` → 清理旧包 → 自动调 `verify_build.py` **完整模式**，真启动 exe 探 `/openapi.json`，46 路由 + 6 核心路由）。app 运行时它**只检测不杀进程**，rc=3 退出。备份目录名带点号：`dist_prev_1.4.23`。
 - **构建坑**：孤儿 `node.exe` 会锁 `dist/*.exe`，重建前清残留 + 关 live app；**app 运行时锁 dist/** → `build.directories.output` 临时改 `dist_new`，**完事必须还原 `dist`**。先独立命令 rm 旧 exe，再单独 `NODE_OPTIONS= npm run build`（`rm && build` 同行会被 safe-delete 拦）。
 - 校验：`win-unpacked/resources/` 是未压缩真源，核对 index.html 新代码、backend exe **MD5 与 `backend/dist/` 一致**、无真实 config.json / data 泄漏。
-- **本机 shell**：bash PATH 偶发整段丢失 → 一律**绝对路径**；构建命令**不接管道**；`wmic` 不存在。
+- **本机 shell**：bash PATH 偶发整段丢失 → 一律**绝对路径**；构建命令**不接管道**；`wmic` 不存在。**`grep -o "a|b"` 的 alternation 在这台机不可靠**（管道符会被吃掉、返回假空），要 alternation 就跑多个 `grep -n <单个词>` 或用 Grep 工具 —— 曾因此差点把「已实现」误判成「未实现」去做重复劳动。
 - **正常进程树（勿当残留杀）**：启动器 `Personal-AI-Dev-Center.exe` → 主 `Personal AI Dev Center.exe` → 同名 `devcenter-backend.exe` 两段（onefile 引导父 + 真实后端 LISTENING 8765）。
 
 ## 启动/退出硬约束（便携版）
