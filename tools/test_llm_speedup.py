@@ -88,6 +88,97 @@ def test_breaker():
         f5, o5 = S._update_llm_breaker(1, False, st)
         check(f"熔断：{st} 不改变计数", f5 == 1 and o5 is False)
 
+    # ⚠️ 429 限流绝不能触发熔断（2026-10-14 真实事故）
+    # 商汤对大项目直接 429，熔断把它当 provider 故障，一轮把 13 个项目全跳过了。
+    err_429 = 'HTTP 429 {"error":{"message":"inference exceeds tpm/rpm limit"}}'
+    f6, o6 = S._update_llm_breaker(1, False, "api_failed", err_429)
+    check("熔断：429 限流不计入连续失败", f6 == 1 and o6 is False, f"({f6},{o6})")
+    # 连撞多次 429 也不打开熔断
+    f7, o7 = 0, False
+    for _ in range(6):
+        f7, o7 = S._update_llm_breaker(f7, o7, "api_failed", err_429)
+    check("熔断：连续 6 次 429 也不打开熔断", o7 is False, f"consec={f7}")
+    # 真故障（无 429 字样）仍要熔断，别把熔断功能改废了
+    f8, o8 = S._update_llm_breaker(0, False, "api_failed", "硬超时 180s")
+    check("熔断：真故障（硬超时）仍计数", f8 == 1, f"consec={f8}")
+    # error 为 None 的旧调用方式仍兼容
+    f9, o9 = S._update_llm_breaker(0, False, "api_failed", None)
+    check("熔断：error=None 仍按真故障计数", f9 == 1, f"consec={f9}")
+
+
+# --------------------------------------------------------------------------
+# 4b) 429 限流退避重试（llm_analyzer._call_openai）
+# --------------------------------------------------------------------------
+def test_429_backoff():
+    """429 必须退避重试，且重试耗尽后的错误里要带 429 以便熔断正确识别。"""
+    L = sys.modules.get("backend.llm_analyzer")
+
+    orig_post = L.requests.post if hasattr(L, "requests") else None
+    calls = {"n": 0}
+
+    class FakeResp:
+        status_code = 429
+        text = '{"error":{"message":"inference exceeds tpm/rpm limit"}}'
+        headers = {}
+        def raise_for_status(self):
+            import requests as _rq
+            raise _rq.exceptions.HTTPError(response=self)
+
+    class FakeOK:
+        status_code = 200
+        headers = {}
+        text = ""
+        def raise_for_status(self):
+            return None
+        def json(self):
+            return {"choices": [{"message": {
+                "content": '{"summary":"ok","features":[],"issues":{},'
+                           '"todos":{},"architecture":{},"routes":[]}'}}]}
+
+    import requests as rq
+
+    def fake_post(*a, **kw):
+        calls["n"] += 1
+        return FakeResp() if calls["n"] <= 2 else FakeOK()
+
+    rq.post = fake_post
+    orig_sleep = L.time.sleep
+    slept = []
+    L.time.sleep = lambda s: slept.append(s)
+
+    orig_backoff = L.LLM_RATE_LIMIT_BACKOFF
+    orig_retries = L.LLM_RATE_LIMIT_RETRIES
+    L.LLM_RATE_LIMIT_BACKOFF = 0
+    L.LLM_RATE_LIMIT_RETRIES = 3
+
+    try:
+        res, err = L._call_openai("hi", {"base_url": "https://x", "model": "m"}, "https://x")
+    finally:
+        rq.post = orig_post
+        L.time.sleep = orig_sleep
+        L.LLM_RATE_LIMIT_BACKOFF = orig_backoff
+        L.LLM_RATE_LIMIT_RETRIES = orig_retries
+
+    check("429 退避：前两次 429 后第 3 次成功", res is not None, f"err={err}")
+    check("429 退避：确实发起了 3 次请求", calls["n"] == 3, f"n={calls['n']}")
+
+    # 一直 429 时，错误信息必须含 429，让上层熔断能识别成「限流而非故障」
+    calls2 = {"n": 0}
+    def fake_post_always429(*a, **kw):
+        calls2["n"] += 1
+        return FakeResp()
+    rq.post = fake_post_always429
+    L.time.sleep = lambda s: None
+    try:
+        res2, err2 = L._call_openai("hi", {"base_url": "https://x", "model": "m"}, "https://x")
+    finally:
+        rq.post = orig_post
+        L.time.sleep = orig_sleep
+
+    check("429 退避：耗尽后返回失败", res2 is None)
+    check("429 退避：错误信息含 429 供熔断识别",
+          bool(err2) and "429" in str(err2), f"err={str(err2)[:90]}")
+
 
 # --------------------------------------------------------------------------
 # 4) 增量复用（md 未变 + 模型未变 → 不发请求）
@@ -201,6 +292,7 @@ def main():
     test_fingerprint()
     test_signature()
     test_breaker()
+    test_429_backoff()
     test_reuse()
     test_hard_timeout()
 

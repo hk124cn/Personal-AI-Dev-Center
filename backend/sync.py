@@ -636,8 +636,13 @@ _LLM_PREV_CACHE = None
 # 目的同上 —— 别让「卡住的请求」把整批同步拖成小时级。
 LLM_BREAKER_THRESHOLD = int(os.environ.get("DEV_CENTER_LLM_BREAKER", "2"))
 
+# 项目之间的 LLM 请求节流（秒）。入门档模型普遍有 TPM/RPM 上限，
+# 15 个项目连着甩过去必然撞 429（2026-10-14 实测）。设 0 可关掉。
+LLM_PROJECT_SPACING = int(os.environ.get("DEV_CENTER_LLM_SPACING", "8"))
 
-def _update_llm_breaker(consec_fail: int, breaker_open: bool, status: str):
+
+def _update_llm_breaker(consec_fail: int, breaker_open: bool, status: str,
+                        error: str = None):
     """
     根据本次 LLM 结果推进熔断状态。
 
@@ -647,9 +652,19 @@ def _update_llm_breaker(consec_fail: int, breaker_open: bool, status: str):
                   → 计数不变。特别是 **reused 不算成功**：它压根没发请求，
                     不能用来证明 provider 已经恢复。
 
+    ⚠️ **429 限流不计入熔断**（2026-10-14 实测踩坑）：
+    商汤对 AUTO-STOCK（46k 字符 / 29k token）直接返回
+    `HTTP 429 inference exceeds tpm/rpm limit`。熔断原本把任何 api_failed 一律当
+    「provider 挂了」，一轮下来把余下 13 个项目全标成 skipped_breaker —— 但 provider
+    一直是好的，只是那 1 分钟的配额用完了。llm_analyzer 现在会先退避重试，
+    真到重试用尽才返回失败；那种情况下计数照旧，但错误信息里带 429 字样。
+
     Returns:
         (新的连续失败数, 熔断是否打开)
     """
+    # 限流是「等一会就好」，绝不能据此判定 provider 挂掉
+    if status == "api_failed" and error and "429" in str(error) and "limit" in str(error).lower():
+        return consec_fail, breaker_open
     if status == "api_failed":
         consec_fail += 1
         if consec_fail >= LLM_BREAKER_THRESHOLD:
@@ -964,8 +979,12 @@ def sync_all():
                 print(f"[LLM] 熔断中，跳过: {project['name']}")
             else:
                 remote_data = apply_llm_analysis(project['name'], remote_data, config, project['id'])
+                # 真发过请求才需要节流：reused 走本地复用，不占配额，别白等
+                if remote_data.get("llm_status") in ("analyzed", "api_failed"):
+                    time.sleep(LLM_PROJECT_SPACING)
                 llm_consec_fail, llm_breaker_open = _update_llm_breaker(
-                    llm_consec_fail, llm_breaker_open, remote_data.get("llm_status"))
+                    llm_consec_fail, llm_breaker_open, remote_data.get("llm_status"),
+                    remote_data.get("llm_error"))
                 if llm_breaker_open:
                     print(f"[LLM] 连续失败 {llm_consec_fail} 次 → 打开熔断，"
                           f"本轮后续项目不再请求 LLM")
@@ -1019,6 +1038,10 @@ def sync_all():
                 "llm_config_sig": remote_data.get("llm_config_sig"),
                 "llm_analyzed": remote_data.get("llm_analyzed", False),
                 "llm_status": remote_data.get("llm_status", "disabled"),
+                # ⚠️ 别漏这个：漏了的话 sync_all 的失败原因会被吞掉，
+                # 只剩一个光秃秃的 api_failed，排查时完全看不出是哪一步挂的
+                # （sync_single 那份早就有，这里曾长期不一致）
+                "llm_error": remote_data.get("llm_error"),
             }
             projects_data.append(project_entry)
 

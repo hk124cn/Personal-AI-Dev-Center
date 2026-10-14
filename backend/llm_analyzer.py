@@ -6,6 +6,7 @@ Dev Center - LLM Analyzer Module
 import json
 import os
 import sys
+import time
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeout
 from typing import Optional, Dict, Any
 
@@ -24,6 +25,13 @@ LLM_HTTP_TIMEOUT = int(os.environ.get("DEV_CENTER_LLM_TIMEOUT", "120"))
 # 返回，挂起的请求线程用 shutdown(wait=False) 放任其自行结束（Python 无法强杀线程，
 # 但它不会阻塞主流程，也不再占用后续项目的配额）。
 LLM_HARD_TIMEOUT = int(os.environ.get("DEV_CENTER_LLM_HARD_TIMEOUT", "180"))
+
+# --- 429 限流退避 ---
+# 多数免费/入门档模型有 TPM（每分钟 token）和 RPM（每分钟请求）上限。一次性把 15 个项目的
+# md 全丢进去，必然在第 2~3 个撞上 429。**429 是「等一会就好」，不是「provider 挂了」**，
+# 所以要退避重试，且不能计入 sync.py 的熔断计数。
+LLM_RATE_LIMIT_RETRIES = int(os.environ.get("DEV_CENTER_LLM_429_RETRIES", "3"))
+LLM_RATE_LIMIT_BACKOFF = int(os.environ.get("DEV_CENTER_LLM_429_BACKOFF", "20"))
 
 # Windows 控制台 GBK 编码无法打印 emoji 等 Unicode 字符，强制使用 UTF-8
 if sys.stdout and hasattr(sys.stdout, 'reconfigure'):
@@ -161,7 +169,36 @@ def _call_openai(prompt: str, api_key: str, model: str, base_url: Optional[str] 
         resp = getattr(e, "response", None)
         status = resp.status_code if resp is not None else "?"
         body = resp.text[:800] if resp is not None else ""
-        return None, f"HTTP {status} {body}"
+        err = f"HTTP {status} {body}"
+        # 429 = 限流（TPM/RPM 超限），**不是 provider 挂了**，值得退避后重试。
+        # 实测教训：2026-10-14 商汤对 AUTO-STOCK（46k 字符 / 29k token）直接 429，
+        # 而 sync_all 的熔断把它当成「provider 故障」，一轮把 13 个项目全跳过了。
+        if status == 429:
+            retry_after = ""
+            try:
+                retry_after = resp.headers.get("Retry-After", "") if resp is not None else ""
+            except Exception:
+                retry_after = ""
+            print(f"[LLM] 触发限流 (429)，退避 {LLM_RATE_LIMIT_BACKOFF}s 后重试"
+                  + (f"（服务端要求 {retry_after}s）" if retry_after else ""))
+            for attempt in range(LLM_RATE_LIMIT_RETRIES):
+                time.sleep(LLM_RATE_LIMIT_BACKOFF * (attempt + 1))
+                try:
+                    response = requests.post(url, headers=headers, json=payload,
+                                             timeout=LLM_HTTP_TIMEOUT)
+                    response.raise_for_status()
+                    result = response.json()
+                    content = result["choices"][0]["message"]["content"]
+                    return _extract_json_from_text(content)
+                except requests.exceptions.HTTPError as e2:
+                    resp2 = getattr(e2, "response", None)
+                    st2 = resp2.status_code if resp2 is not None else "?"
+                    if st2 != 429:
+                        break
+                except Exception:
+                    break
+            return None, f"限流重试 {LLM_RATE_LIMIT_RETRIES} 次仍失败: {err}"
+        return None, err
     except requests.exceptions.Timeout:
         return None, "请求超时 (30s)"
     except requests.exceptions.ConnectionError as e:
