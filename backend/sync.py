@@ -1076,6 +1076,11 @@ def sync_all():
 
 # ==================== 双向文件同步引擎 ====================
 
+# 下载分批：每批一个独立 tar。0 表示不分批（回到旧的一次性行为，一般不建议）。
+DL_BATCH_SIZE = int(os.environ.get("DEV_CENTER_DL_BATCH", "600"))
+# 批间停顿秒数，避免连着开几十个 exec_command 把 SSH 通道窗口打满。
+DL_BATCH_GAP = float(os.environ.get("DEV_CENTER_DL_BATCH_GAP", "0.5"))
+
 DEFAULT_SYNC_IGNORE = {
     ".git", "__pycache__", "node_modules", ".venv", "venv",
     ".DS_Store", "Thumbs.db", ".idea", ".vscode",
@@ -1299,104 +1304,151 @@ def sync_download(server: dict, project: dict, local_path: str, progress_cb=None
             _report(phase='cancelled')
             return result
 
+        n_batches_pre = ((len(to_download) + DL_BATCH_SIZE - 1) // DL_BATCH_SIZE) \
+            if (to_download and DL_BATCH_SIZE > 0) else 1
         _report(phase='transferring', total=result["total"], to_transfer=total_to_transfer,
-                skipped=result["skipped"], current=0, total_bytes=total_bytes)
+                skipped=result["skipped"], current=0, total_bytes=total_bytes,
+                batches=n_batches_pre)
 
         if total_to_transfer == 0:
             _report(phase='done', **{k: result[k] for k in ('downloaded', 'skipped', 'failed', 'total', 'errors')})
             return result
 
-        # --- tar-over-SSH：文件清单经 stdin 传入（--null -T -），不受命令行长度限制 ---
-        # 相对路径 + -C remote_path，解包时 member.name 即为相对路径；服务器端零写入。
-        cmd = f"tar --null -cf - -C {shlex.quote(remote_path)} -T -"
-        print(f"[sync-download] 执行: {cmd}（{total_to_transfer} 个文件经 stdin 传入）")
+        # --- 分批 tar-over-SSH ---
+        # 为什么分批（2026-10-14 用户实测反馈）：
+        #   一次性把 9 万多个文件塞进单个 tar，SSH 通道要连续跑几十分钟，
+        #   前端只有「(0 / 95728)」干看着 → 用户以为卡死。而且**一个批次挂掉就全盘皆输**，
+        #   前面下好的几千个文件随进程一起废掉。
+        # 分批后：每批独立 tar，失败只影响那一批，且每批结束都能上报进度与成功信息。
+        # 文件清单仍经 stdin 传入（--null -T -），不受命令行长度限制、不在服务器写文件。
+        # DL_BATCH_SIZE<=0 时退化成不分批（旧行为）
+        BATCH_SIZE = DL_BATCH_SIZE if DL_BATCH_SIZE > 0 else max(total_to_transfer, 1)
+        chunks = [to_download[i:i + BATCH_SIZE] for i in range(0, len(to_download), BATCH_SIZE)]
+        n_batches = len(chunks)
+        print(f"[sync-download] 共 {total_to_transfer} 个文件，分 {n_batches} 批传输"
+              f"（每批 ≤{BATCH_SIZE}，{total_bytes / 1024 / 1024:.1f}MB）")
 
-        try:
-            stdin, stdout, stderr = client.exec_command(cmd, bufsize=262144)
+        os.makedirs(local_path, exist_ok=True)
+        transferred = 0
+        current = 0
+        last_report = 0.0
+        t_start = time.time()
+        cancelled = False
 
-            # 后台线程持续排空 stderr，防止 tar 告警塞满通道窗口导致死锁
-            err_chunks = []
-            def _drain_err():
-                try:
-                    while True:
-                        b = stderr.read(65536)
-                        if not b:
-                            break
-                        err_chunks.append(b)
-                except Exception:
-                    pass
-            err_thread = threading.Thread(target=_drain_err, daemon=True)
-            err_thread.start()
+        for bi, chunk in enumerate(chunks, 1):
+            if _cancelled():
+                cancelled = True
+                break
 
-            # 写入 null 分隔的相对路径清单，然后关闭写端让 tar 开始打包
-            payload = b"".join(rel.encode("utf-8", "surrogateescape") + b"\0" for _, rel in to_download)
-            stdin.write(payload)
-            stdin.flush()
-            stdin.channel.shutdown_write()
+            chunk_bytes = sum(remote_files[rp][1] for rp, _ in chunk)
+            cmd = f"tar --null -cf - -C {shlex.quote(remote_path)} -T -"
+            if n_batches > 1:
+                print(f"[sync-download] 第 {bi}/{n_batches} 批：{len(chunk)} 个文件 "
+                      f"{chunk_bytes / 1024 / 1024:.1f}MB")
 
-            os.makedirs(local_path, exist_ok=True)
-            transferred = 0
-            current = 0
-            last_report = 0.0
-
-            # 流式解包：边下边写盘，不占内存，逐文件报进度
-            with tarfile.open(fileobj=stdout, mode='r|') as tar:
-                for member in tar:
-                    if _cancelled():
-                        raise _DownloadCancelled()
-                    if not member.isreg():
-                        continue
-                    rel = member.name
-                    # 防路径穿越
-                    if rel.startswith("/") or ".." in rel.split("/"):
-                        continue
-                    target = os.path.join(local_path, rel)
-                    os.makedirs(os.path.dirname(target) or local_path, exist_ok=True)
-                    f = tar.extractfile(member)
-                    with open(target, 'wb') as out:
-                        if f:
-                            while True:
-                                buf = f.read(262144)
-                                if not buf:
-                                    break
-                                if _cancelled():
-                                    out.close()
-                                    raise _DownloadCancelled()
-                                out.write(buf)
-                                transferred += len(buf)
-                    os.utime(target, (member.mtime, member.mtime))
-                    result["downloaded"] += 1
-                    current += 1
-                    now = time.time()
-                    if now - last_report > 0.15 or current == total_to_transfer:
-                        last_report = now
-                        _report(phase='file', current=current, to_transfer=total_to_transfer,
-                                file=rel, bytes=transferred, total_bytes=total_bytes)
-
-            err_thread.join(timeout=3)
-            err_output = b"".join(err_chunks).decode("utf-8", errors="replace").strip()
-            exit_status = stdout.channel.recv_exit_status()
-            if exit_status != 0 and err_output:
-                print(f"[sync-download] tar stderr: {err_output[:500]}")
-                result["errors"].append(f"tar 警告: {err_output[:200]}")
-        except _DownloadCancelled:
-            result["errors"].append("已取消")
-            print("[sync-download] 用户取消")
+            batch_ok = True
             try:
-                client.close()
-            except Exception:
-                pass
-            _report(phase='cancelled', **{k: result[k] for k in ('downloaded', 'skipped', 'failed', 'total')})
-            return result
-        except (IOError, OSError, EOFError) as e:
-            result["failed"] = total_to_transfer - result["downloaded"]
-            err_msg = f"网络传输中断: {type(e).__name__}: {e}"
-            result["errors"].append(err_msg)
-            print(f"[sync-download] {err_msg}")
-        except tarfile.TarError as e:
-            result["failed"] = total_to_transfer - result["downloaded"]
-            result["errors"].append(f"解包失败: {e}")
-            print(f"[sync-download] 解包错误: {e}")
+                stdin, stdout, stderr = client.exec_command(cmd, bufsize=262144)
+
+                # 后台线程持续排空 stderr，防止 tar 告警塞满通道窗口导致死锁
+                err_chunks = []
+
+                def _drain_err(ch=stderr, sink=err_chunks):
+                    try:
+                        while True:
+                            b = ch.read(65536)
+                            if not b:
+                                break
+                            sink.append(b)
+                    except Exception:
+                        pass
+
+                err_thread = threading.Thread(target=_drain_err, daemon=True)
+                err_thread.start()
+
+                # 写入本批 null 分隔的相对路径清单，然后关闭写端让 tar 开始打包
+                payload = b"".join(rel.encode("utf-8", "surrogateescape") + b"\0"
+                                   for _, rel in chunk)
+                stdin.write(payload)
+                stdin.flush()
+                stdin.channel.shutdown_write()
+
+                # 流式解包：边下边写盘，不占内存，逐文件报进度
+                with tarfile.open(fileobj=stdout, mode='r|') as tar:
+                    for member in tar:
+                        if _cancelled():
+                            cancelled = True
+                            break
+                        if not member.isreg():
+                            continue
+                        rel = member.name
+                        # 防路径穿越
+                        if rel.startswith("/") or ".." in rel.split("/"):
+                            continue
+                        target = os.path.join(local_path, rel)
+                        os.makedirs(os.path.dirname(target) or local_path, exist_ok=True)
+                        f = tar.extractfile(member)
+                        with open(target, 'wb') as out:
+                            if f:
+                                while True:
+                                    buf = f.read(262144)
+                                    if not buf:
+                                        break
+                                    if _cancelled():
+                                        out.close()
+                                        cancelled = True
+                                        break
+                                    out.write(buf)
+                                    transferred += len(buf)
+                        if cancelled:
+                            break
+                        os.utime(target, (member.mtime, member.mtime))
+                        result["downloaded"] += 1
+                        current += 1
+                        now = time.time()
+                        if now - last_report > 0.15 or current == total_to_transfer:
+                            last_report = now
+                            # batch 事件：前端靠它显示「已传/总量 + 速率」，
+                            # 缺了它界面就只干巴巴一个 (0 / 95728)，看着像卡死。
+                            _report(phase='batch', current=current, to_transfer=total_to_transfer,
+                                    file=rel, bytes=transferred, total_bytes=total_bytes,
+                                    batch=bi, batches=n_batches)
+                            _report(phase='file', current=current,
+                                    to_transfer=total_to_transfer, file=rel,
+                                    bytes=transferred, total_bytes=total_bytes)
+
+                err_thread.join(timeout=3)
+                err_output = b"".join(err_chunks).decode("utf-8", errors="replace").strip()
+                exit_status = stdout.channel.recv_exit_status()
+                if exit_status != 0 and err_output:
+                    print(f"[sync-download] tar stderr: {err_output[:500]}")
+                    batch_ok = False
+            except (IOError, OSError, EOFError) as e:
+                err_msg = f"网络传输中断: {type(e).__name__}: {e}"
+                print(f"[sync-download] {err_msg}")
+                result["failed"] += len(chunk)
+                result["errors"].append(err_msg)
+                batch_ok = False
+            except tarfile.TarError as e:
+                print(f"[sync-download] 解包错误: {e}")
+                result["failed"] += len(chunk)
+                result["errors"].append(f"解包失败: {e}")
+                batch_ok = False
+
+            # 每批结束都上报一次成功信息 —— 用户明确要求「下面的成功信息也要有输出」
+            elapsed = max(time.time() - t_start, 0.001)
+            _report(phase='batch_done', batch=bi, batches=n_batches,
+                    batch_ok=batch_ok, batch_files=len(chunk),
+                    current=current, to_transfer=total_to_transfer,
+                    downloaded=result["downloaded"], skipped=result["skipped"],
+                    failed=result["failed"], bytes=transferred, total_bytes=total_bytes)
+            if batch_ok:
+                print(f"[sync-download] 第 {bi}/{n_batches} 批完成，累计 {result['downloaded']}/"
+                      f"{total_to_transfer} 个（{transferred / 1024 / 1024:.1f}MB，"
+                      f"{elapsed:.0f}s，{transferred / 1024 / elapsed:.0f}KB/s）")
+            if batch_ok and bi < n_batches:
+                # 批间稍作停顿，避免连着 15 次 exec_command 把 SSH 通道打满
+                time.sleep(DL_BATCH_GAP)
 
     finally:
         try:
@@ -1408,6 +1460,12 @@ def sync_download(server: dict, project: dict, local_path: str, progress_cb=None
         except Exception:
             pass
 
+    if cancelled:
+        result["errors"].append("已取消")
+        print("[sync-download] 用户取消")
+        _report(phase='cancelled', **{k: result[k] for k in ('downloaded', 'skipped', 'failed', 'total')})
+        return result
+
     print(f"[sync-download] 完成: 下载 {result['downloaded']}, 跳过 {result['skipped']}, 失败 {result['failed']}")
     if result["errors"]:
         print("[sync-download] 失败详情:")
@@ -1418,7 +1476,12 @@ def sync_download(server: dict, project: dict, local_path: str, progress_cb=None
 
 
 class _DownloadCancelled(Exception):
-    """下载被用户取消"""
+    """传输被用户取消。
+
+    ⚠️ 目前只有 `sync_upload` 还用它（走raise 上抛）；`sync_download` 自v1.4.25
+    改成**分批 + cancelled 标志**（一批失败/取消不再连坐后面的批次），
+    所以 download 侧已不再 raise 这个异常。别再拿它去改 download 路径。
+    """
     pass
 
 

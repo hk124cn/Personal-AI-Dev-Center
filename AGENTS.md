@@ -325,7 +325,7 @@ python tools/run_checks.py
 
 ## 11. 当前状态速览
 
-- 版本：**1.4.24**
+- 版本：**1.4.25**
 - 安全加固 R1–R10 **全部完成**（后端绑 127.0.0.1、流式上传、命令注入防护、
   取消机制、PyInstaller 内置后端、原子写配置、知识库 XSS 消毒、子进程树清理…），
   详见 `docs/system-review.md`。
@@ -339,8 +339,18 @@ python tools/run_checks.py
   4669s）；② **增量跳过**（md 内容指纹 + `provider|model|base_url` 签名都没变 → 直接复用
   上次结果，一个请求都不发，`llm_status='reused'`）；③ **失败熔断**（一次同步内连续失败
   `LLM_BREAKER_THRESHOLD` 次后本轮不再请求，`skipped_breaker`）。
-  另：LLM 配置表单加 provider 预设下拉（OpenAI / DeepSeek / 智谱 / Kimi / 硅基流动 /
+  另：LLM 配置表单加provider 预设下拉（OpenAI / DeepSeek / 智谱 / Kimi / 硅基流动 /
   商汤 / Claude / 通义 / 自定义），前端把英文 `llm_status` 翻译成人话。
+- v1.4.25：① **429 限流不等于 provider 故障** —— 商汤对大项目（29k token）直接
+  `HTTP 429 tpm/rpm limit`，熔断原先只看 `status`，一轮限流把 13 个健康项目全跳过了。
+  现在 `_call_openai` 遇 429 自动退避重试（`LLM_RATE_LIMIT_RETRIES`/`BACKOFF`），
+  `_update_llm_breaker` 增加 `error` 参数，429 不计入熔断；另加项目间节流
+  `LLM_PROJECT_SPACING=8s`（`reused` 不等）。② 修`sync_all` 的 `project_entry`
+  漏传 `llm_error`（`sync_single` 一直有）→ 失败原因被吞，只剩光秃秃的 `api_failed`。
+  ③ **下载分批**（`DL_BATCH_SIZE=600`/`DL_BATCH_GAP=0.5`）：一次性把 9 万文件塞给单个 tar
+  会让 SSH 连跑几十分钟、界面只显示「(0 / 95728)」看着像卡死，且一批挂掉全盘皆输。
+  现改为每批独立 tar，进度浮窗显示「已传/总量 + 第 N/M 批 + 速率」，每批结束追加一条
+  成功信息到日志区。实测 772 文件 / 307MB 分 52 批 91s、3495KB/s、0 失败。
 - 参考数据：15 个项目全量重算一次约 12.7 万 input + 3 万 output token（`$0.15/$0.6`
   档位约 ¥0.27），工具 `tools/estimate_llm_tokens.py`。
 - 待办与历史：见 `.workbuddy/memory/` 下的日记与 `MEMORY.md`。

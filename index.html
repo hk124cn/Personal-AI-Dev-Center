@@ -800,7 +800,7 @@ select.form-input{cursor:pointer;appearance:none;background-image:url("data:imag
 <div id="app" class="app"></div>
 
 <script>
-const APP_VERSION = '1.4.24';
+const APP_VERSION = '1.4.25';
 // ==================== THEMES ====================
 const themes = {
   violet: {
@@ -4933,11 +4933,14 @@ function runSyncWithProgress(projectId, endpoint, type, name, force, selectedFil
               case 'transferring':
                 var toT = event.to_transfer || 0;
                 var sk = event.skipped || 0;
-                setPhase(t('sync_phase_transferring') + ' (0 / ' + toT + ')');
+                var bt = event.batches || 1;
+                setPhase(t('sync_phase_transferring') + ' (0 / ' + toT + ')'
+                  + (bt > 1 ? ' · ' + bt + ' ' + t('sync_batches_unit') : ''));
                 setStats([
                   '<span class="dot" style="background:var(--accent)"></span>' + toT + ' ' + t('sync_files_to_transfer'),
-                  '<span class="dot" style="background:var(--text-tertiary)"></span>' + sk + ' ' + t('sync_files_skipped')
-                ]);
+                  '<span class="dot" style="background:var(--text-tertiary)"></span>' + sk + ' ' + t('sync_files_skipped'),
+                  (event.total_bytes ? '<span class="dot" style="background:var(--blue)"></span>' + formatBytes(event.total_bytes) : '')
+                ].filter(Boolean));
                 if (toT === 0) { setBar(100); setPhase(t('sync_phase_done'), true); showDone(true, t('sync_phase_done')); }
                 break;
               case 'file':
@@ -4946,15 +4949,39 @@ function runSyncWithProgress(projectId, endpoint, type, name, force, selectedFil
                 var tot = event.to_transfer || 1;
                 setPhase(t('sync_phase_transferring') + ' (' + cur + ' / ' + tot + ') — ' + elapsedStr());
                 setBar((cur / tot) * 100);
-                addLog((isUpload ? '\u2191 ' : '\u2193 ') + event.file);
+                // 带 bytes 的事件由 batch 分支接管（会按批次汇总），别再逐文件刷屏
+                if (!event.bytes) addLog((isUpload ? '\u2191 ' : '\u2193 ') + event.file);
                 break;
               case 'batch':
-                var bytes = event.bytes || 0;
-                var totalB = event.total_bytes || 1;
-                var pct = Math.min(99, (bytes / totalB) * 100);
-                var filesN = event.to_transfer || 0;
-                setPhase(formatBytes(bytes) + ' / ' + formatBytes(totalB) + ' (' + filesN + ' ' + t('sync_files_unit') + ')' + speedStr(bytes) + ' · ' + elapsedStr());
-                setBar(pct);
+                // 传输中显示「已传/总量 + 当前批次 + 速率」——
+                // 别只干巴巴一个 (0 / 95728)，用户反馈这看着像卡死（2026-10-14）
+                if (logEl) logEl.style.display = '';
+                var bBytes = event.bytes || 0;
+                var bTotal = event.total_bytes || 1;
+                var bPct = Math.min(99, (bBytes / bTotal) * 100);
+                var bCur = event.current || 0;
+                var bToT = event.to_transfer || 0;
+                var bAll = event.batches || 1;
+                setPhase(formatBytes(bBytes) + ' / ' + formatBytes(bTotal)
+                  + (bAll > 1 ? ' · ' + t('sync_batch_n') + ' ' + (event.batch || 0) + '/' + bAll : '')
+                  + ' · ' + bCur + '/' + bToT + ' ' + t('sync_files_unit')
+                  + speedStr(bBytes) + ' · ' + elapsedStr());
+                setBar(bPct);
+                break;
+              case 'batch_done':
+                // 每批结束输出一次成功信息（用户明确要求「成功信息也要有输出」）
+                var bOk = event.batch_ok;
+                addLog((bOk ? '\u2713 ' : '\u2717 ') + t('sync_batch_n') + ' ' + (event.batch || 0) + '/' + (event.batches || 1)
+                  + (bOk ? ' ' + t('sync_batch_ok') : ' ' + t('sync_batch_fail'))
+                  + ' \u00b7 ' + (event.downloaded || 0) + '/' + (event.to_transfer || 0) + ' ' + t('sync_files_unit')
+                  + ' \u00b7 ' + formatBytes(event.bytes || 0)
+                  + (event.skipped ? ' \u00b7 ' + t('sync_files_skipped') + ' ' + event.skipped : '')
+                  + (event.failed ? ' \u00b7 ' + t('ls_failed') + ' ' + event.failed : ''));
+                setStats([
+                  '<span class="dot" style="background:var(--accent)"></span>' + (event.downloaded || 0) + ' ' + t('sync_files_done'),
+                  '<span class="dot" style="background:var(--text-tertiary)"></span>' + (event.skipped || 0) + ' ' + t('sync_files_skipped'),
+                  (event.failed ? '<span class="dot" style="background:var(--amber)"></span>' + event.failed + ' ' + t('ls_failed') : '')
+                ].filter(Boolean));
                 break;
               case 'done':
                 setBar(100);
