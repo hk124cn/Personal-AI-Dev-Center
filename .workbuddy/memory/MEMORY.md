@@ -39,8 +39,11 @@
 - **LLM provider 分发（`call_llm_api`）**：`anthropic` → 原生协议；`qwen` → 阿里云百炼；**其余任意值 → OpenAI 兼容**（`base_url.rstrip('/') + '/chat/completions'`）→ 接任何付费模型后端早就支持，缺的只是 UI 入口（v1.4.24 加了 `LLM_PRESETS` 预设下拉）。⚠️ 商汤预设的 provider 必须填 `商汤科技`（与现有配置一致），否则签名变了触发一轮全量重算。
 - **⚠️ 429 限流 ≠ provider 故障**（2026-10-14 真实事故）：v1.4.24 上线后第一次同步 15 个项目里 2 个 `api_failed` + 13 个 `skipped_breaker`，看似熔断误伤。真因是商汤 `HTTP 429 inference exceeds tpm/rpm limit`（AUTO-STOCK 46k 字符 / 29k token 一次撞 TPM 上限）。修法三件：① `_call_openai` 遇 429 退避重试（`LLM_RATE_LIMIT_RETRIES=3` / `LLM_RATE_LIMIT_BACKOFF=20`，读服务端 `Retry-After`）；② `_update_llm_breaker` 增加第 4 参 `error`，含 `429`+`limit` 时**不计入熔断**（原来只看 status，任何 api_failed 一律熔断）；③ `sync_all` 项目间节流 `LLM_PROJECT_SPACING=8` 秒，且只对真发过请求的（`analyzed`/`api_failed`）等，`reused` 不等。
 - **`sync_all` 的 project_entry 曾漏 `llm_error`**（`sync_single` 一直有）→ 失败原因被吞，只剩光秃秃的 `api_failed`，排查时看不出哪一步挂的。已补，注释标注别再删。
-- **下载 ≠ 同步**：浮窗 `sync_phase_transferring` = 「正在传输文件」，与同步提速无关。**实测 AUTO-STOCK 远端 95,728 文件 / 3,191 MB，其中 `node_modules` 35,977 + `venv` 8,282 + `.git` 6,474 + `__pycache__` 3,731 + `dist` 3,517**；默认过滤后只剩 **2,329 个 / 212.7 MB（砍 98%）**。所以下载时**别勾「全部」**（`all=true`），否则在 SSH 上跑很久。扫描本身很快（find 3.26s / 本地 0s），慢的是传输。
-- **过滤清单漏了一批构建目录**：`DEFAULT_SYNC_IGNORE` 只有 9 项，缺 `.next`(Next.js)/`target`(Java)/`.pytest_cache`/`.mypy_cache`/`.tox`/`coverage`/`.cache` 等。AUTO-STOCK 里有 **249 个 `dist` 目录**、11 个 `build` 都没被忽略；补齐可从 2,329 再降到 2,122。⚠️ `dist`/`build`/`out` 名字太通用，加进清单有「源码真的放在 src/dist 下被误伤」的边缘风险，**未改，等用户拍板**。
+- **下载 ≠ 同步**：浮窗 `sync_phase_transferring` = 「正在传输文件」，与同步提速无关。**实测 AUTO-STOCK 远端 95,728 文件 / 3,191 MB，其中 `node_modules` 35,977 + `venv` 8,282 + `.git` 6,474 + `__pycache__` 3,731 + `dist` 3,517**；「智能过滤」后只剩 **2,329 个 / 212.7 MB（砍 98%）**。扫描本身很快（find 3.26s / 本地 0s），慢的是传输。
+- **⚠️ 过滤清单只作用于「智能过滤」，跟全量无关**（2026-10-17 用户纠正）：下载弹窗两个选项 =「智能过滤(推荐)」/「全部文件」。**「全部文件」走 `all=true` → `sync_all=True` → `_remote_stat_tree_fast` 与 `_sftp_stat_tree` 两条扫描路径都直接跳过所有过滤判断，一个文件都不漏。**
+  → 所以：**用户要全量镜像时，别再建议「补过滤清单」** —— 那是给智能过滤用的优化，对全量零影响，纯属答非所问。被用户当场点出过一次。
+- **过滤清单漏了一批构建目录**（仅影响「智能过滤」）：`DEFAULT_SYNC_IGNORE` 只有 9 项，缺 `.next`(Next.js)/`target`(Java)/`.pytest_cache`/`.mypy_cache`/`.tox`/`coverage`/`.cache` 等。AUTO-STOCK 里有 **249 个 `dist` 目录**、11 个 `build` 没被忽略；补齐可从 2,329 再降到 2,122。⚠️ `dist`/`build`/`out` 名字太通用，有「源码真的放在 src/dist 下被误伤」的边缘风险，**暂未改，用户未拍板**。
+- **下载分批（v1.4.25）**：`DL_BATCH_SIZE=600`（`DEV_CENTER_DL_BATCH`）+ `DL_BATCH_GAP=0.5`。每批独立 tar，某批失败不连坐后面；事件 `phase='batch'`（传输中，带 bytes → 前端显示速率）与 `phase='batch_done'`（每批成功信息）。**取消逻辑已改**：`sync_download` 不再 raise `_DownloadCancelled`（会穿出 finally），改 `cancelled` 标志 + break；该异常类只剩 `sync_upload` 在用。
 - **LLM token 消耗实测**（`tools/estimate_llm_tokens.py`）：15 个项目全量重算 = **127,434 输入 + 30,000 输出上限** ≈ **¥0.27/次**，每周一次约 ¥1/月；上了增量跳过后常态更低。
 
 ## 验证与工具
