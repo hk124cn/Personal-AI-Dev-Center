@@ -688,6 +688,15 @@ select.form-input{cursor:pointer;appearance:none;background-image:url("data:imag
 .bench-cmp td{padding:9px 8px;border-bottom:1px solid var(--border);color:var(--text-secondary);white-space:nowrap}
 .bench-cmp tr.top td{background:var(--bg-elevated)}
 .bench-cmp td.v{color:var(--text);font-weight:600}
+.bench-pick{display:flex;flex-direction:column;gap:6px;margin-top:10px}
+.bench-pick-row{display:flex;align-items:center;gap:10px;padding:9px 12px;border:1px solid var(--border);border-radius:8px;background:var(--bg-elevated);font-size:12px}
+.bench-pick-row .bp-name{color:var(--text);font-weight:500;min-width:110px}
+.bench-pick-row .bp-meta{color:var(--text-tertiary);font-size:11px;flex:1}
+.bench-pick-row .bp-score{font-size:15px;font-weight:700;width:44px;text-align:right}
+.bench-pick-bar{height:4px;border-radius:2px;background:var(--border);overflow:hidden;flex:1;min-width:60px}
+.bench-pick-bar i{display:block;height:100%;background:var(--accent);transition:width .25s}
+.bench-pick-done{color:var(--green)}
+.bench-pick-fail{color:var(--red)}
 
 /* ===== DASHBOARD MONITOR (首页概览实时监控) ===== */
 .dash-mon-panel{}
@@ -1124,6 +1133,12 @@ const I18N = {
   // Quick actions
   qa_new_project:{zh:'新建项目',en:'New Project'},
   qa_add_server:{zh:'添加服务器',en:'Add Server'},
+  qa_bench:{zh:'跑分',en:'Benchmark'},
+  bench_run:{zh:'跑分',en:'Run'},
+  bench_run_all:{zh:'全部快速体检',en:'Quick-test all'},
+  bench_pick_tip:{zh:'逐台跑，或一键全跑（串行执行，约 15 秒/台）',en:'Run one by one, or all at once (serial, ~15s each)'},
+  bench_pick_note:{zh:'批量跑分用「快速体检」档（零依赖、不影响线上业务）。要评估 CPU 真实水平请到服务器详情里选「标准跑分」。',en:'Batch run uses the quick profile (zero dependency, safe for production). For real CPU numbers use the standard profile from the server detail page.'},
+  bench_no_servers:{zh:'还没有添加服务器',en:'No servers yet'},
   // Dashboard panels
   panel_server_status:{zh:'服务器状态',en:'Server Status'},
   panel_agent_dist:{zh:'Agent 分布',en:'Agent Distribution'},
@@ -1638,7 +1653,7 @@ function viewDashboard(){
   const agS=new Set(state.agents.flatMap(a=>a.servers)).size;
   saveStatsSnapshot({online:onC,active:actP,agents:state.agents.length,progress:avgP});
   const tOnline=getTrend(onC,'online'),tActive=getTrend(actP,'active'),tAgents=getTrend(state.agents.length,'agents'),tProgress=getTrend(avgP,'progress');
-  const quickActions=`<div class="quick-actions"><div class="quick-action" onclick="addProject()">${icon('plus')} ${t('qa_new_project')}</div><div class="quick-action" onclick="addServer()">${icon('server')} ${t('qa_add_server')}</div><div style="flex:1"></div><div style="font-size:11px;color:var(--text-tertiary);align-self:center">v${APP_VERSION}</div></div>`;
+  const quickActions=`<div class="quick-actions"><div class="quick-action" onclick="addProject()">${icon('plus')} ${t('qa_new_project')}</div><div class="quick-action" onclick="addServer()">${icon('server')} ${t('qa_add_server')}</div><div class="quick-action" onclick="openBenchPicker()">${icon('gauge')} ${t('qa_bench')}</div><div style="flex:1"></div><div style="font-size:11px;color:var(--text-tertiary);align-self:center">v${APP_VERSION}</div></div>`;
   // 首页不再展示「最近同步」状态条（用户要求：删掉显示，后台查询照旧）。
   // 后台仍在拉取并写入 state.lastSync（见 refreshData），「定时同步」页也照常显示完整形态。
   // 需要恢复首页显示时，把 renderLastSyncBar(state.lastSync,'compact') 加回下面这行即可。
@@ -3241,6 +3256,125 @@ async function benchLoadHistory(sid){
         </div>`;
       }).join('');
   }catch(e){ /* 历史加载失败不影响主流程 */ }
+}
+
+/* ---- 批量跑分面板（首页快速操作入口）----
+   解决「扫 N 台要点 N 次」的痛点：一次点开，逐台或一键全跑（串行，避免并发 SSH 抢资源）。 */
+function openBenchPicker(){
+  const rows = state.servers.map(s=>{
+    const p = BENCH_PROFILES.find(x=>x.key==='quick');
+    return `<div class="bench-pick-row" id="bp-row-${s.id}">
+      <span class="bp-name">${escapeHtml(s.name||s.id)}</span>
+      <span class="bp-meta" id="bp-meta-${s.id}">${escapeHtml(s.ip||'')}</span>
+      <span class="bench-pick-bar" id="bp-bar-${s.id}" style="display:none"><i style="width:0%"></i></span>
+      <span class="bp-score" id="bp-score-${s.id}">—</span>
+      <button class="btn btn-sm" onclick="benchPickOne('${s.id}')">${icon('play')} ${t('bench_run')}</button>
+    </div>`;
+  }).join('');
+  state.modal={title:'📊 批量跑分', body:`<div class="bench-opts">
+      <span style="font-size:12px;color:var(--text-secondary)">${t('bench_pick_tip')}</span>
+      <span style="flex:1"></span>
+      <button class="btn btn-sm" onclick="benchPickAll()">${icon('zap')} ${t('bench_run_all')}</button>
+    </div>
+    <div class="bench-pick" id="bench-pick-list">${rows||'<div class="bench-note">'+t('bench_no_servers')+'</div>'}</div>
+    <div class="bench-note" id="bench-pick-msg">${icon('info')} ${t('bench_pick_note')}</div>`, size:'modal-lg'};
+  render();
+  if(window.lucide) lucide.createIcons();
+  benchPickLoadScores();
+}
+// 载入各台最近一次跑分分数（没有就显示 —）
+async function benchPickLoadScores(){
+  try{
+    const r=await fetch(API_BASE+'/api/bench/compare');
+    const d=await r.json();
+    (d.rows||[]).forEach(row=>{
+      const el=document.getElementById('bp-score-'+row.server_id);
+      if(!el) return;
+      const sc=row.score||{};
+      if(row.has_data && sc.total_score!==null && sc.total_score!==undefined){
+        el.textContent=sc.total_score;
+        el.style.color=benchColorFor(sc.total_score);
+      } else {
+        el.textContent='—'; el.style.color='var(--text-tertiary)';
+      }
+    });
+  }catch(e){/* 分数加载失败不影响跑分 */}
+}
+function benchPickSetMsg(text, kind){
+  const el=document.getElementById('bench-pick-msg');
+  if(el) el.innerHTML=(kind==='ok'?icon('check-circle'):kind==='err'?icon('alert-circle'):icon('info'))+' '+escapeHtml(text);
+}
+// Promise 化的单次跑分（供批量串行调用）
+function benchRunOnce(sid, profile, lowPrio){
+  return new Promise((resolve,reject)=>{
+    const url=API_BASE+'/api/bench/'+encodeURIComponent(sid)
+      +'?profile='+encodeURIComponent(profile)
+      +'&low_priority='+(lowPrio?'true':'false');
+    const es=new EventSource(url);
+    let lastMsg='';
+    es.onmessage=(ev)=>{
+      let d; try{ d=JSON.parse(ev.data); }catch(e){ return; }
+      if(d.phase==='progress'){ lastMsg=d.message||''; }
+      else if(d.phase==='done'){ es.close(); resolve(d); }
+      else if(d.phase==='error'){ es.close(); reject(new Error(d.message||'未知错误')); }
+    };
+    es.onerror=()=>{ es.close(); reject(new Error('连接中断')); };
+    setTimeout(()=>{ if(lastMsg) benchPickSetMsg(lastMsg); }, 50);
+  });
+}
+async function benchPickOne(sid){
+  const s=getServer(sid); if(!s) return;
+  const bar=document.getElementById('bp-bar-'+sid);
+  const btn=document.querySelector('#bp-row-'+CSS.escape(sid)+' button');
+  if(btn) btn.disabled=true;
+  if(bar){ bar.style.display=''; bar.querySelector('i').style.width='35%'; }
+  benchPickSetMsg((s.name||sid)+' 跑分中…');
+  try{
+    const d=await benchRunOnce(sid, _benchState.profile||'quick', true);
+    const sc=d.score||{};
+    const el=document.getElementById('bp-score-'+sid);
+    if(el){
+      el.textContent=(sc.total_score!==null&&sc.total_score!==undefined)?sc.total_score:'—';
+      el.style.color=benchColorFor(sc.total_score);
+    }
+    if(bar) bar.querySelector('i').style.width='100%';
+    benchPickSetMsg((s.name||sid)+' 完成：'+(sc.total_score!==null&&sc.total_score!==undefined?sc.total_score+' 分（'+(sc.total_grade||'')+'）':'无分数'),'ok');
+  }catch(e){
+    if(bar) bar.querySelector('i').style.width='100%';
+    benchPickSetMsg((s.name||sid)+' 失败：'+(e.message||e),'err');
+  }finally{
+    if(btn) btn.disabled=false;
+  }
+}
+async function benchPickAll(){
+  const ids=state.servers.map(s=>s.id);
+  if(!ids.length) return;
+  const t0=Date.now();
+  let ok=0, fail=0;
+  for(let i=0;i<ids.length;i++){
+    const s=getServer(ids[i]);
+    const nm=(s&&s.name)||ids[i];
+    benchPickSetMsg('('+(i+1)+'/'+ids.length+') '+nm+' 跑分中…');
+    const bar=document.getElementById('bp-bar-'+ids[i]);
+    if(bar){ bar.style.display=''; bar.querySelector('i').style.width='35%'; }
+    try{
+      const d=await benchRunOnce(ids[i],'quick',true);
+      const sc=d.score||{};
+      const el=document.getElementById('bp-score-'+ids[i]);
+      if(el){
+        el.textContent=(sc.total_score!==null&&sc.total_score!==undefined)?sc.total_score:'—';
+        el.style.color=benchColorFor(sc.total_score);
+      }
+      if(bar) bar.querySelector('i').style.width='100%';
+      ok++;
+    }catch(e){
+      if(bar) bar.querySelector('i').style.width='100%';
+      fail++;
+    }
+  }
+  const sec=Math.round((Date.now()-t0)/1000);
+  benchPickSetMsg('批量完成：成功 '+ok+' 台'+(fail?'，失败 '+fail+' 台':'')+'，耗时 '+sec+' 秒。'
+    +' 横向对比见侧边栏「跑分评估」。','ok');
 }
 
 /* ---- 多服务器横向对比 ---- */
