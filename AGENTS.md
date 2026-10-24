@@ -325,7 +325,7 @@ python tools/run_checks.py
 
 ## 11. 当前状态速览
 
-- 版本：**1.4.25**
+- 版本：**1.4.26**
 - 安全加固 R1–R10 **全部完成**（后端绑 127.0.0.1、流式上传、命令注入防护、
   取消机制、PyInstaller 内置后端、原子写配置、知识库 XSS 消毒、子进程树清理…），
   详见 `docs/system-review.md`。
@@ -351,6 +351,16 @@ python tools/run_checks.py
   会让 SSH 连跑几十分钟、界面只显示「(0 / 95728)」看着像卡死，且一批挂掉全盘皆输。
   现改为每批独立 tar，进度浮窗显示「已传/总量 + 第 N/M 批 + 速率」，每批结束追加一条
   成功信息到日志区。实测 772 文件 / 307MB 分 52 批 91s、3495KB/s、0 失败。
+- v1.4.26：**VPS 跑分 / 采购评估模块**（为黑五采购准备）。① `backend/bench.py` 三档采集 ——
+  `quick`（零依赖 ~15 秒，/proc + dd + socket）/ `standard`（YABS 全套 ~10 分钟）/
+  `full`（+ NextTrace 路由 + IP 质量 + 流媒体解锁）；**低优先级模式**用
+  `nice -n 19` + `ionice -c 3` 包裹（会被子进程继承，fio/sysbench 全自动降权），
+  且自动跳过 iperf3（nice 管不住带宽）。② `backend/bench_score.py` 评分引擎，维度权重参考
+  VPSBenchmarks 官方 v2026.04（CPU 30 / 磁盘 25 / 网络 20 / 内存 15 / 稳定性 10），
+  阈值可在 `config.json.bench_thresholds` 配置。③ 前端：服务器详情卡「跑分」按钮 +
+  侧边栏「跑分评估」对比视图。④ `tools/local_speedtest.py` **本地侧**测速
+  （你 → VPS 的真实延迟，带代理/TUN 检测）。
+  ⚠️ **服务器侧延迟 ≠ 用户侧延迟**，采购决策要看后者。
 - 参考数据：15 个项目全量重算一次约 12.7 万 input + 3 万 output token（`$0.15/$0.6`
   档位约 ¥0.27），工具 `tools/estimate_llm_tokens.py`。
 - 待办与历史：见 `.workbuddy/memory/` 下的日记与 `MEMORY.md`。
