@@ -295,7 +295,7 @@ def _collect_quick(client, progress_cb=None, cancel_event=None, low_priority=Tru
                    latency_targets=None):
     """quick 档：零依赖体检。"""
     if progress_cb:
-        progress_cb({"phase": "running", "step": "quick", "message": "快速体检中（零依赖）"})
+        progress_cb({"phase": "progress", "step": "quick", "message": "快速体检中（零依赖）"})
 
     targets = latency_targets or DEFAULT_LATENCY_TARGETS
     # 生成 shell 目标清单：GROUP HOST PORT
@@ -416,7 +416,7 @@ def _collect_quick(client, progress_cb=None, cancel_event=None, low_priority=Tru
     if bw:
         result["raw"]["net_down_mbps"] = max(bw)
     if progress_cb:
-        progress_cb({"phase": "done", "message": "快速体检完成"})
+        progress_cb({"phase": "progress", "step": "quick", "message": "快速体检完成"})
     return result
 
 
@@ -449,7 +449,7 @@ def _collect_standard(client, profile="standard", progress_cb=None,
                       cancel_event=None, low_priority=True):
     """standard / full 档：跑 YABS，解析 JSON。"""
     if progress_cb:
-        progress_cb({"phase": "running", "step": "yabs",
+        progress_cb({"phase": "progress", "step": "yabs",
                      "message": "YABS 跑分中（fio / sysbench / iperf3 / Geekbench），约 10 分钟"})
 
     result_path = "/tmp/.devcenter_yabs.json"
@@ -480,7 +480,8 @@ def _collect_standard(client, profile="standard", progress_cb=None,
         "raw": {},
     }
     if progress_cb:
-        progress_cb({"phase": "done", "message": "YABS 完成（%.0f 秒）" % elapsed})
+        progress_cb({"phase": "progress", "step": "yabs",
+                     "message": "YABS 完成（%.0f 秒）" % elapsed})
 
     if profile == "full":
         extra = _collect_full_extra(client, progress_cb=progress_cb,
@@ -497,7 +498,7 @@ def _collect_full_extra(client, progress_cb=None, cancel_event=None, low_priorit
 
     # --- 路由：优先 NextTrace，回退 besttrace ---
     if progress_cb:
-        progress_cb({"phase": "running", "step": "route", "message": "路由追踪中（NextTrace）"})
+        progress_cb({"phase": "progress", "step": "route", "message": "路由追踪中（NextTrace）"})
     try:
         cmd = ("cd /tmp && curl -fL -m 60 https://nxtrace.org/nt -o nt.sh 2>/dev/null && "
                "chmod +x nt.sh && %s./nt.sh --tcp 223.5.5.5 2>&1 | head -60; rm -f nt.sh"
@@ -517,7 +518,7 @@ def _collect_full_extra(client, progress_cb=None, cancel_event=None, low_priorit
 
     # --- IP 质量 ---
     if progress_cb:
-        progress_cb({"phase": "running", "step": "ip", "message": "IP 质量检测中"})
+        progress_cb({"phase": "progress", "step": "ip", "message": "IP 质量检测中"})
     try:
         cmd = ("%sbash <(curl -Ls --max-time 90 https://IP.Check.Place) 2>&1 | head -120"
                % prefix)
@@ -529,7 +530,7 @@ def _collect_full_extra(client, progress_cb=None, cancel_event=None, low_priorit
 
     # --- 流媒体解锁 ---
     if progress_cb:
-        progress_cb({"phase": "running", "step": "unlock", "message": "流媒体解锁检测中"})
+        progress_cb({"phase": "progress", "step": "unlock", "message": "流媒体解锁检测中"})
     try:
         cmd = ("%sbash <(curl -L -s --max-time 90 https://check.unlock.media) 2>&1 | head -80"
                % prefix)

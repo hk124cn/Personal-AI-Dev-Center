@@ -1368,6 +1368,201 @@ def monitor_history(server_id: str):
     return {"server_id": server_id, "history": _MONITOR_HISTORY.get(server_id, [])}
 
 
+# ==================== VPS 跑分 / 采购评估 ====================
+# 采集在 backend/bench.py（SSH 执行），评分在 backend/bench_score.py。
+# 三档：quick（零依赖秒级）/ standard（YABS 全套）/ full（+路由+IP质量）
+_BENCH_CANCEL = {}
+_BENCH_CANCEL_LOCK = threading.Lock()
+
+
+def _bench_server(server_id: str):
+    """按 server_id 找服务器配置。"""
+    config = load_json(CONFIG_PATH) or {"servers": []}
+    server = next((s for s in config.get("servers", []) if s.get("id") == server_id), None)
+    if not server:
+        return None
+    return server
+
+
+def _bench_score_of(result, thresholds=None):
+    """把采集结果转成评分结构。"""
+    try:
+        from backend import bench_score as BS
+    except ImportError:
+        sys.path.insert(0, str(BASE_DIR))
+        from backend import bench_score as BS
+    extra = result.get("raw") or {}
+    metrics = BS.extract_metrics(result.get("yabs"), extra=extra)
+    scored = BS.score(metrics, thresholds=thresholds)
+    scored["summary"] = BS.summarize(scored)
+    return scored
+
+
+@app.post("/api/bench/{server_id}")
+def bench_run(server_id: str, profile: str = "quick", low_priority: bool = True):
+    """对一台服务器跑分（SSE 流式进度，可取消）。
+
+    profile: quick | standard | full
+    low_priority: true 时用 nice -n 19 + ionice -c 3 降权执行，尽量不影响线上业务
+    """
+    from fastapi.responses import StreamingResponse
+    try:
+        from backend import bench as BENCH
+    except ImportError:
+        sys.path.insert(0, str(BASE_DIR))
+        from backend import bench as BENCH
+
+    if profile not in BENCH.PROFILES:
+        raise HTTPException(400, "未知 profile: %s（可选 quick/standard/full）" % profile)
+    server = _bench_server(server_id)
+    if not server:
+        raise HTTPException(404, "服务器不存在")
+
+    cancel_event = threading.Event()
+    with _BENCH_CANCEL_LOCK:
+        _BENCH_CANCEL[server_id] = cancel_event
+
+    def sse(d):
+        return "data: %s\n\n" % json.dumps(d, ensure_ascii=False)
+
+    def run():
+        try:
+            import queue
+            yield sse({"phase": "start", "profile": profile,
+                       "low_priority": low_priority,
+                       "message": "开始跑分（%s 档%s）" % (
+                           profile, "，低优先级" if low_priority else "，全速")})
+            config = load_json(CONFIG_PATH) or {}
+            thresholds = (config.get("bench_thresholds") or None)
+            latency_targets = config.get("bench_latency_targets") or None
+
+            # 采集放后台线程，SSE 生成器从队列取（否则会阻塞事件循环）
+            q = queue.Queue()
+
+            def progress_cb(d):
+                q.put(d)
+
+            def worker():
+                try:
+                    res = BENCH.run_benchmark(server, profile=profile,
+                                              low_priority=low_priority,
+                                              progress_cb=progress_cb,
+                                              cancel_event=cancel_event,
+                                              latency_targets=latency_targets)
+                    q.put({"phase": "collected", "result": res})
+                except Exception as e:
+                    q.put({"phase": "error", "message": "%s: %s" % (type(e).__name__, str(e)[:400])})
+
+            th = threading.Thread(target=worker, daemon=True)
+            th.start()
+
+            while True:
+                try:
+                    item = q.get(timeout=3.0)
+                except queue.Empty:
+                    if not th.is_alive():
+                        break
+                    # 心跳：防中间代理把长连接掐掉。3 秒一次足够，
+                    # 之前 1 秒一次在 quick 档（13 秒）里刷出 40 多条，前端根本没法看。
+                    yield sse({"phase": "heartbeat"})
+                    continue
+                if item.get("phase") == "collected":
+                    res = item["result"]
+                    scored = _bench_score_of(res, thresholds)
+                    # 落盘保存
+                    try:
+                        path = BENCH.save_result(DATA_DIR, server_id, res)
+                    except Exception as e:
+                        path = "(保存失败: %s)" % e
+                    yield sse({"phase": "done", "result": res, "score": scored,
+                               "saved_to": path})
+                    break
+                if item.get("phase") == "error":
+                    yield sse(item)
+                    break
+                # 采集层的进度事件统一是 phase='progress'（step + message）
+                yield sse(item)
+        finally:
+            with _BENCH_CANCEL_LOCK:
+                _BENCH_CANCEL.pop(server_id, None)
+
+    return StreamingResponse(run(), media_type="text/event-stream")
+
+
+@app.post("/api/bench/{server_id}/cancel")
+def bench_cancel(server_id: str):
+    with _BENCH_CANCEL_LOCK:
+        ev = _BENCH_CANCEL.get(server_id)
+    if ev:
+        ev.set()
+        return {"ok": True, "message": "已请求取消"}
+    return {"ok": False, "message": "该服务器当前没有在跑分"}
+
+
+@app.get("/api/bench/{server_id}/history")
+def bench_history(server_id: str, limit: int = 20):
+    """历史跑分记录（新的在前）。"""
+    try:
+        from backend import bench as BENCH
+    except ImportError:
+        sys.path.insert(0, str(BASE_DIR))
+        from backend import bench as BENCH
+    config = load_json(CONFIG_PATH) or {}
+    thresholds = config.get("bench_thresholds") or None
+    items = []
+    for r in BENCH.list_results(DATA_DIR, server_id=server_id, limit=limit):
+        try:
+            scored = _bench_score_of(r, thresholds)
+        except Exception:
+            scored = None
+        items.append({
+            "collected_at": r.get("collected_at"),
+            "saved_at": r.get("saved_at"),
+            "profile": r.get("profile"),
+            "low_priority": r.get("low_priority"),
+            "score": scored,
+            "raw": r.get("raw"),
+            "latency_groups": r.get("latency_groups"),
+        })
+    return {"server_id": server_id, "items": items}
+
+
+@app.get("/api/bench/compare")
+def bench_compare(limit: int = 10):
+    """多服务器横向对比：每台取最近一次跑分。"""
+    try:
+        from backend import bench as BENCH
+    except ImportError:
+        sys.path.insert(0, str(BASE_DIR))
+        from backend import bench as BENCH
+    config = load_json(CONFIG_PATH) or {}
+    thresholds = config.get("bench_thresholds") or None
+    rows = []
+    for s in config.get("servers", []):
+        sid = s.get("id")
+        hist = BENCH.list_results(DATA_DIR, server_id=sid, limit=1)
+        if not hist:
+            rows.append({"server_id": sid, "server_name": s.get("name"), "has_data": False})
+            continue
+        r = hist[0]
+        try:
+            scored = _bench_score_of(r, thresholds)
+        except Exception:
+            scored = None
+        rows.append({
+            "server_id": sid,
+            "server_name": s.get("name"),
+            "has_data": True,
+            "collected_at": r.get("collected_at"),
+            "profile": r.get("profile"),
+            "score": scored,
+            "raw": r.get("raw"),
+            "latency_groups": r.get("latency_groups"),
+        })
+    rows.sort(key=lambda x: (x.get("score") or {}).get("total_score") or -1, reverse=True)
+    return {"rows": rows}
+
+
 # ==================== 计划任务 / Cron 管理 (docs/1panel-analysis.md §5.3.2) ====================
 from backend.cron_manager import CronManager
 
