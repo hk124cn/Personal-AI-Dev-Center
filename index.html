@@ -58,9 +58,9 @@ body{font-family:var(--font);background:var(--bg-deep);color:var(--text);height:
 /* ===== MAIN ===== */
 .main{flex:1;display:flex;flex-direction:column;overflow:hidden}
 .topbar{display:flex;align-items:center;justify-content:space-between;padding:14px 28px;border-bottom:1px solid var(--border);background:var(--bg-base);flex-shrink:0}
-.topbar-left{display:flex;align-items:baseline;gap:10px}
-.topbar-title{font-size:18px;font-weight:700;letter-spacing:-.3px}
-.topbar-sub{font-size:12px;color:var(--text-tertiary)}
+.topbar-left{display:flex;align-items:baseline;gap:10px;min-width:0;flex:1}
+.topbar-title{font-size:18px;font-weight:700;letter-spacing:-.3px;white-space:nowrap;flex-shrink:0}
+.topbar-sub{font-size:12px;color:var(--text-tertiary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
 .topbar-right{display:flex;align-items:center;gap:12px}
 .conn-badge{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:500;padding:3px 10px;border-radius:20px;white-space:nowrap}
 .conn-ok{background:var(--green-muted);color:var(--green);border:1px solid var(--green-border)}
@@ -644,6 +644,50 @@ select.form-input{cursor:pointer;appearance:none;background-image:url("data:imag
 .mon-error{text-align:center;padding:30px 20px;color:var(--red);font-size:13px}
 .btn.mon-live{background:var(--green);border-color:var(--green);color:#fff}
 .btn.mon-live.off{background:var(--bg-elevated);border-color:var(--border);color:var(--text-secondary)}
+
+/* ===== VPS 跑分 / 采购评估 ===== */
+.bench-opts{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:14px;padding:12px 14px;background:var(--bg-elevated);border:1px solid var(--border);border-radius:var(--radius)}
+.bench-opt{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text-secondary);cursor:pointer}
+.bench-opt input{accent-color:var(--accent)}
+.bench-prof{display:flex;gap:6px;flex-wrap:wrap}
+.bench-prof button{padding:6px 12px;border-radius:8px;border:1px solid var(--border);background:var(--bg-elevated);color:var(--text-secondary);font-size:12px;cursor:pointer;display:flex;align-items:center;gap:5px}
+.bench-prof button.on{background:var(--accent);border-color:var(--accent);color:#fff}
+.bench-prof button svg{width:13px;height:13px;stroke-width:1.9}
+.bench-total{display:flex;align-items:center;gap:18px;flex-wrap:wrap;padding:16px;background:var(--bg-elevated);border:1px solid var(--border);border-radius:var(--radius);margin-bottom:14px}
+.bench-ring{width:96px;height:96px;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;position:relative}
+.bench-ring::after{content:'';position:absolute;inset:9px;border-radius:50%;background:var(--bg-card)}
+.bench-ring b{position:relative;z-index:1;font-size:26px;font-weight:700;line-height:1}
+.bench-ring small{position:relative;z-index:1;font-size:11px;color:var(--text-tertiary);display:block;text-align:center;margin-top:2px}
+.bench-summary{flex:1;min-width:200px}
+.bench-summary .bs-title{font-size:14px;font-weight:600;color:var(--text);margin-bottom:4px}
+.bench-summary .bs-text{font-size:12px;color:var(--text-secondary);line-height:1.6}
+.bench-meta{display:flex;flex-wrap:wrap;gap:6px 16px;margin-top:8px;font-size:11px;color:var(--text-tertiary)}
+.bench-dims{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:14px}
+.bench-dim{background:var(--bg-elevated);border:1px solid var(--border);border-radius:8px;padding:10px 12px}
+.bench-dim .bd-top{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:6px}
+.bench-dim .bd-name{font-size:12px;color:var(--text-secondary)}
+.bench-dim .bd-score{font-size:16px;font-weight:700}
+.bench-bar{height:6px;border-radius:3px;background:var(--border);overflow:hidden}
+.bench-bar i{display:block;height:100%;border-radius:3px;transition:width .3s}
+.bench-dim .bd-sub{font-size:11px;color:var(--text-tertiary);margin-top:5px}
+.bench-items{width:100%;border-collapse:collapse;font-size:12px}
+.bench-items th{text-align:left;color:var(--text-tertiary);font-weight:500;padding:7px 8px;border-bottom:1px solid var(--border);font-size:11px}
+.bench-items td{padding:7px 8px;border-bottom:1px solid var(--border);color:var(--text-secondary)}
+.bench-items td.v{color:var(--text);font-weight:500}
+.bench-items td.s{text-align:right;font-weight:600}
+.bench-tag{display:inline-block;padding:1px 7px;border-radius:4px;font-size:11px}
+.bench-hist{margin-top:14px}
+.bench-hist-row{display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--border);font-size:12px}
+.bench-hist-row .bh-time{color:var(--text-tertiary);font-size:11px;width:130px;flex-shrink:0}
+.bench-prog{display:flex;align-items:center;gap:10px;padding:14px 0;font-size:13px;color:var(--text-secondary)}
+.bench-spin{width:15px;height:15px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:bench-spin .8s linear infinite;flex-shrink:0}
+@keyframes bench-spin{to{transform:rotate(360deg)}}
+.bench-note{font-size:11px;color:var(--text-tertiary);line-height:1.6;margin-top:10px;padding:9px 11px;background:var(--bg-elevated);border-radius:8px;border-left:2px solid var(--border)}
+.bench-cmp{width:100%;border-collapse:collapse;font-size:12px}
+.bench-cmp th{text-align:left;color:var(--text-tertiary);font-weight:500;padding:9px 8px;border-bottom:1px solid var(--border);font-size:11px;white-space:nowrap}
+.bench-cmp td{padding:9px 8px;border-bottom:1px solid var(--border);color:var(--text-secondary);white-space:nowrap}
+.bench-cmp tr.top td{background:var(--bg-elevated)}
+.bench-cmp td.v{color:var(--text);font-weight:600}
 
 /* ===== DASHBOARD MONITOR (首页概览实时监控) ===== */
 .dash-mon-panel{}
@@ -1374,6 +1418,30 @@ const I18N = {
   sync_llm_not_run:{zh:'，LLM 未运行：',en:', LLM not run: '},
   sync_no_changes:{zh:'无变化',en:'No changes'},
   sync_files_unit:{zh:'个文件',en:'files'},
+  // ===== VPS 跑分 / 采购评估 =====
+  bench_total:{zh:'总分',en:'Total'},
+  bench_item:{zh:'指标',en:'Metric'},
+  bench_value:{zh:'实测值',en:'Value'},
+  bench_score:{zh:'得分',en:'Score'},
+  bench_grade:{zh:'评价',en:'Grade'},
+  bench_server:{zh:'服务器',en:'Server'},
+  bench_latency:{zh:'延迟',en:'Latency'},
+  bench_bandwidth:{zh:'带宽',en:'Bandwidth'},
+  bench_time:{zh:'测试时间',en:'Tested at'},
+  bench_history:{zh:'历史跑分',en:'History'},
+  bench_lowprio_tag:{zh:'低优先级',en:'low priority'},
+  bench_confidence:{zh:'数据覆盖',en:'Coverage'},
+  bench_latency_tip:{zh:'延迟按「国内 / 国际」分组取中位数 —— 就近的 anycast 节点不代表线路好，评分用国内组。<br>⚠️ 注意：这是「这台机器到各公共服务的延迟」，反映的是它的出口网络质量，<b>不等于「你从家访问它的延迟」</b>。采购决策要看后者：请在本地关掉代理后跑 <code>python tools/local_speedtest.py &lt;IP&gt;</code>，用 tracert 末跳 RTT 才准（开了代理/TUN 时测出的数全是假的，工具会警告）。',en:'Latency is grouped (domestic / international) and median-based — a nearby anycast node does not mean a good route; scoring uses the domestic group.<br>⚠️ Note: this measures the server\u2019s latency TO public services (its outbound network quality). It is NOT the latency from your home to the server. For purchasing decisions, run <code>python tools/local_speedtest.py &lt;IP&gt;</code> locally with the proxy OFF — tracert final-hop RTT is the reliable number (with TUN/proxy on, every measurement is fake; the tool warns you).'},
+  bench_score_tip:{zh:'总分是按行业实测阈值校准的绝对分（不是 VPSBenchmarks 那种全库百分位）。阈值可在 config.json 的 bench_thresholds 里调整。',en:'The total is an absolute score calibrated against industry thresholds (not a database percentile). You can adjust thresholds in config.json via bench_thresholds.'},
+  bench_no_data:{zh:'还没有任何跑分记录。先在服务器详情里点「跑分」。',en:'No benchmark records yet. Open a server and click Benchmark.'},
+  bench_compare_tip:{zh:'对比的是每台服务器最近一次跑分结果。不同时间跑的分数不可直接比较 —— 超售机器的分数会随负载波动，建议晚高峰再跑一轮。',en:'Each row shows the latest benchmark per server. Scores from different times are not directly comparable — oversold hosts fluctuate; re-run during peak hours.'},
+  bench_load_fail:{zh:'加载对比数据失败',en:'Failed to load comparison data'},
+  nav_bench:{zh:'跑分评估',en:'Benchmarks'},
+  bench_title:{zh:'服务器跑分评估',en:'Server benchmark evaluation'},
+  bench_sub:{zh:'各服务器最近一次跑分横向对比',en:'Latest benchmark per server, side by side'},
+  bench_refresh:{zh:'刷新',en:'Refresh'},
+  bench_loading:{zh:'正在加载各服务器最近一次跑分…',en:'Loading latest benchmarks…'},
+  bench_per_server:{zh:'按服务器跑分',en:'Benchmark a server'},
   sync_dl_syncing:{zh:'正在从服务器下载',en:'Downloading from server'},
   sync_dl_done:{zh:'下载完成',en:'Download complete'},
   sync_dl_fail:{zh:'下载失败',en:'Download failed'},
@@ -1550,18 +1618,18 @@ function render(){
 }
 
 function sidebarHTML(){
-  const items=[{v:'dashboard',icon:'layout-dashboard',label:t('nav_dashboard')},{v:'servers',icon:'server',label:t('nav_servers'),badge:state.servers.filter(s=>s.status==='online').length},{v:'projects',icon:'folder-kanban',label:t('nav_projects'),badge:state.projects.length},{v:'domains',icon:'globe',label:t('nav_domains'),badge:state.domains.length},{v:'assets',icon:'credit-card',label:t('nav_assets'),badge:state.assets.length},{v:'agents',icon:'bot',label:t('nav_agents')},{v:'knowledge',icon:'book-open',label:t('nav_knowledge')},{v:'schedules',icon:'clock',label:t('nav_schedules')}];
+  const items=[{v:'dashboard',icon:'layout-dashboard',label:t('nav_dashboard')},{v:'servers',icon:'server',label:t('nav_servers'),badge:state.servers.filter(s=>s.status==='online').length},{v:'projects',icon:'folder-kanban',label:t('nav_projects'),badge:state.projects.length},{v:'domains',icon:'globe',label:t('nav_domains'),badge:state.domains.length},{v:'assets',icon:'credit-card',label:t('nav_assets'),badge:state.assets.length},{v:'agents',icon:'bot',label:t('nav_agents')},{v:'knowledge',icon:'book-open',label:t('nav_knowledge')},{v:'schedules',icon:'clock',label:t('nav_schedules')},{v:'bench',icon:'gauge',label:t('nav_bench')}];
   return`<aside class="sidebar"><div class="sidebar-header"><div class="logo"><div class="logo-mark">${icon('rocket')}</div><div><div class="logo-text">Dev Center</div><div class="logo-sub">Personal Console</div></div></div></div><nav class="sidebar-nav">${items.map(i=>`<div class="nav-item ${state.view===i.v?'active':''}" onclick="navigate('${i.v}')">${icon(i.icon)}<span>${i.label}</span>${i.badge?`<span class="badge">${i.badge}</span>`:''}</div>`).join('')}</nav>${alertsHTML()}<div class="sidebar-footer"><div class="user-row"><div class="avatar">D</div><div><div class="user-name">Developer</div><div class="user-role">${t('nav_role')}</div></div></div><div style="margin-top:8px;font-size:10px;color:var(--text-tertiary);letter-spacing:.5px">v${APP_VERSION}</div></div></aside>`}
 
 function topbarHTML(){
-  const titles={dashboard:[t('top_dashboard'),t('top_dashboard_sub')],servers:[t('top_servers'),state.servers.length+' '+t('top_servers_sub')],projects:[t('top_projects'),state.projects.length+' '+t('top_projects_sub')],domains:[t('top_domains'),state.domains.length+' '+t('top_domains_sub')],assets:[t('top_assets'),state.assets.length+' '+t('top_assets_sub')],agents:[t('top_agents'),state.agents.length+' '+t('top_agents_sub')],knowledge:[t('top_knowledge'),t('top_knowledge_sub')],schedules:[t('top_schedules'),t('top_schedules_sub')]};
+  const titles={dashboard:[t('top_dashboard'),t('top_dashboard_sub')],servers:[t('top_servers'),state.servers.length+' '+t('top_servers_sub')],projects:[t('top_projects'),state.projects.length+' '+t('top_projects_sub')],domains:[t('top_domains'),state.domains.length+' '+t('top_domains_sub')],assets:[t('top_assets'),state.assets.length+' '+t('top_assets_sub')],agents:[t('top_agents'),state.agents.length+' '+t('top_agents_sub')],knowledge:[t('top_knowledge'),t('top_knowledge_sub')],schedules:[t('top_schedules'),t('top_schedules_sub')],bench:[t('bench_title'),t('bench_sub')]};
   const[title,sub]=titles[state.view]||['',''];
   const connBadge = apiConnected
     ? `<span class="conn-badge conn-ok"><span class="dot dot-green dot-pulse" style="width:6px;height:6px"></span>${t('conn_ok')}</span>`
     : `<span class="conn-badge conn-demo"><span class="dot dot-amber" style="width:6px;height:6px"></span>${t('conn_demo')}</span>`;
   return`<header class="topbar"><div class="topbar-left"><span class="topbar-title">${title}</span><span class="topbar-sub">${sub}</span></div><div class="topbar-right">${langToggleHTML()}${connBadge}<button class="btn-icon" onclick="openAboutModal()" title="${t('about_title')}">${icon('info')}</button><button class="btn-icon" onclick="openSettingsModal()" title="${t('llm_settings')}">${icon('settings')}</button><button class="btn-icon" onclick="openLogViewer()" title="${t('log_btn')}">${icon('terminal')}</button><span class="theme-label">${t('theme')}</span><div class="theme-dots">${Object.entries(themes).map(([k,v])=>`<div class="theme-dot ${currentTheme===k?'active':''}" data-theme="${k}" style="background:${v.dot}" title="${t('theme_'+k)}" onclick="applyTheme('${k}');render()"></div>`).join('')}</div></div></header>`}
 
-function renderView(){return({dashboard:viewDashboard,servers:viewServers,projects:viewProjects,domains:viewDomains,assets:viewAssets,agents:viewAgents,knowledge:viewKnowledge,schedules:viewSchedules})[state.view]()}
+function renderView(){return({dashboard:viewDashboard,servers:viewServers,projects:viewProjects,domains:viewDomains,assets:viewAssets,agents:viewAgents,knowledge:viewKnowledge,schedules:viewSchedules,bench:viewBench})[state.view]()}
 
 // ==================== DASHBOARD ====================
 function viewDashboard(){
@@ -2827,7 +2895,7 @@ function openServerDetail(id){
     </div>
     <div class="detail-section"><h4>${icon('package')} ${t('sd_tools')}</h4><div style="display:flex;flex-wrap:wrap;gap:5px">${s.tools.map(tool=>`<span class="tag tag-accent">${tool}</span>`).join('')}</div></div>
     ${projs.length?`<div class="detail-section"><h4>${icon('folder-kanban')} ${t('sd_running_projects')} (${projs.length})</h4>${projs.map(p=>`<div class="li" style="cursor:pointer" onclick="closeModal();setTimeout(()=>openProjectDetail('${p.id}'),200)"><div class="li-icon" style="background:${p.status==='active'?'var(--green-muted)':'var(--amber-muted)'}"><div class="dot ${dotClass(p.status)}"></div></div><div class="li-body"><div class="li-title">${p.name}</div><div class="li-sub">${statusText(p.status)} · ${p.progress}%</div></div></div>`).join('')}</div>`:''}
-    ${s.sshUser?`<div class="detail-section"><h4>${icon('terminal')} ${t('sd_ssh')}</h4><div class="ssh-block"><div>$ ssh ${s.sshUser}@${s.ip} -p ${s.sshPort}${s.sshKey?' -i '+s.sshKey:''}</div><div class="comment"># ${t('sd_key')}: ${s.sshKey}</div></div><div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap"><button class="btn btn-sm" onclick="sshLogin('${s.ip}',${s.sshPort},'${s.sshUser}','${s.sshKey}')">${icon('terminal')} ${t('pd_ssh_login')}</button><button class="btn btn-sm btn-primary" onclick="openServerMonitor('${s.id}')">${icon('activity')} 实时监控</button><button class="btn btn-sm" onclick="openServerCron('${s.id}')">${icon('calendar-clock')} 计划任务</button></div></div>`:''}
+    ${s.sshUser?`<div class="detail-section"><h4>${icon('terminal')} ${t('sd_ssh')}</h4><div class="ssh-block"><div>$ ssh ${s.sshUser}@${s.ip} -p ${s.sshPort}${s.sshKey?' -i '+s.sshKey:''}</div><div class="comment"># ${t('sd_key')}: ${s.sshKey}</div></div><div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap"><button class="btn btn-sm" onclick="sshLogin('${s.ip}',${s.sshPort},'${s.sshUser}','${s.sshKey}')">${icon('terminal')} ${t('pd_ssh_login')}</button><button class="btn btn-sm btn-primary" onclick="openServerMonitor('${s.id}')">${icon('activity')} 实时监控</button><button class="btn btn-sm" onclick="openServerCron('${s.id}')">${icon('calendar-clock')} 计划任务</button><button class="btn btn-sm" onclick="openServerBench('${s.id}')">${icon('gauge')} 跑分</button></div></div>`:''}
     <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:20px;padding-top:16px;border-top:1px solid var(--border)">
       <button class="btn btn-sm" onclick="cloneServer('${s.id}')">${icon('copy')} ${t('sd_clone')}</button>
       <button class="btn btn-sm" onclick="editServer('${s.id}')">${icon('pencil')} ${t('sd_edit')}</button>
@@ -2953,6 +3021,277 @@ function openServerCron(id){
   if(window.lucide) lucide.createIcons();
   loadServerCron(id);
 }
+
+/* ==================== VPS 跑分 / 采购评估 ==================== */
+const BENCH_PROFILES = [
+  {key:'quick',    icon:'zap',      label:'快速体检', desc:'零依赖 · 约 15 秒'},
+  {key:'standard', icon:'gauge',    label:'标准跑分', desc:'YABS 全套 · 约 10 分钟'},
+  {key:'full',     icon:'radar',    label:'完整评估', desc:'+ 路由 / IP 质量 · 约 15 分钟'}
+];
+let _benchState = {sid:null, profile:'quick', lowPrio:true, running:false, es:null, result:null};
+
+function benchProfileBtn(key){
+  const p = BENCH_PROFILES.find(x=>x.key===key)||BENCH_PROFILES[0];
+  const on = _benchState.profile===key?' on':'';
+  return `<button class="${on.trim()}" onclick="benchSetProfile('${key}')" title="${p.desc}">${icon(p.icon)} ${p.label}</button>`;
+}
+function benchSetProfile(k){
+  _benchState.profile=k;
+  const el=document.getElementById('bench-prof'); if(el) el.innerHTML=BENCH_PROFILES.map(p=>benchProfileBtn(p.key)).join('');
+  const d=document.getElementById('bench-prof-desc');
+  if(d){ const p=BENCH_PROFILES.find(x=>x.key===k); d.textContent=p?p.desc:''; }
+}
+function benchSetLowPrio(v){
+  _benchState.lowPrio=!!v;
+  const el=document.getElementById('bench-lowprio'); if(el) el.checked=!!v;
+}
+function benchColorFor(score){
+  if(score===null||score===undefined) return 'var(--text-tertiary)';
+  if(score>=85) return 'var(--green)';
+  if(score>=70) return 'var(--accent)';
+  if(score>=55) return 'var(--amber)';
+  return 'var(--red)';
+}
+function benchTagColor(score){
+  if(score===null||score===undefined) return 'background:var(--bg-elevated);color:var(--text-tertiary)';
+  if(score>=85) return 'background:var(--green-muted);color:var(--green)';
+  if(score>=70) return 'background:var(--accent-muted);color:var(--accent)';
+  if(score>=55) return 'background:var(--amber-muted);color:var(--amber)';
+  return 'background:var(--red-muted);color:var(--red)';
+}
+function benchFmtTime(ts){
+  if(!ts) return '—';
+  const d=new Date(ts*1000);
+  const p=n=>String(n).padStart(2,'0');
+  return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+
+function openServerBench(id){
+  const s=getServer(id); if(!s) return;
+  _benchState={sid:id, profile:'quick', lowPrio:true, running:false, es:null, result:null};
+  state.modal={title:'📊 跑分评估 · '+s.name, body:benchHTML(s), size:'modal-xl'};
+  render();
+  if(window.lucide) lucide.createIcons();
+  benchLoadHistory(id);
+}
+function benchHTML(s){
+  return `<div class="bench-opts">
+    <div class="bench-prof" id="bench-prof">${BENCH_PROFILES.map(p=>benchProfileBtn(p.key)).join('')}</div>
+    <span id="bench-prof-desc" style="font-size:11px;color:var(--text-tertiary)">${BENCH_PROFILES[0].desc}</span>
+    <span style="flex:1"></span>
+    <label class="bench-opt"><input type="checkbox" id="bench-lowprio" ${_benchState.lowPrio?'checked':''} onchange="benchSetLowPrio(this.checked)"> 低优先级（不影响线上业务）</label>
+    <button class="btn btn-sm btn-primary" id="bench-run-btn" onclick="benchRun()">${icon('play')} 开始跑分</button>
+  </div>
+  <div id="bench-body"><div class="bench-note">${icon('info')} 选择档位后点「开始跑分」。低优先级模式会用 nice + ionice 降权执行，尽量不影响线上业务；standard / full 档耗时较长，建议在低峰期跑。</div></div>`;
+}
+
+function benchCancel(){
+  const sid=_benchState.sid; if(!sid) return;
+  fetch(API_BASE+'/api/bench/'+encodeURIComponent(sid)+'/cancel',{method:'POST'}).catch(()=>{});
+  if(_benchState.es){ try{_benchState.es.close();}catch(e){} _benchState.es=null; }
+  _benchState.running=false;
+  const btn=document.getElementById('bench-run-btn');
+  if(btn){ btn.disabled=false; btn.innerHTML=icon('play')+' 开始跑分'; }
+  benchSetProgress('已请求取消', true);
+}
+function benchSetProgress(msg, done){
+  const el=document.getElementById('bench-prog-msg');
+  if(el) el.textContent=msg;
+  const sp=document.getElementById('bench-spin');
+  if(sp) sp.style.display = done?'none':'';
+}
+
+function benchRun(){
+  const sid=_benchState.sid; if(!sid) return;
+  if(_benchState.running) return;
+  _benchState.running=true; _benchState.result=null;
+  const btn=document.getElementById('bench-run-btn');
+  if(btn){ btn.disabled=true; btn.innerHTML=icon('loader')+' 跑分中…'; }
+  const body=document.getElementById('bench-body');
+  if(body){
+    body.innerHTML=`<div class="bench-prog"><span class="bench-spin" id="bench-spin"></span>
+      <span id="bench-prog-msg">正在连接服务器…</span>
+      <span style="flex:1"></span>
+      <button class="btn btn-sm" onclick="benchCancel()">取消</button></div>
+      <div class="bench-note">跑分会占用 CPU 与磁盘 IO。standard / full 档还会跑 iperf3 打满带宽测速，低优先级模式下会自动跳过带宽压测。</div>`;
+  }
+  const url=API_BASE+'/api/bench/'+encodeURIComponent(sid)
+    +'?profile='+encodeURIComponent(_benchState.profile)
+    +'&low_priority='+(_benchState.lowPrio?'true':'false');
+  const es=new EventSource(url);
+  _benchState.es=es;
+  es.onmessage=(ev)=>{
+    let d; try{ d=JSON.parse(ev.data); }catch(e){ return; }
+    if(d.phase==='start'){ benchSetProgress(d.message||'开始…'); }
+    else if(d.phase==='progress'){ benchSetProgress(d.message||'进行中…'); }
+    else if(d.phase==='heartbeat'){ /* 心跳：不显示，避免刷屏 */ }
+    else if(d.phase==='error'){
+      benchSetProgress('出错：'+(d.message||'未知错误'), true);
+      _benchState.running=false; try{es.close();}catch(e){}
+      const b=document.getElementById('bench-run-btn');
+      if(b){ b.disabled=false; b.innerHTML=icon('play')+' 开始跑分'; }
+    }
+    else if(d.phase==='done'){
+      _benchState.result=d;
+      benchRenderResult(d);
+      _benchState.running=false; try{es.close();}catch(e){}
+      const b=document.getElementById('bench-run-btn');
+      if(b){ b.disabled=false; b.innerHTML=icon('refresh-cw')+' 重新跑分'; }
+      benchLoadHistory(sid);
+    }
+  };
+  es.onerror=()=>{
+    try{es.close();}catch(e){}
+    if(_benchState.running){
+      _benchState.running=false;
+      benchSetProgress('连接中断（后端可能已退出）', true);
+      const b=document.getElementById('bench-run-btn');
+      if(b){ b.disabled=false; b.innerHTML=icon('play')+' 开始跑分'; }
+    }
+  };
+}
+
+function benchRenderResult(d){
+  const sc=d.score||{};
+  const body=document.getElementById('bench-body'); if(!body) return;
+  const raw=d.result&&d.result.raw||{};
+  const total=sc.total_score;
+  const conf=sc.confidence||0;
+  const dims=sc.dimensions||{};
+  const order=['cpu','disk','network','memory','stability'];
+  let dimsHtml=order.filter(k=>dims[k]).map(k=>{
+    const dr=dims[k];
+    const pct=Math.max(0,Math.min(100,dr.score||0));
+    return `<div class="bench-dim">
+      <div class="bd-top"><span class="bd-name">${escapeHtml(dr.label||k)}</span>
+        <span class="bd-score" style="color:${benchColorFor(dr.score)}">${dr.score!==null&&dr.score!==undefined?dr.score:'—'}</span></div>
+      <div class="bench-bar"><i style="width:${pct}%;background:${benchColorFor(dr.score)}"></i></div>
+      <div class="bd-sub">${escapeHtml(dr.grade||'')} · 权重 ${Math.round((dr.weight||0)*100)}%</div>
+    </div>`;
+  }).join('');
+
+  let itemsHtml='';
+  const allItems=sc.items||[];
+  if(allItems.length){
+    itemsHtml=`<table class="bench-items"><thead><tr>
+      <th>${t('bench_item')}</th><th>${t('bench_value')}</th><th>${t('bench_score')}</th><th>${t('bench_grade')}</th></tr></thead><tbody>
+      ${allItems.map(it=>`<tr>
+        <td>${escapeHtml(it.label||'')}</td>
+        <td class="v">${escapeHtml(String(it.display||'—'))}</td>
+        <td class="s" style="color:${benchColorFor(it.score)}">${it.score!==null&&it.score!==undefined?it.score:'—'}</td>
+        <td><span class="bench-tag" style="${benchTagColor(it.score)}">${escapeHtml(it.grade||'')}</span></td>
+      </tr>`).join('')}</tbody></table>`;
+  }
+
+  const lg=(d.result&&d.result.latency_groups)||{};
+  let latHtml='';
+  if(lg.D||lg.I){
+    const gname={D:'到国内（阿里云DNS / DNSPod / 114DNS）',I:'到国际（Cloudflare / Google）'};
+    const gk={D:'D',I:'I'};
+    latHtml=`<div class="bench-note"><b>${t('bench_latency')}</b><br>`+
+      ['D','I'].filter(g=>lg[g]).map(g=>{
+        const grp=lg[g];
+        return `${gname[g]}：${grp.median_ms!==null&&grp.median_ms!==undefined?grp.median_ms+' ms':'不可达'}（${grp.samples||0} 个样本，取中位数）`;
+      }).join('<br>')+
+      `<br>${t('bench_latency_tip')}</div>`;
+  }
+  body.innerHTML=`
+    <div class="bench-total">
+      <div class="bench-ring" style="background:conic-gradient(${benchColorFor(total)} ${(total||0)*3.6}deg, var(--border) 0deg)">
+        <div style="position:relative;z-index:1;text-align:center">
+          <b style="color:${benchColorFor(total)}">${total!==null&&total!==undefined?total:'—'}</b>
+          <small>${escapeHtml(sc.total_grade||'')}</small>
+        </div>
+      </div>
+      <div class="bench-summary">
+        <div class="bs-title">${t('bench_total')}</div>
+        <div class="bs-text">${escapeHtml(sc.summary||'')}</div>
+        <div class="bench-meta">
+          <span>${icon('clock')} ${benchFmtTime(d.result&&d.result.collected_at)}</span>
+          <span>${icon('layers')} ${escapeHtml((d.result&&d.result.profile)||'—')}${d.result&&d.result.low_priority?' · '+t('bench_lowprio_tag'):''}</span>
+          ${raw.cpu_model?`<span>${icon('cpu')} ${escapeHtml(raw.cpu_model)} × ${raw.cpu_cores||'?'}</span>`:''}
+          ${conf<100?`<span style="color:var(--amber)">${icon('alert-triangle')} ${t('bench_confidence')} ${conf}%</span>`:''}
+        </div>
+      </div>
+    </div>
+    <div class="bench-dims">${dimsHtml}</div>
+    ${itemsHtml}
+    ${latHtml}
+    <div class="bench-note">${icon('info')} ${t('bench_score_tip')}</div>
+    <div id="bench-hist" class="bench-hist"></div>`;
+  if(window.lucide) lucide.createIcons();
+}
+
+async function benchLoadHistory(sid){
+  const el=document.getElementById('bench-hist'); if(!el) return;
+  try{
+    const r=await fetch(API_BASE+'/api/bench/'+encodeURIComponent(sid)+'/history?limit=8');
+    const d=await r.json();
+    const items=d.items||[];
+    if(!items.length){ el.innerHTML=''; return; }
+    el.innerHTML=`<div style="font-size:12px;font-weight:600;color:var(--text);margin-bottom:6px">${t('bench_history')}</div>`+
+      items.map(it=>{
+        const sc=it.score||{};
+        return `<div class="bench-hist-row">
+          <span class="bh-time">${benchFmtTime(it.collected_at)}</span>
+          <span class="bench-tag" style="${benchTagColor(sc.total_score)}">${sc.total_score!==null&&sc.total_score!==undefined?sc.total_score:'—'}</span>
+          <span style="color:var(--text-secondary)">${escapeHtml(sc.total_grade||'')}</span>
+          <span style="flex:1"></span>
+          <span style="font-size:11px;color:var(--text-tertiary)">${escapeHtml(it.profile||'')}${it.low_priority?' · '+t('bench_lowprio_tag'):''}</span>
+        </div>`;
+      }).join('');
+  }catch(e){ /* 历史加载失败不影响主流程 */ }
+}
+
+/* ---- 多服务器横向对比 ---- */
+function openBenchCompare(){
+  state.modal={title:'📊 多服务器跑分对比', body:`<div id="bench-cmp-wrap"><div class="bench-prog"><span class="bench-spin"></span><span>正在加载各服务器最近一次跑分…</span></div></div>`, size:'modal-xl'};
+  render();
+  if(window.lucide) lucide.createIcons();
+  loadBenchCompare();
+}
+async function loadBenchCompare(){
+  const el=document.getElementById('bench-cmp-wrap'); if(!el) return;
+  try{
+    const r=await fetch(API_BASE+'/api/bench/compare');
+    const d=await r.json();
+    const rows=d.rows||[];
+    const withData=rows.filter(x=>x.has_data);
+    if(!withData.length){
+      el.innerHTML=`<div class="bench-note">${icon('info')} ${t('bench_no_data')}</div>`;
+      return;
+    }
+    const dims=['cpu','disk','network','memory','stability'];
+    const dname={cpu:'CPU',disk:'磁盘',network:'网络',memory:'内存',stability:'稳定性'};
+    el.innerHTML=`<table class="bench-cmp"><thead><tr>
+      <th>${t('bench_server')}</th><th>${t('bench_total')}</th>
+      ${dims.map(k=>`<th>${dname[k]}</th>`).join('')}
+      <th>CPU</th><th>${t('bench_latency')}</th><th>${t('bench_bandwidth')}</th><th>${t('bench_time')}</th>
+      </tr></thead><tbody>
+      ${rows.map((row,i)=>{
+        const sc=row.score||{};
+        const raw=row.raw||{};
+        const lg=row.latency_groups||{};
+        const lat=(lg.D&&lg.D.median_ms)?lg.D.median_ms+' ms':((lg.I&&lg.I.median_ms)?lg.I.median_ms+' ms':'—');
+        return `<tr class="${i===0?'top':''}">
+          <td class="v">${escapeHtml(row.server_name||row.server_id||'')}</td>
+          <td class="v" style="color:${benchColorFor(sc.total_score)}">${sc.total_score!==null&&sc.total_score!==undefined?sc.total_score:'—'}</td>
+          ${dims.map(k=>{const dr=sc.dimensions&&sc.dimensions[k];
+            return `<td style="color:${benchColorFor(dr&&dr.score)}">${dr&&dr.score!==null&&dr.score!==undefined?dr.score:'—'}</td>`;}).join('')}
+          <td>${raw.cpu_model?escapeHtml(String(raw.cpu_model).slice(0,18))+' ×'+ (raw.cpu_cores||'?'):'—'}</td>
+          <td>${lat}</td>
+          <td>${raw.net_down_mbps?raw.net_down_mbps+' Mbps':'—'}</td>
+          <td>${benchFmtTime(row.collected_at)}</td>
+        </tr>`;
+      }).join('')}
+      </tbody></table>
+      <div class="bench-note">${icon('info')} ${t('bench_compare_tip')}</div>`;
+    if(window.lucide) lucide.createIcons();
+  }catch(e){
+    el.innerHTML=`<div class="bench-note" style="color:var(--red)">${t('bench_load_fail')}</div>`;
+  }
+}
+
 async function loadServerCron(id){
   const wrap=document.getElementById('cron-wrap'); if(!wrap) return;
   try{
@@ -4253,6 +4592,26 @@ async function syncNow(btn){
   }catch(e){ showToast(e.message||'同步失败','alert-circle'); }
 }
 
+// ==================== VPS 跑分对比视图 ====================
+function viewBench(){
+  const sids=state.servers.map(s=>s.id);
+  return`<div class="bench-view">
+    <div class="bench-opts" style="margin-bottom:16px">
+      <span style="font-size:13px;font-weight:600;color:var(--text)">${icon('gauge')} ${t('bench_title')}</span>
+      <span style="font-size:11px;color:var(--text-tertiary)">${t('bench_sub')}</span>
+      <span style="flex:1"></span>
+      <button class="btn btn-sm" onclick="loadBenchCompare()">${icon('refresh-cw')} ${t('bench_refresh')}</button>
+    </div>
+    <div id="bench-cmp-wrap"><div class="bench-prog"><span class="bench-spin"></span><span>${t('bench_loading')}</span></div></div>
+    <div style="margin-top:18px">
+      <div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:8px">${t('bench_per_server')}</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        ${state.servers.map(s=>`<button class="btn btn-sm" onclick="openServerBench('${s.id}')">${icon('gauge')} ${escapeHtml(s.name)}</button>`).join('')}
+      </div>
+    </div>
+  </div>`;
+}
+
 // ==================== 实时同步进度浮窗 ====================
 // 轮询 /api/sync-progress：展示「正在同步哪个项目 / 哪个目录 / 哪些已完成 / 哪些等待」。
 // 既能捕获手动触发的同步，也能捕获定时任务自动触发的同步。
@@ -4374,7 +4733,7 @@ document.addEventListener('click',function(e){
 });
 
 // ==================== NAVIGATION ====================
-function navigate(v){if(_monTimer){clearInterval(_monTimer);_monTimer=null;}if(_dashMonTimer){clearInterval(_dashMonTimer);_dashMonTimer=null;}_monLive=false;state.view=v;state.modal=null;render();if(v==='dashboard'&&state.dashMonLive){initDashboardMonitor();}if(v==='schedules'){refreshSchedules();}}
+function navigate(v){if(_monTimer){clearInterval(_monTimer);_monTimer=null;}if(_dashMonTimer){clearInterval(_dashMonTimer);_dashMonTimer=null;}_monLive=false;state.view=v;state.modal=null;render();if(v==='dashboard'&&state.dashMonLive){initDashboardMonitor();}if(v==='schedules'){refreshSchedules();}if(v==='bench'){setTimeout(loadBenchCompare,60);}}
 
 document.addEventListener('keydown',e=>{
   if(e.key==='Escape')closeModal();

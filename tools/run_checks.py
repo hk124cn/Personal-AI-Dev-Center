@@ -15,6 +15,7 @@
   8. 保密自查：config.json 未被 git 跟踪
   9. 弹窗草稿回归     tools/test_asset_modal.py（需 Chrome 无头）
   10. 同步提速回归    tools/test_llm_speedup.py（LLM 硬超时 / 增量跳过 / 失败熔断）
+  11. 跑分评分回归    tools/test_bench_score.py（评分引擎 / 反向指标 / 延迟分组 / YABS JSON 修复）
 
 依赖：6/7 需要 fastapi / paramiko 等，优先用 backend/build_venv 的解释器。
 """
@@ -169,6 +170,9 @@ def main():
         run_script('test_llm_speedup',
                    [PY, os.path.join(TOOLS, 'test_llm_speedup.py')],
                    'tools/test_llm_speedup.py (LLM 硬超时 / 增量跳过 / 失败熔断)')
+        run_script('test_bench_score',
+                   [PY, os.path.join(TOOLS, 'test_bench_score.py')],
+                   'tools/test_bench_score.py (跑分评分引擎 / 反向指标 / 延迟分组)')
         run_script('test_r8_r9', [PY, os.path.join(TOOLS, 'test_r8_r9.py')],
                    'tools/test_r8_r9.py (R8/R9)')
         run_script('test_security', [PY, os.path.join(TOOLS, 'test_security_robustness.py')],
