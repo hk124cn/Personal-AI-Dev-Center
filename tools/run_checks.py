@@ -16,6 +16,7 @@
   9. 弹窗草稿回归     tools/test_asset_modal.py（需 Chrome 无头）
   10. 同步提速回归    tools/test_llm_speedup.py（LLM 硬超时 / 增量跳过 / 失败熔断）
   11. 跑分评分回归    tools/test_bench_score.py（评分引擎 / 反向指标 / 延迟分组 / YABS JSON 修复）
+  12. 跑分浏览器回归  tools/test_bench_browser.py（真实 Chrome 点一次「开始跑分」，端到端）
 
 依赖：6/7 需要 fastapi / paramiko 等，优先用 backend/build_venv 的解释器。
 """
@@ -173,6 +174,10 @@ def main():
         run_script('test_bench_score',
                    [PY, os.path.join(TOOLS, 'test_bench_score.py')],
                    'tools/test_bench_score.py (跑分评分引擎 / 反向指标 / 延迟分组)')
+        # 真实浏览器回归：跑分弹窗真点一次按钮（EventSource 发 POST 那类 bug 只有它能抓）
+        run_script('test_bench_browser',
+                   [PY, os.path.join(TOOLS, 'test_bench_browser.py')],
+                   'tools/test_bench_browser.py (跑分弹窗真实浏览器端到端)')
         run_script('test_r8_r9', [PY, os.path.join(TOOLS, 'test_r8_r9.py')],
                    'tools/test_r8_r9.py (R8/R9)')
         run_script('test_security', [PY, os.path.join(TOOLS, 'test_security_robustness.py')],

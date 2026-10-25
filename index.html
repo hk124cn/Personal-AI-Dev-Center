@@ -3103,7 +3103,8 @@ function benchHTML(s){
 function benchCancel(){
   const sid=_benchState.sid; if(!sid) return;
   fetch(API_BASE+'/api/bench/'+encodeURIComponent(sid)+'/cancel',{method:'POST'}).catch(()=>{});
-  if(_benchState.es){ try{_benchState.es.close();}catch(e){} _benchState.es=null; }
+  // ⚠️ 现在 _benchState.es 存的是 AbortController（不是 EventSource），取消要用 abort()
+  if(_benchState.es){ try{_benchState.es.abort();}catch(e){} _benchState.es=null; }
   _benchState.running=false;
   const btn=document.getElementById('bench-run-btn');
   if(btn){ btn.disabled=false; btn.innerHTML=icon('play')+' 开始跑分'; }
@@ -3133,37 +3134,77 @@ function benchRun(){
   const url=API_BASE+'/api/bench/'+encodeURIComponent(sid)
     +'?profile='+encodeURIComponent(_benchState.profile)
     +'&low_priority='+(_benchState.lowPrio?'true':'false');
-  const es=new EventSource(url);
-  _benchState.es=es;
-  es.onmessage=(ev)=>{
-    let d; try{ d=JSON.parse(ev.data); }catch(e){ return; }
-    if(d.phase==='start'){ benchSetProgress(d.message||'开始…'); }
-    else if(d.phase==='progress'){ benchSetProgress(d.message||'进行中…'); }
-    else if(d.phase==='heartbeat'){ /* 心跳：不显示，避免刷屏 */ }
-    else if(d.phase==='error'){
-      benchSetProgress('出错：'+(d.message||'未知错误'), true);
-      _benchState.running=false; try{es.close();}catch(e){}
-      const b=document.getElementById('bench-run-btn');
-      if(b){ b.disabled=false; b.innerHTML=icon('play')+' 开始跑分'; }
+  // ⚠️ **不能用 EventSource** —— 它只支持 GET，而后端跑分路由是 POST。
+  //    EventSource 发 POST 会被浏览器直接拒绝 → 立刻 onerror → 界面显示「连接中断」。
+  //    （2026-10-25 真实事故：Python 侧用 urllib 手动发 POST 测通了，
+  //      浏览器里却全挂，就是这个原因。）
+  //    正确做法：fetch + res.body.getReader() 流式读 SSE（与下载/上传进度同一套路）。
+  benchStreamSSE(url, {
+    onEvent: function(d){
+      if(d.phase==='start'){ benchSetProgress(d.message||'开始…'); }
+      else if(d.phase==='progress'){ benchSetProgress(d.message||'进行中…'); }
+      else if(d.phase==='heartbeat'){ /* 心跳：不显示，避免刷屏 */ }
+      else if(d.phase==='error'){
+        benchSetProgress('出错：'+(d.message||'未知错误'), true);
+        benchFinishRun(icon('play')+' 开始跑分');
+      }
+      else if(d.phase==='done'){
+        _benchState.result=d;
+        benchRenderResult(d);
+        benchFinishRun(icon('refresh-cw')+' 重新跑分');
+        benchLoadHistory(sid);
+      }
+    },
+    onError: function(msg){
+      benchSetProgress('连接失败：'+(msg||'未知原因'), true);
+      benchFinishRun(icon('play')+' 开始跑分');
     }
-    else if(d.phase==='done'){
-      _benchState.result=d;
-      benchRenderResult(d);
-      _benchState.running=false; try{es.close();}catch(e){}
-      const b=document.getElementById('bench-run-btn');
-      if(b){ b.disabled=false; b.innerHTML=icon('refresh-cw')+' 重新跑分'; }
-      benchLoadHistory(sid);
-    }
-  };
-  es.onerror=()=>{
-    try{es.close();}catch(e){}
-    if(_benchState.running){
-      _benchState.running=false;
-      benchSetProgress('连接中断（后端可能已退出）', true);
-      const b=document.getElementById('bench-run-btn');
-      if(b){ b.disabled=false; b.innerHTML=icon('play')+' 开始跑分'; }
-    }
-  };
+  });
+}
+function benchFinishRun(btnHtml){
+  _benchState.running=false;
+  _benchState.es=null;
+  const b=document.getElementById('bench-run-btn');
+  if(b){ b.disabled=false; b.innerHTML=btnHtml; }
+}
+
+/* 通用：POST + SSE 流式读取（EventSource 只能 GET，用不了） */
+function benchStreamSSE(url, opts){
+  opts=opts||{};
+  const ctl=new AbortController();
+  _benchState.es=ctl;
+  fetch(url, {method:'POST', signal:ctl.signal})
+    .then(function(res){
+      if(!res.ok){
+        return res.json().catch(function(){return null;}).then(function(d){
+          const msg=(d&&d.detail)?d.detail:('HTTP '+res.status);
+          throw new Error(msg);
+        });
+      }
+      const reader=res.body.getReader();
+      const decoder=new TextDecoder();
+      let buf='';
+      function pump(){
+        return reader.read().then(function(chunk){
+          if(chunk.done) return;
+          buf+=decoder.decode(chunk.value,{stream:true});
+          const lines=buf.split('\n');
+          buf=lines.pop();
+          for(let i=0;i<lines.length;i++){
+            const line=lines[i].trim();
+            if(!line.startsWith('data: ')) continue;
+            let d; try{ d=JSON.parse(line.slice(6)); }catch(e){ continue; }
+            if(opts.onEvent) opts.onEvent(d);
+          }
+          return pump();
+        });
+      }
+      return pump();
+    })
+    .catch(function(e){
+      if(e && e.name==='AbortError') return;   // 主动取消，不算错误
+      if(opts.onError) opts.onError(e&&e.message?e.message:String(e));
+    });
 }
 
 function benchRenderResult(d){
@@ -3306,20 +3347,18 @@ function benchPickSetMsg(text, kind){
 }
 // Promise 化的单次跑分（供批量串行调用）
 function benchRunOnce(sid, profile, lowPrio){
-  return new Promise((resolve,reject)=>{
+  return new Promise(function(resolve, reject){
     const url=API_BASE+'/api/bench/'+encodeURIComponent(sid)
       +'?profile='+encodeURIComponent(profile)
       +'&low_priority='+(lowPrio?'true':'false');
-    const es=new EventSource(url);
-    let lastMsg='';
-    es.onmessage=(ev)=>{
-      let d; try{ d=JSON.parse(ev.data); }catch(e){ return; }
-      if(d.phase==='progress'){ lastMsg=d.message||''; }
-      else if(d.phase==='done'){ es.close(); resolve(d); }
-      else if(d.phase==='error'){ es.close(); reject(new Error(d.message||'未知错误')); }
-    };
-    es.onerror=()=>{ es.close(); reject(new Error('连接中断')); };
-    setTimeout(()=>{ if(lastMsg) benchPickSetMsg(lastMsg); }, 50);
+    // ⚠️ 不能用 EventSource（只支持 GET，后端是 POST）→ 必须 fetch + 流式读
+    benchStreamSSE(url, {
+      onEvent: function(d){
+        if(d.phase==='done'){ resolve(d); }
+        else if(d.phase==='error'){ reject(new Error(d.message||'未知错误')); }
+      },
+      onError: function(msg){ reject(new Error(msg||'连接失败')); }
+    });
   });
 }
 async function benchPickOne(sid){
