@@ -17,6 +17,13 @@ con
 aux
 prn
 
+# ===== Git 本地备份 / 改史临时目录（绝不能入库）=====
+# 改写历史前会 `cp -r .git .git_backup_pre_filter`，
+# 若不忽略，一次 `git add -A` 就会把整个 .git（618 个文件）提交进仓库。
+.git_backup*/
+.git-rewrite/
+.gitfilter-branch/
+
 # ===== Node =====
 node_modules/
 

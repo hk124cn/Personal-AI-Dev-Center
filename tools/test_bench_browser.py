@@ -35,13 +35,24 @@ import urllib.request
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 
-PORT = int(os.environ.get("BENCH_TEST_PORT", "8799"))
+results = []
+
+
+def _free_port():
+    """找一个空闲的 TCP 端口（避免与残留 Chrome / 其他测试抢端口）。"""
+    import socket
+    s = socket.socket()
+    s.bind(('127.0.0.1', 0))
+    port = s.getsockname()[1]
+    s.close()
+    return port
+
+
+PORT = int(os.environ.get("BENCH_TEST_PORT") or _free_port())
 OUT = os.path.join(tempfile.gettempdir(), "padc_bench_real")
 os.makedirs(OUT, exist_ok=True)
 os.environ.setdefault("DEV_CENTER_DATA_DIR", os.path.join(
     os.environ.get("APPDATA", os.path.expanduser("~")), "Personal AI Dev Center", "data"))
-
-results = []
 
 
 def check(name, cond, extra=""):
@@ -194,9 +205,11 @@ def main():
     # ⚠️ 第 1 轮的 Chrome（dump-dom 模式）到点就退出会**掐断 SSE 连接**，
     #    后端生成器随之中断 → 跑分不落盘。所以这里用 `--remote-debugging-port` 模式
     #    （不截图、不 dump、不设 virtual-time）让 Chrome 一直活着。
+    # ⚠️ 调试端口必须用**动态空闲端口** —— 写死 9222 会在并发跑回归时
+    #    和上一次残留的 Chrome 抢端口 → Chrome 起不来 → 整个测试假失败。
     keep_flags = ['--headless=new', '--disable-gpu', '--no-sandbox', '--hide-scrollbars',
                   '--disable-extensions', '--window-size=1680,1150',
-                  '--remote-debugging-port=9222']
+                  '--remote-debugging-port=%d' % _free_port()]
     prof2 = tempfile.mkdtemp(prefix="bbench2_")
     proc = subprocess.Popen([CHROME] + keep_flags + ['--user-data-dir=' + prof2,
                              'file:///' + vpath.replace("\\", "/")],
