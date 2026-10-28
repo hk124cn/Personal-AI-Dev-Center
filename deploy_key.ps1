@@ -158,7 +158,7 @@ mkdir -p ~/.ssh && chmod 700 ~/.ssh && touch ~/.ssh/authorized_keys && echo '$Pu
         Write-Host "    [OK] 公钥已写入 authorized_keys" -ForegroundColor Green
     }
 
-    # 2) 验证免密登录（**用 config 里配的那把私钥**，不是硬编码 <key>）
+    # 2) 验证免密登录（**用 config 里配的那把私钥**，不是硬编码某个固定私钥名）
     $verify = & ssh -p $port -i $keyPath -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=15 "$user@$sshHost" "echo __OK__" 2>&1
     if ("$verify" -match '__OK__') {
         Write-Host "    [OK] 免密登录验证通过" -ForegroundColor Green
