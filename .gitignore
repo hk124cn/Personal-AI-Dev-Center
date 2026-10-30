@@ -24,6 +24,11 @@ prn
 .git-rewrite/
 .gitfilter-branch/
 
+# ===== 一次性临时脚本（用完即弃，绝不入库）=====
+# ⚠️ 这些脚本会读真实 config.json 做扫描，检测正则一旦硬编码真值，
+#    脚本本身就变成泄露源（2026-10-30 真实踩过：硬编码正则被扫出来）。
+tools/_tmp_*
+
 # ===== Node =====
 node_modules/
 
