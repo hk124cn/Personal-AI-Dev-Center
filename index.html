@@ -1433,6 +1433,11 @@ const I18N = {
   sync_llm_not_run:{zh:'，LLM 未运行：',en:', LLM not run: '},
   sync_no_changes:{zh:'无变化',en:'No changes'},
   sync_files_unit:{zh:'个文件',en:'files'},
+  sync_files_done:{zh:'已下载',en:'downloaded'},
+  sync_batches_unit:{zh:'批',en:'batches'},
+  sync_batch_n:{zh:'第',en:'batch'},
+  sync_batch_ok:{zh:'完成',en:'ok'},
+  sync_batch_fail:{zh:'失败',en:'failed'},
   // ===== VPS 跑分 / 采购评估 =====
   bench_total:{zh:'总分',en:'Total'},
   bench_item:{zh:'指标',en:'Metric'},
@@ -1520,7 +1525,14 @@ function llmStatusLabel(s){
   };
   return m[s]||s;
 }
-function t(key){return (I18N[key]&&I18N[key][lang])||I18N[key]&&I18N[key]['zh']||key}
+function t(key){
+  const v=(I18N[key]&&I18N[key][lang])||(I18N[key]&&I18N[key]['zh']);
+  // 缺 key 时原来**静默返回 key 本身** → 界面直接显示 "sync_files_done" 这种，
+  // 而且没有任何报错，一整天都没人发现（2026-10-31 真实事故）。
+  // 现在至少在控制台喊一声，方便开发者第一时间发现。
+  if(v===undefined){ if(typeof console!=='undefined') console.warn('[i18n] 缺少文案 key:', key); return key; }
+  return v;
+}
 function toggleLang(){lang=lang==='zh'?'en':'zh';localStorage.setItem('dev-center-lang',lang);render()}
 function langToggleHTML(){return `<button class="btn-ghost" onclick="toggleLang()" style="font-size:11px;padding:3px 8px;border-radius:var(--radius-xs);border:1px solid var(--border);background:var(--bg-elevated);cursor:pointer;color:var(--text-secondary)">${lang==='zh'?'EN':'中'}</button>`}
 
@@ -5509,8 +5521,12 @@ function runSyncWithProgress(projectId, endpoint, type, name, force, selectedFil
                   + ' \u00b7 ' + formatBytes(event.bytes || 0)
                   + (event.skipped ? ' \u00b7 ' + t('sync_files_skipped') + ' ' + event.skipped : '')
                   + (event.failed ? ' \u00b7 ' + t('ls_failed') + ' ' + event.failed : ''));
+                // 统计条：已下载（含总数） / 已跳过 / 失败
+                // ⚠️ 「已跳过」是**扫描时一次性算出的过滤总数**，全程不变 —— 不是 bug。
                 setStats([
-                  '<span class="dot" style="background:var(--accent)"></span>' + (event.downloaded || 0) + ' ' + t('sync_files_done'),
+                  '<span class="dot" style="background:var(--accent)"></span>'
+                    + t('sync_files_done') + ' ' + (event.downloaded || 0)
+                    + (event.to_transfer ? ' / ' + event.to_transfer : '') + ' ' + t('sync_files_unit'),
                   '<span class="dot" style="background:var(--text-tertiary)"></span>' + (event.skipped || 0) + ' ' + t('sync_files_skipped'),
                   (event.failed ? '<span class="dot" style="background:var(--amber)"></span>' + event.failed + ' ' + t('ls_failed') : '')
                 ].filter(Boolean));
