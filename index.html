@@ -683,6 +683,14 @@ select.form-input{cursor:pointer;appearance:none;background-image:url("data:imag
 .bench-trend-sum b{color:var(--text);font-weight:600}
 .bench-trend-warn{color:var(--amber)}
 .bench-trend-note{font-size:11px;color:var(--text-secondary);margin-top:4px;line-height:1.6}
+/* CPU 抢占率 = 超售的直接证据，要醒目 */
+.bench-oversell-alert{display:flex;gap:9px;align-items:flex-start;padding:10px 12px;border-radius:var(--radius-sm);margin-bottom:12px;font-size:12px;line-height:1.65;border:1px solid}
+.bench-oversell-alert svg{width:15px;height:15px;flex-shrink:0;margin-top:1px;stroke-width:2.2}
+.bench-oversell-alert.sev-high{background:var(--red-muted);border-color:var(--red);color:var(--red)}
+.bench-oversell-alert.sev-mid{background:var(--amber-muted);border-color:var(--amber);color:var(--amber)}
+.bench-oversell-alert.sev-ok{background:var(--green-muted);border-color:var(--green);color:var(--green)}
+.bench-oversell-alert b{font-weight:600}
+.bench-steal-mark{color:var(--amber);margin-right:3px}
 .bench-score-badge{display:inline-flex;align-items:center;gap:3px;padding:1px 7px;border-radius:999px;font-size:11px;font-weight:600;line-height:1.6;vertical-align:middle;white-space:nowrap}
 .bench-score-badge svg{width:11px;height:11px;stroke-width:2.2}
 .bench-score-badge.bench-badge-none{background:var(--bg-elevated);color:var(--text-tertiary);font-weight:400}
@@ -1200,6 +1208,12 @@ const I18N = {
   bench_trend_gap_mid:{zh:'波动偏大 —— 可能存在轻度超售或邻居干扰。',en:'Moderate swing — mild overselling or noisy neighbours.'},
   bench_trend_gap_low:{zh:'表现稳定，可以放心用。',en:'Stable performance.'},
   bench_trend_need2:{zh:'至少需要 2 次跑分才能画出趋势',en:'Need at least 2 runs to draw a trend'},
+  bench_steal_title:{zh:'CPU 抢占率',en:'CPU steal'},
+  bench_steal_high:{zh:'宿主机在抢你的 CPU —— 这台机器被超售了。',en:'The host is stealing your CPU — this machine is oversold.'},
+  bench_steal_mid:{zh:'有轻微抢占，长期跑满载任务时要注意。',en:'Slight stealing — watch out for long-running full-load tasks.'},
+  bench_steal_ok:{zh:'未被宿主机抢占，正常。',en:'Not being stolen — healthy.'},
+  bench_steal_explain:{zh:'这个数字是宿主机抢走 CPU 的时间占比（不是你的程序慢）。分数波动只是间接信号，这个才是超售的直接读数。',en:'Share of CPU time taken by the hypervisor (not your app being slow). Score swings are indirect; this is the direct reading.'},
+  bench_steal_notvirt:{zh:'该机器不是虚拟化环境（物理机 / 容器），结构上不存在宿主机抢占，这个 0 是正常的。',en:'Not a virtualized host (bare metal / container) — hypervisor stealing is structurally impossible here, so 0 is expected.'},
   pd_llm_skipped_breaker:{zh:'熔断跳过（前面已连续失败）',en:'skipped (breaker open)'},
   pd_llm_api_failed:{zh:'API 调用失败',en:'API failed'},
   pd_llm_timeout:{zh:'硬超时放弃',en:'hard timeout'},
@@ -3301,12 +3315,33 @@ function benchRenderResult(d){
   if(allItems.length){
     itemsHtml=`<table class="bench-items"><thead><tr>
       <th>${t('bench_item')}</th><th>${t('bench_value')}</th><th>${t('bench_score')}</th><th>${t('bench_grade')}</th></tr></thead><tbody>
-      ${allItems.map(it=>`<tr>
-        <td>${escapeHtml(it.label||'')}</td>
+      ${allItems.map(it=>`<tr${it.key==='cpu_steal_pct'&&it.value!==null&&it.value!==undefined&&Number(it.value)>=1?' style="background:var(--amber-muted)"':''}>
+        <td>${it.key==='cpu_steal_pct'?`<span class="bench-steal-mark">${icon('cpu')}</span>`:''}${escapeHtml(it.label||'')}</td>
         <td class="v">${escapeHtml(String(it.display||'—'))}</td>
         <td class="s" style="color:${benchColorFor(it.score)}">${it.score!==null&&it.score!==undefined?it.score:'—'}</td>
         <td><span class="bench-tag" style="${benchTagColor(it.score)}">${escapeHtml(it.grade||'')}</span></td>
       </tr>`).join('')}</tbody></table>`;
+  }
+
+  // ---- CPU 抢占率（超售的直接证据）----
+  // steal = 宿主机（hypervisor）从你这台机器抢走的 CPU 时间占比。
+  // 这是**超售的硬证据**：分数波动只是间接信号，steal 是直接读数。
+  const _stInfo=(sc.items||[]).find(it=>it.key==='cpu_steal_pct');
+  const _stVal=_stInfo&&_stInfo.value!==null&&_stInfo.value!==undefined?Number(_stInfo.value):null;
+  // 虚拟化类型：steal 只在 KVM/Xen 等虚拟化环境才有意义。
+  // 物理机 / 容器恒为 0 —— 那是「结构上不存在抢占」，不是「没被超售」。
+  const _virt=String((raw&&raw.virt_type)||'none').toLowerCase();
+  const _virtReal=(_virt!=='none'&&_virt!=='container'&&_virt!=='lxc'&&_virt!=='docker');
+  let stealAlert='';
+  if(_stVal!==null){
+    let sev='sev-ok', msg='';
+    if(_stVal>=3){ sev='sev-high'; msg=t('bench_steal_high'); }
+    else if(_stVal>=1){ sev='sev-mid'; msg=t('bench_steal_mid'); }
+    else if(!_virtReal){ sev='sev-ok'; msg=t('bench_steal_notvirt'); }
+    else { msg=t('bench_steal_ok'); }
+    stealAlert=`<div class="bench-oversell-alert ${sev}">${icon(_stVal>=1?'alert-triangle':'shield-check')}
+      <div><b>${escapeHtml(t('bench_steal_title'))}</b> — ${escapeHtml(msg)}
+      <div style="opacity:.85;margin-top:2px">${escapeHtml(t('bench_steal_explain'))}</div></div></div>`;
   }
 
   const lg=(d.result&&d.result.latency_groups)||{};
@@ -3340,6 +3375,7 @@ function benchRenderResult(d){
         </div>
       </div>
     </div>
+    ${stealAlert}
     <div class="bench-dims">${dimsHtml}</div>
     ${itemsHtml}
     ${latHtml}

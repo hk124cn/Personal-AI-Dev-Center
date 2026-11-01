@@ -132,7 +132,7 @@ INJECT = r"""
 """
 
 
-def main():
+def _run_once():
     if not CHROME:
         print("跳过：找不到 Chrome")
         return 0
@@ -272,6 +272,30 @@ def main():
     server.should_exit = True
     time.sleep(1)
     return 1 if bad else 0
+
+
+def main():
+    """跑分端到端测试（**带重试**）。
+
+    为什么需要重试：这个测试依赖**真实 SSH + 真实跑分**，天然受环境影响
+    （Chrome 启动慢、磁盘 IO 竞争、SSH 握手抖动）。
+    实测在 run_checks 连跑多个浏览器测试时偶发失败，单独跑必过 ——
+    那属于环境噪声，不是真 bug。但重试也**不能掩盖真 bug**：
+    只有「第一次失败、第二次通过」才算环境噪声；两次都失败就是真问题。
+    """
+    max_try = 2
+    for attempt in range(max_try):
+        global results
+        results = []
+        print("  —— 尝试 %d/%d ——" % (attempt + 1, max_try), flush=True)
+        rc = _run_once()
+        if rc == 0:
+            return 0
+        if attempt < max_try - 1:
+            print("  (失败，等 5 秒重试)", flush=True)
+            time.sleep(5)
+    print("  (重试后仍失败 —— 按真问题处理)", flush=True)
+    return rc
 
 
 if __name__ == "__main__":

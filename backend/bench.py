@@ -77,13 +77,32 @@ CPU_FREQ=$(grep -m1 "cpu MHz" /proc/cpuinfo 2>/dev/null | cut -d: -f2 | tr -d ' 
 echo "CPU_MODEL=$CPU_MODEL"
 echo "CPU_CORES=$CPU_CORES"
 echo "CPU_FREQ_MHZ=$CPU_FREQ"
+# ---- 虚拟化类型 ----
+# steal（宿主机抢 CPU）只在 **KVM/Xen 等虚拟化环境**才有意义；
+# 物理机 / 容器（Aliyun 轻量、部分 OpenStack）恒为 0 —— 那不是"没被超售"，
+# 而是**结构上不存在抢占**。分清楚，别误判。
+VIRT=$(systemd-detect-virt 2>/dev/null || true)
+if [ -z "$VIRT" ] && [ -r /sys/hypervisor/type ]; then
+  VIRT=$(cat /sys/hypervisor/type 2>/dev/null || true)
+fi
+if [ -z "$VIRT" ]; then
+  case "$(cat /proc/1/cgroup 2>/dev/null | head -1)" in
+    *docker*|*lxc*|*container*) VIRT="container" ;;
+    *) VIRT="none" ;;
+  esac
+fi
+echo "VIRT_TYPE=${VIRT:-none}"
 
 # ---- CPU steal（超售的直接证据） ----
 # /proc/stat 第一行：user nice system idle iowait irq softirq steal
-STEAL=$(awk '/^cpu /{print $9; exit}' /proc/stat 2>/dev/null)
-TOTAL=$(awk '/^cpu /{print $2+$3+$4+$5+$6+$7+$8+$9; exit}' /proc/stat 2>/dev/null)
-if [ -n "${STEAL:-}" ] && [ -n "${TOTAL:-}" ] && [ "$TOTAL" -gt 0 ]; then
-  echo "CPU_STEAL_PCT=$(awk -v s="$STEAL" -v t="$TOTAL" 'BEGIN{printf "%.2f", s*100/t}')"
+# ⚠️ 这里采的是**开机累计占比**，会被开机时长严重稀释：
+#    机器开了 30 天、今天才开始被超售 → 累计占比几乎不动 → 看起来一直健康。
+#    所以后面在**磁盘+网络测试全程结束后再采一次**（窗口 10~20 秒），
+#    算**窗口内**的 steal 占比，那才是「当下有没有被抢」的真实读数。
+STEAL1=$(awk '/^cpu /{print $9; exit}' /proc/stat 2>/dev/null)
+TOTAL1=$(awk '/^cpu /{print $2+$3+$4+$5+$6+$7+$8+$9; exit}' /proc/stat 2>/dev/null)
+if [ -n "${STEAL1:-}" ] && [ -n "${TOTAL1:-}" ] && [ "$TOTAL1" -gt 0 ]; then
+  echo "CPU_STEAL_PCT=$(awk -v s="$STEAL1" -v t="$TOTAL1" 'BEGIN{printf "%.2f", s*100/t}')"
 else
   echo "CPU_STEAL_PCT="
 fi
@@ -195,6 +214,19 @@ for NAME in cloudflare apple; do
     *) echo "BANDWIDTH_${NAME}_MBPS=$(awk -v b="$R" 'BEGIN{printf "%.1f", b*8/1000000}')";;
   esac
 done
+
+# ---- CPU steal 窗口采样（当下读数，比累计值准得多）----
+# 窗口 = 磁盘 dd + 网络测试全程（通常 10~20 秒）。
+# 这个长度很重要：10Hz tick 下 20 秒 = 200 jiffies，3% steal = 6 个 jiffies，
+# 精度足够；只有 2 秒的短窗口测不出 3% 这种量级。
+STEAL2=$(awk '/^cpu /{print $9; exit}' /proc/stat 2>/dev/null)
+TOTAL2=$(awk '/^cpu /{print $2+$3+$4+$5+$6+$7+$8+$9; exit}' /proc/stat 2>/dev/null)
+if [ -n "${STEAL1:-}" ] && [ -n "${STEAL2:-}" ] && [ -n "${TOTAL1:-}" ] && [ -n "${TOTAL2:-}" ] \
+   && [ "$TOTAL2" -gt "$TOTAL1" ]; then
+  echo "CPU_STEAL_WINDOW_PCT=$(awk -v s1="$STEAL1" -v s2="$STEAL2" -v t1="$TOTAL1" -v t2="$TOTAL2" 'BEGIN{printf "%.2f", (s2-s1)*100/(t2-t1)}')"
+else
+  echo "CPU_STEAL_WINDOW_PCT="
+fi
 
 echo "END_QUICK"
 '''
@@ -336,6 +368,10 @@ def _collect_quick(client, progress_cb=None, cancel_event=None, low_priority=Tru
             "cpu_cores": _num(kv.get("CPU_CORES")),
             "cpu_freq_mhz": _num(kv.get("CPU_FREQ_MHZ")),
             "cpu_steal_pct": _num(kv.get("CPU_STEAL_PCT")),
+            # 窗口内 steal 占比（当下读数）；采集失败时为 None → 评分退回累计值
+            "cpu_steal_window_pct": _num(kv.get("CPU_STEAL_WINDOW_PCT")),
+            # 虚拟化类型：steal 只在虚拟化环境才有意义（物理机/容器恒为 0）
+            "virt_type": (kv.get("VIRT_TYPE") or "none").strip() or "none",
             "ram_kib": _num(kv.get("MEM_TOTAL_KIB")),
             "ram_available_kib": _num(kv.get("MEM_AVAIL_KIB")),
             "swap_kib": _num(kv.get("SWAP_TOTAL_KIB")),

@@ -254,6 +254,61 @@ def test_configurable_thresholds():
     check("自定义阈值生效（更严格 → 分数更低）", s is not None and b is not None and s < b, (b, s))
 
 
+def check_steal():
+    """CPU 抢占率（steal）——超售的直接证据。"""
+    from backend import bench_score as BS
+    from backend import bench as BENCH
+
+    # 1) 锚点存在且是反向指标（首项得分 > 末项得分）
+    anc = BS._get({}, "cpu_steal_pct")
+    check("steal 有锚点", bool(anc))
+    check("steal 是反向指标（0% 满分）",
+          bool(anc) and anc[0][1] > anc[-1][1], "首项 %s / 末项 %s" % (anc[0], anc[-1]) if anc else "")
+    check("steal 窗口值也有锚点", bool(BS._get({}, "cpu_steal_window_pct")))
+
+    # 2) 窗口值优先于累计值
+    base = {"cpu_model": "X", "cpu_cores": 2, "ram_kib": 1048576}
+
+    def steal_of(raw):
+        sc = BS.score({"raw": raw})
+        stab = (sc.get("dimensions") or {}).get("stability") or {}
+        for it in stab.get("items") or []:
+            if it["key"] == "cpu_steal_pct":
+                return it
+        return None
+
+    r = dict(base); r["cpu_steal_pct"] = 0.0; r["cpu_steal_window_pct"] = 12.0
+    it = steal_of(r)
+    check("窗口值优先于累计值", it is not None and abs(it["value"] - 12.0) < 1e-6,
+          it.get("value") if it else "无")
+
+    r = dict(base); r["cpu_steal_pct"] = 0.0   # 无窗口值 → 退回累计值
+    it = steal_of(r)
+    check("没有窗口值时退回累计值", it is not None and abs(it["value"]) < 1e-6,
+          it.get("value") if it else "无")
+
+    # 3) 分数随抢占率单调下降
+    scores = []
+    for v in (0.0, 1.0, 3.0, 10.0, 30.0):
+        r = dict(base); r["cpu_steal_window_pct"] = v
+        it = steal_of(r)
+        scores.append(it["score"] if it else None)
+    check("抢占率越高分越低", all(scores[i] >= scores[i + 1] for i in range(len(scores) - 1)),
+          str(scores))
+    check("0% 抢占率满分", scores[0] == 100.0, scores[0])
+    check("30% 抢占率很低分", scores[-1] is not None and scores[-1] < 25, scores[-1])
+
+    # 4) _num 对空值返回 None（采集失败不能变成假 0）
+    check("采集失败 → None（不是假 0）", BENCH._num("") is None and BENCH._num(None) is None)
+    check("正常值能解析", BENCH._num("3.50") == 3.5)
+
+    # 5) 采集脚本里有窗口采样 + 虚拟化类型
+    bsrc = io.open(os.path.join(ROOT, "backend", "bench.py"), encoding="utf-8").read()
+    check("采集脚本有窗口 steal 采样", "CPU_STEAL_WINDOW_PCT" in bsrc)
+    check("窗口采样是两次采样的差值", "(s2-s1)*100/(t2-t1)" in bsrc)
+    check("采集脚本有虚拟化类型", "VIRT_TYPE" in bsrc)
+
+
 def main():
     test_score_value()
     test_reverse_metrics()
@@ -268,6 +323,7 @@ def main():
     for ok, msg in results:
         print("%s  %s" % ("PASS" if ok else "FAIL", msg))
     bad = [m for ok, m in results if not ok]
+    check_steal()
     print("----")
     print("合计 %d 项，失败 %d 项" % (len(results), len(bad)))
     return 1 if bad else 0

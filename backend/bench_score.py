@@ -62,6 +62,9 @@ DEFAULT_THRESHOLDS = {
     # ⚠️ CPU 抢占率也是越小越好（0% = 完全没被抢 = 满分）
     "cpu_steal_pct": [(0.2, 100), (1, 95), (3, 85), (6, 68),
                       (12, 45), (25, 22), (45, 5)],
+    # 窗口内抢占率（当下读数）—— 同一套刻度
+    "cpu_steal_window_pct": [(0.2, 100), (1, 95), (3, 85), (6, 68),
+                             (12, 45), (25, 22), (45, 5)],
     # 跑分波动（%）：同样越小越好
     "score_cv_pct": [(2, 100), (5, 92), (10, 78), (20, 58),
                      (35, 35), (60, 12)],
@@ -409,7 +412,14 @@ def score(metrics, thresholds=None):
                 cap_rec["score"] = score_value(ram_mb, cap_anchors)
 
     # ---- 稳定性 ----
-    add("stability", "cpu_steal_pct", "CPU 抢占率", raw.get("cpu_steal_pct"), "%")
+    # CPU 抢占率：**窗口值优先**（当下读数），采集不到才退回开机累计值。
+    # 累计值会被开机时长稀释 —— 机器开了 30 天、今天才开始被超售，
+    # 累计占比几乎不动，看起来一直健康；窗口值才是真实读数。
+    _steal = raw.get("cpu_steal_window_pct")
+    _steal_is_win = _steal is not None
+    if _steal is None:
+        _steal = raw.get("cpu_steal_pct")
+    add("stability", "cpu_steal_pct", "CPU 抢占率", _steal, "%")
     add("stability", "score_cv_pct", "跑分波动", raw.get("score_cv_pct"), "%")
 
     # ---- 汇总维度分 ----
