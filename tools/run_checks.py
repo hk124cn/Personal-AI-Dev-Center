@@ -19,6 +19,8 @@
   12. 跑分浏览器回归  tools/test_bench_browser.py（真实 Chrome 点一次「开始跑分」，端到端）
   13. i18n 完整性   tools/test_i18n_keys.py（缺文案 key 会静默显示裸 key，必须 0）
   14. 下载统计渲染  tools/test_sync_stats.py（浮窗统计不出现裸 key，含总数）
+  15. LLM 降级     tools/test_llm_fallback.py（LLM 失败不丢数据 + 超时退避重试）
+  16. 跑分趋势图   tools/test_bench_trend.py（首页徽章 / 趋势图 / 超售波动判定）
 
 依赖：6/7 需要 fastapi / paramiko 等，优先用 backend/build_venv 的解释器。
 """
@@ -186,6 +188,12 @@ def main():
         run_script('test_sync_stats',
                    [PY, os.path.join(TOOLS, 'test_sync_stats.py')],
                    'tools/test_sync_stats.py (下载浮窗统计渲染 / 不出现裸 i18n key)')
+        run_script('test_llm_fallback',
+                   [PY, os.path.join(TOOLS, 'test_llm_fallback.py')],
+                   'tools/test_llm_fallback.py (LLM 失败不丢分析数据 / 超时退避重试)')
+        run_script('test_bench_trend',
+                   [PY, os.path.join(TOOLS, 'test_bench_trend.py')],
+                   'tools/test_bench_trend.py (首页跑分徽章 / 跑分历史趋势图 / 超售波动)')
         run_script('test_r8_r9', [PY, os.path.join(TOOLS, 'test_r8_r9.py')],
                    'tools/test_r8_r9.py (R8/R9)')
         run_script('test_security', [PY, os.path.join(TOOLS, 'test_security_robustness.py')],

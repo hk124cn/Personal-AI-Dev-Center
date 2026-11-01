@@ -85,9 +85,10 @@ INJECT = r"""
     step('HAVE_SERVERS');
     try{
       state.view='servers'; render();
+      step('RENDERED');
       setTimeout(function(){
         step('OPENING');
-        openServerBench(state.servers[0].id);
+        try{ openServerBench(state.servers[0].id); }catch(e){ step('OPEN_EX|'+String(e).slice(0,120)); }
         setTimeout(function(){
           var btn=document.getElementById('bench-run-btn');
           if(!btn){ step('NO_BUTTON'); return; }

@@ -818,9 +818,26 @@ def apply_llm_analysis(project_name: str, remote_data: dict, config: dict,
 
         print(f"[LLM] [OK] Analysis applied for {project_name}")
     else:
-        remote_data["llm_analyzed"] = False
-        remote_data["llm_status"] = "api_failed"
         remote_data["llm_error"] = llm_error or "未知原因"
+        # ⚠️ **关键：LLM 失败不能把上次的分析数据清空**（2026-11-01 真实发现的缺陷）。
+        #    原逻辑直接置空 llm_features / llm_summary / llm_tech_stack → 写进 latest.json
+        #    → 首页的 AI 分析**整块消失**。
+        #    触发条件很常见：远端 md 一改（指纹变了） + provider 超时/限流 → 必现。
+        #    正确做法：沿用上次的分析结果，只把状态标成 stale（数据过期但仍可用），
+        #    同时保留 llm_error 让用户知道"这次没更新成功"。
+        if prev and prev.get("llm_analyzed"):
+            remote_data["llm_features"] = prev.get("llm_features", [])
+            remote_data["llm_architecture"] = prev.get("llm_architecture", {})
+            remote_data["llm_routes"] = prev.get("llm_routes", [])
+            remote_data["llm_summary"] = prev.get("llm_summary", "")
+            remote_data["llm_tech_stack"] = prev.get("llm_tech_stack", [])
+            remote_data["llm_analyzed"] = True
+            remote_data["llm_status"] = "stale"
+            print(f"[LLM] 分析失败（{llm_error}），沿用上次结果并标记 stale: {project_name}")
+        else:
+            # 首次分析就失败 → 确实没有任何历史数据可沿用
+            remote_data["llm_analyzed"] = False
+            remote_data["llm_status"] = "api_failed"
 
     return remote_data
 

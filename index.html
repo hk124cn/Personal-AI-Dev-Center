@@ -677,6 +677,15 @@ select.form-input{cursor:pointer;appearance:none;background-image:url("data:imag
 .bench-items td.s{text-align:right;font-weight:600}
 .bench-tag{display:inline-block;padding:1px 7px;border-radius:4px;font-size:11px}
 .bench-hist{margin-top:14px}
+.bench-trend{position:relative;margin-bottom:8px}
+.bench-trend canvas{width:100%;height:112px;display:block}
+.bench-trend-sum{display:flex;gap:12px;flex-wrap:wrap;font-size:11px;color:var(--text-tertiary);margin-top:2px}
+.bench-trend-sum b{color:var(--text);font-weight:600}
+.bench-trend-warn{color:var(--amber)}
+.bench-trend-note{font-size:11px;color:var(--text-secondary);margin-top:4px;line-height:1.6}
+.bench-score-badge{display:inline-flex;align-items:center;gap:3px;padding:1px 7px;border-radius:999px;font-size:11px;font-weight:600;line-height:1.6;vertical-align:middle;white-space:nowrap}
+.bench-score-badge svg{width:11px;height:11px;stroke-width:2.2}
+.bench-score-badge.bench-badge-none{background:var(--bg-elevated);color:var(--text-tertiary);font-weight:400}
 .bench-hist-row{display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--border);font-size:12px}
 .bench-hist-row .bh-time{color:var(--text-tertiary);font-size:11px;width:130px;flex-shrink:0}
 .bench-prog{display:flex;align-items:center;gap:10px;padding:14px 0;font-size:13px;color:var(--text-secondary)}
@@ -966,7 +975,7 @@ function daysAgo(d){ return hoursAgo(d*24); }
 let todoIdCounter = 100;
 const state = {
   view:'dashboard', projectViewMode:'grouped', collapsedGroups:{}, alertsCollapsed:false, modal:null,
-  dashMonMode:'ring', dashMonLive:true, _mon:{}, schedules:[],
+  dashMonMode:'ring', dashMonLive:true, _mon:{}, schedules:[], benchScores:{},
   servers:[
     {id:'ali',name:'阿里云轻量',provider:'阿里云',providerHue:24,cpu:2,ram:2,disk:'60G SSD',ip:'47.xx.xx.xx',region:'杭州',os:'Ubuntu 22.04',tools:['OpenClaw','Claude Code'],expiry:'2027-02-01',status:'online',projects:['ecommerce-platform','api-gateway'],sshPort:22,sshUser:'root',sshKey:'~/.ssh/ali_key'},
     {id:'tx',name:'腾讯云轻量',provider:'腾讯云',providerHue:210,cpu:4,ram:4,disk:'80G SSD',ip:'101.xx.xx.xx',region:'上海',os:'Ubuntu 22.04',tools:['OpenClaw','Claude Code'],expiry:'2027-05-15',status:'online',projects:['ai-chatbot','data-dashboard'],sshPort:22,sshUser:'root',sshKey:'~/.ssh/tx_key'},
@@ -1180,6 +1189,17 @@ const I18N = {
   pd_agent_task:{zh:'下发 Agent 任务',en:'Assign Agent Task'},
   pd_llm_analyzed:{zh:'LLM 已分析',en:'LLM Analyzed'},
   pd_llm_reused:{zh:'复用上次',en:'reused'},
+  pd_llm_stale:{zh:'数据过期',en:'stale'},
+  bench_badge_none:{zh:'还没跑过分',en:'not benchmarked yet'},
+  bench_badge_title:{zh:'最近一次跑分：',en:'Latest benchmark: '},
+  bench_trend_max:{zh:'最高',en:'max'},
+  bench_trend_min:{zh:'最低',en:'min'},
+  bench_trend_avg:{zh:'平均',en:'avg'},
+  bench_trend_gap:{zh:'波动',en:'swing'},
+  bench_trend_gap_high:{zh:'⚠️ 波动很大 —— 高度疑似宿主机超售（白天抢不到核心）。建议晚高峰复测确认。',en:'⚠️ Large swing — likely oversold host. Re-test at peak hours.'},
+  bench_trend_gap_mid:{zh:'波动偏大 —— 可能存在轻度超售或邻居干扰。',en:'Moderate swing — mild overselling or noisy neighbours.'},
+  bench_trend_gap_low:{zh:'表现稳定，可以放心用。',en:'Stable performance.'},
+  bench_trend_need2:{zh:'至少需要 2 次跑分才能画出趋势',en:'Need at least 2 runs to draw a trend'},
   pd_llm_skipped_breaker:{zh:'熔断跳过（前面已连续失败）',en:'skipped (breaker open)'},
   pd_llm_api_failed:{zh:'API 调用失败',en:'API failed'},
   pd_llm_timeout:{zh:'硬超时放弃',en:'hard timeout'},
@@ -1516,6 +1536,7 @@ const I18N = {
 function llmStatusLabel(s){
   const m={
     reused:t('pd_llm_reused'),
+    stale:t('pd_llm_stale'),
     skipped_breaker:t('pd_llm_skipped_breaker'),
     api_failed:t('pd_llm_api_failed'),
     missing_api_key:t('pd_llm_no_key'),
@@ -1641,6 +1662,11 @@ function render(){
   if(window.lucide)lucide.createIcons();
   // 按 editMode.type 分派：资产有独立渲染器，不能塞给 renderEditModal（它只认 server/project）
   if(editMode){ if(editMode.type==='asset') renderAssetEditModal(); else renderEditModal(); }
+  if(state.view==='dashboard'){
+    // 跑分分数变化很慢（跑一次才有新数据），**不跟监控的秒级轮询**，
+    // 只在进首页 / 切回首页时拉一次，避免给首页加负担。
+    loadBenchScores();
+  }
   if(state.view==='dashboard'&&state.dashMonLive&&!_dashMonTimer){initDashboardMonitor();}
 }
 
@@ -1704,7 +1730,7 @@ function renderDashMonRingGrid(){
     return `<div class="dash-mon-card" onclick="openServerMonitor('${s.id}')">
       <div class="dmc-top">
         <div class="dmc-icon" style="background:${s.status==='online'?'var(--green-muted)':'var(--blue-muted)'}"><div class="dot ${dotClass(s.status)}"></div></div>
-        <div class="dmc-title"><h4>${s.name}</h4><div class="dmc-sub">${s.cpu} ${t('unit_cores')} ${s.ram}G · ${s.region}</div></div>
+        <div class="dmc-title"><h4>${s.name} ${benchScoreBadge(s.id)}</h4><div class="dmc-sub">${s.cpu} ${t('unit_cores')} ${s.ram}G · ${s.region}</div></div>
       </div>
       <div class="dmc-rings">
         <div style="position:relative;display:flex;justify-content:center">
@@ -1740,7 +1766,7 @@ function renderDashMonBarList(){
     return `<div class="dash-mon-row" onclick="openServerMonitor('${s.id}')">
       <div class="dmr-left">
         <div class="dmr-icon" style="background:${s.status==='online'?'var(--green-muted)':'var(--blue-muted)'}"><div class="dot ${dotClass(s.status)}"></div></div>
-        <div class="dmr-info"><h4>${s.name}</h4><div class="dmr-sub">${s.cpu} ${t('unit_cores')} ${s.ram}G · ${s.region}</div></div>
+        <div class="dmr-info"><h4>${s.name} ${benchScoreBadge(s.id)}</h4><div class="dmr-sub">${s.cpu} ${t('unit_cores')} ${s.ram}G · ${s.region}</div></div>
       </div>
       <div class="dmr-bars">
         <div class="dash-mon-bar-item">
@@ -1779,6 +1805,37 @@ function toggleDashMonLive(){
   const rf=document.getElementById('dash-mon-refresh');
   if(rf){rf.innerHTML=icon(state.dashMonLive?'loader-2':'pause-circle')+' '+(state.dashMonLive?'自动刷新中':'已暂停');}
   if(state.dashMonLive){initDashboardMonitor();}else{stopDashboardMonitor();}
+}
+/* ---- 首页跑分分数徽章 ---- */
+async function loadBenchScores(){
+  try{
+    const r=await fetch(API_BASE+'/api/bench/compare',{signal:AbortSignal.timeout(8000)});
+    const d=await r.json();
+    const map={};
+    (d.rows||[]).forEach(row=>{
+      const sc=row.score||{};
+      map[row.server_id]={
+        score:sc.total_score??null,
+        grade:sc.total_grade||'',
+        at:row.collected_at||null,
+        profile:row.profile||''
+      };
+    });
+    state.benchScores=map;
+    // 只更新徽章文字，不整页重绘（重绘会打断用户的输入/滚动）
+    document.querySelectorAll('[data-bench-badge]').forEach(el=>{
+      const b=map[el.getAttribute('data-bench-badge')];
+      el.outerHTML=benchScoreBadge(el.getAttribute('data-bench-badge'));
+    });
+  }catch(e){ /* 分数加载失败不影响首页其它内容 */ }
+}
+function benchScoreBadge(sid){
+  const b=(state.benchScores||{})[sid];
+  if(!b||b.score===null||b.score===undefined){
+    return `<span class="bench-score-badge bench-badge-none" data-bench-badge="${escapeHtml(sid)}" title="${escapeHtml(t('bench_badge_none'))}">${icon('gauge')} —</span>`;
+  }
+  const when=b.at?benchFmtTime(b.at):'';
+  return `<span class="bench-score-badge" data-bench-badge="${escapeHtml(sid)}" style="${benchTagColor(b.score)}" title="${escapeHtml(t('bench_badge_title')+b.score+' · '+b.grade+(when?' · '+when:''))}">${icon('gauge')} ${b.score}</span>`;
 }
 function stopDashboardMonitor(){if(_dashMonTimer){clearInterval(_dashMonTimer);_dashMonTimer=null;}}
 async function dashboardMonTick(){
@@ -3109,7 +3166,8 @@ function benchHTML(s){
     <label class="bench-opt"><input type="checkbox" id="bench-lowprio" ${_benchState.lowPrio?'checked':''} onchange="benchSetLowPrio(this.checked)"> 低优先级（不影响线上业务）</label>
     <button class="btn btn-sm btn-primary" id="bench-run-btn" onclick="benchRun()">${icon('play')} 开始跑分</button>
   </div>
-  <div id="bench-body"><div class="bench-note">${icon('info')} 选择档位后点「开始跑分」。低优先级模式会用 nice + ionice 降权执行，尽量不影响线上业务；standard / full 档耗时较长，建议在低峰期跑。</div></div>`;
+  <div id="bench-body"><div class="bench-note">${icon('info')} 选择档位后点「开始跑分」。低优先级模式会用 nice + ionice 降权执行，尽量不影响线上业务；standard / full 档耗时较长，建议在低峰期跑。</div></div>
+  <div id="bench-hist" class="bench-hist"></div>`;
 }
 
 function benchCancel(){
@@ -3285,15 +3343,15 @@ function benchRenderResult(d){
     <div class="bench-dims">${dimsHtml}</div>
     ${itemsHtml}
     ${latHtml}
-    <div class="bench-note">${icon('info')} ${t('bench_score_tip')}</div>
-    <div id="bench-hist" class="bench-hist"></div>`;
+    <div class="bench-note">${icon('info')} ${t('bench_score_tip')}</div>`;
   if(window.lucide) lucide.createIcons();
 }
 
 async function benchLoadHistory(sid){
   const el=document.getElementById('bench-hist'); if(!el) return;
   try{
-    const r=await fetch(API_BASE+'/api/bench/'+encodeURIComponent(sid)+'/history?limit=8');
+    // 拉 20 条：趋势图需要足够多的采样点才能看出波动（判断超售的关键）
+    const r=await fetch(API_BASE+'/api/bench/'+encodeURIComponent(sid)+'/history?limit=20');
     const d=await r.json();
     const items=d.items||[];
     if(!items.length){ el.innerHTML=''; return; }
@@ -3307,8 +3365,85 @@ async function benchLoadHistory(sid){
           <span style="flex:1"></span>
           <span style="font-size:11px;color:var(--text-tertiary)">${escapeHtml(it.profile||'')}${it.low_priority?' · '+t('bench_lowprio_tag'):''}</span>
         </div>`;
-      }).join('');
+      }).join('')
+    +`<div class="bench-trend"><canvas id="bench-trend-cv"></canvas></div>`
+    +`<div class="bench-trend-sum" id="bench-trend-sum"></div>`
+    +`<div class="bench-trend-note" id="bench-trend-note"></div>`;
+    // canvas 尺寸依赖布局，等一帧再画
+    requestAnimationFrame(()=>benchDrawTrend(items));
   }catch(e){ /* 历史加载失败不影响主流程 */ }
+}
+
+/* ---- 跑分历史趋势图（判断超售的关键）----
+   单次跑分只是一个数据点；**同一台机器多次跑分的波动幅度**才是超售的硬证据：
+   白天 85 分、晚高峰 55 分 → 差 30 分 → 宿主机严重超售。 */
+function benchDrawTrend(items){
+  const cv=document.getElementById('bench-trend-cv'); if(!cv) return;
+  const pts=(items||[])
+    .map(it=>({t:it.collected_at, s:(it.score||{}).total_score}))
+    .filter(p=>p.s!==null&&p.s!==undefined)
+    .reverse();  // 接口是「新的在前」，画图要时间正序
+  const sumEl=document.getElementById('bench-trend-sum');
+  const noteEl=document.getElementById('bench-trend-note');
+
+  // 摘要（先算，图表画不出来也要显示）
+  if(pts.length){
+    const scores=pts.map(p=>p.s);
+    const mx=Math.max(...scores), mn=Math.min(...scores);
+    const avg=scores.reduce((a,b)=>a+b,0)/scores.length;
+    const gap=mx-mn;
+    let gapCls='', gapNote='';
+    if(gap>=20){ gapCls='bench-trend-warn'; gapNote=t('bench_trend_gap_high'); }
+    else if(gap>=10){ gapCls='bench-trend-warn'; gapNote=t('bench_trend_gap_mid'); }
+    else if(pts.length>=3){ gapNote=t('bench_trend_gap_low'); }
+    if(sumEl){
+      sumEl.innerHTML=
+        `<span>${t('bench_trend_max')} <b>${mx}</b></span>`+
+        `<span>${t('bench_trend_min')} <b>${mn}</b></span>`+
+        `<span>${t('bench_trend_avg')} <b>${avg.toFixed(1)}</b></span>`+
+        `<span class="${gapCls}">${t('bench_trend_gap')} <b>${gap.toFixed(1)}</b></span>`;
+    }
+    if(noteEl&&gapNote){ noteEl.innerHTML=gapNote; }
+  }
+
+  const dpr=window.devicePixelRatio||1;
+  const w=cv.clientWidth, h=cv.clientHeight;
+  if(w===0){ return; }
+  cv.width=w*dpr; cv.height=h*dpr;
+  const ctx=cv.getContext('2d'); ctx.setTransform(dpr,0,0,dpr,0,0); ctx.clearRect(0,0,w,h);
+  // 颜色一律从 CSS 变量取（硬编码深色值在浅色主题下会看不见）
+  const GRID=cssVar('--border','rgba(128,128,145,.2)');
+  const AXIS=cssVar('--text-secondary','rgba(150,150,175,.85)');
+  const LINE=cssVar('--accent','rgb(124,108,240)');
+  const padL=26,padR=10,padT=10,padB=18,cw=w-padL-padR,ch=h-padT-padB,max=100;
+  ctx.lineWidth=1; ctx.font='9px sans-serif'; ctx.textBaseline='middle';
+  for(let i=0;i<=4;i++){
+    const y=padT+ch*i/4;
+    ctx.strokeStyle=GRID; ctx.beginPath(); ctx.moveTo(padL,y); ctx.lineTo(padL+cw,y); ctx.stroke();
+    ctx.fillStyle=AXIS; ctx.textAlign='right'; ctx.fillText(String(max-(max*i/4)),padL-4,y);
+  }
+  if(pts.length<2){
+    ctx.fillStyle=AXIS; ctx.textAlign='center';
+    ctx.fillText(t('bench_trend_need2'),padL+cw/2,padT+ch/2);
+    return;
+  }
+  const n=pts.length;
+  const xAt=i=>padL+cw*(n===1?0.5:i/(n-1));
+  const yAt=v=>padT+ch*(1-Math.max(0,Math.min(max,v))/max);
+  // 折线
+  ctx.strokeStyle=LINE; ctx.lineWidth=2; ctx.lineJoin='round'; ctx.lineCap='round';
+  ctx.beginPath();
+  pts.forEach((p,i)=>{ const x=xAt(i),y=yAt(p.s); i?ctx.lineTo(x,y):ctx.moveTo(x,y); });
+  ctx.stroke();
+  // 数据点（颜色按分数评级）
+  pts.forEach((p,i)=>{
+    ctx.fillStyle=benchColorFor(p.s);
+    ctx.beginPath(); ctx.arc(xAt(i),yAt(p.s),3.2,0,Math.PI*2); ctx.fill();
+  });
+  // 首尾时间标注
+  ctx.fillStyle=AXIS; ctx.font='9px sans-serif';
+  ctx.textAlign='left'; ctx.fillText(benchFmtTime(pts[0].t),padL,h-6);
+  ctx.textAlign='right'; ctx.fillText(benchFmtTime(pts[n-1].t),padL+cw,h-6);
 }
 
 /* ---- 批量跑分面板（首页快速操作入口）----

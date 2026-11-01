@@ -33,12 +33,47 @@ LLM_HARD_TIMEOUT = int(os.environ.get("DEV_CENTER_LLM_HARD_TIMEOUT", "180"))
 LLM_RATE_LIMIT_RETRIES = int(os.environ.get("DEV_CENTER_LLM_429_RETRIES", "3"))
 LLM_RATE_LIMIT_BACKOFF = int(os.environ.get("DEV_CENTER_LLM_429_BACKOFF", "20"))
 
+# --- 超时退避重试 ---
+# 429 有退避重试，但**超时没有** —— 推理型模型（商汤 SenseNova 6.8）在大 prompt 下
+# 偶发跑超 120s，直接判失败太浪费（实测 2026-11-01：AUTO-STOCK 9 个 md 共 16k 字符，
+# 超时后整个同步白等 120 秒才回落）。
+# 超时是「再等等可能就好」，值得重试一次；但不能无限重试（会拖垮定时同步）。
+LLM_TIMEOUT_RETRIES = int(os.environ.get("DEV_CENTER_LLM_TIMEOUT_RETRIES", "2"))
+LLM_TIMEOUT_BACKOFF = int(os.environ.get("DEV_CENTER_LLM_TIMEOUT_BACKOFF", "20"))
+
+# 大 prompt 自适应放宽超时：字符数越多，推理耗时越长。
+# 16k 字符 → 120s 不够；给到 300s 比较稳。
+LLM_BIG_PROMPT_CHARS = int(os.environ.get("DEV_CENTER_LLM_BIG_PROMPT_CHARS", "12000"))
+LLM_BIG_PROMPT_TIMEOUT = int(os.environ.get("DEV_CENTER_LLM_BIG_PROMPT_TIMEOUT", "300"))
+
 # Windows 控制台 GBK 编码无法打印 emoji 等 Unicode 字符，强制使用 UTF-8
 if sys.stdout and hasattr(sys.stdout, 'reconfigure'):
     try:
         sys.stdout.reconfigure(encoding='utf-8', errors='replace')
     except Exception:
         pass
+
+
+def _is_timeout_err(err) -> bool:
+    """判断错误原因是不是「超时」。"""
+    return bool(err) and ("超时" in err or "Timeout" in err or "timed out" in err)
+
+
+def _call_with_timeout_retry(fn):
+    """调用 fn，遇超时则退避后重试（最多 LLM_TIMEOUT_RETRIES 次）。
+
+    只对**超时**重试 —— 429 有自己的一套退避（在 provider 函数内部），
+    鉴权失败 / 响应格式错误重试没有意义。
+    """
+    result, err = fn()
+    for attempt in range(LLM_TIMEOUT_RETRIES - 1):
+        if result is not None or not _is_timeout_err(err):
+            break
+        print(f"[LLM] 请求超时，退避 {LLM_TIMEOUT_BACKOFF}s 后重试 "
+              f"({attempt + 1}/{LLM_TIMEOUT_RETRIES - 1})")
+        time.sleep(LLM_TIMEOUT_BACKOFF)
+        result, err = fn()
+    return result, err
 
 
 def call_llm_api(prompt: str, config: dict):
@@ -76,11 +111,13 @@ def call_llm_api(prompt: str, config: dict):
 
     try:
         if provider == "anthropic":
-            result, err = _call_anthropic(prompt, api_key, model)
+            _fn = lambda: _call_anthropic(prompt, api_key, model)
         elif provider == "qwen":
-            result, err = _call_qwen(prompt, api_key, model)
+            _fn = lambda: _call_qwen(prompt, api_key, model)
         else:
-            result, err = _call_openai(prompt, api_key, model, base_url)
+            _fn = lambda: _call_openai(prompt, api_key, model, base_url)
+        # 超时退避重试（429 的退避在 provider 函数内部，不走这里）
+        result, err = _call_with_timeout_retry(_fn)
 
         print(f"[LLM] 返回结果:")
         print("-" * 60)
@@ -132,7 +169,7 @@ def _call_anthropic(prompt: str, api_key: str, model: str):
         body = resp.text[:800] if resp is not None else ""
         return None, f"HTTP {status} {body}"
     except requests.exceptions.Timeout:
-        return None, "请求超时 (30s)"
+        return None, f"请求超时 ({LLM_HTTP_TIMEOUT}s)"
     except requests.exceptions.ConnectionError as e:
         return None, f"网络连接失败: {str(e)[:200]}"
     except Exception as e:
@@ -200,7 +237,7 @@ def _call_openai(prompt: str, api_key: str, model: str, base_url: Optional[str] 
             return None, f"限流重试 {LLM_RATE_LIMIT_RETRIES} 次仍失败: {err}"
         return None, err
     except requests.exceptions.Timeout:
-        return None, "请求超时 (30s)"
+        return None, f"请求超时 ({LLM_HTTP_TIMEOUT}s)"
     except requests.exceptions.ConnectionError as e:
         return None, f"网络连接失败: {str(e)[:200]}"
     except (KeyError, IndexError, TypeError) as e:
@@ -244,7 +281,7 @@ def _call_qwen(prompt: str, api_key: str, model: str):
         body = resp.text[:800] if resp is not None else ""
         return None, f"HTTP {status} {body}"
     except requests.exceptions.Timeout:
-        return None, "请求超时 (30s)"
+        return None, f"请求超时 ({LLM_HTTP_TIMEOUT}s)"
     except requests.exceptions.ConnectionError as e:
         return None, f"网络连接失败: {str(e)[:200]}"
     except (KeyError, IndexError, TypeError) as e:
@@ -386,6 +423,10 @@ def analyze_project(project_name: str, md_contents: Dict[str, str], llm_config: 
 
     prompt = build_analysis_prompt(project_name, md_contents)
     hard = timeout if timeout else LLM_HARD_TIMEOUT
+    # 大 prompt 放宽硬超时（推理型模型在大输入上本来就慢）
+    if timeout is None and len(prompt) >= LLM_BIG_PROMPT_CHARS and hard < LLM_BIG_PROMPT_TIMEOUT:
+        hard = LLM_BIG_PROMPT_TIMEOUT
+        print(f"[LLM] Prompt {len(prompt)} 字符，偏大 → 硬超时放宽到 {hard}s")
 
     pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix="llm-call")
     try:
@@ -465,6 +506,6 @@ def test_connection(config: dict) -> dict:
     except req.exceptions.ConnectionError as e:
         return {"success": False, "message": "网络连接失败", "detail": str(e)[:300]}
     except req.exceptions.Timeout:
-        return {"success": False, "message": "请求超时 (30s)", "detail": ""}
+        return {"success": False, "message": f"请求超时 ({LLM_HTTP_TIMEOUT}s)", "detail": ""}
     except Exception as e:
         return {"success": False, "message": f"异常: {type(e).__name__}", "detail": str(e)[:300]}
