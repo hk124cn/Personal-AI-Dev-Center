@@ -27,6 +27,7 @@
 import argparse
 import glob
 import io
+import json
 import os
 import re
 import shutil
@@ -134,6 +135,21 @@ def check_secrets():
     txt = io.open(gi, encoding='utf-8').read() if os.path.exists(gi) else ''
     miss = [k for k in ('config.json', 'dist', 'backend/data') if k not in txt]
     record('.gitignore 覆盖关键项', not miss, ('缺: ' + ','.join(miss)) if miss else '')
+
+    # 版本号一致性：package.json 与 index.html 必须相同。
+    # ⚠️ 2026-11-03 踩坑：连续几次改动都**忘了 bump 版本号**，
+    #    结果用户启动新版 app 看到的还是旧版本号 → 完全看不出有没有更新。
+    #    这条检查就是为了防这个。
+    try:
+        pkg = json.load(io.open(os.path.join(ROOT, 'package.json'), encoding='utf-8'))
+        pkg_v = pkg.get('version', '')
+        idx = io.open(os.path.join(ROOT, 'index.html'), encoding='utf-8').read()
+        m = re.search(r"const APP_VERSION\s*=\s*'([^']+)'", idx)
+        idx_v = m.group(1) if m else ''
+        record('版本号一致（package.json == index.html）',
+               bool(pkg_v) and pkg_v == idx_v, 'package=%s index=%s' % (pkg_v, idx_v))
+    except Exception as e:
+        record('版本号一致（package.json == index.html）', False, str(e)[:80])
 
 
 # ---------- 4/5/6. 脚本 ----------

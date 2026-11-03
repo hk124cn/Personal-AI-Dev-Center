@@ -870,7 +870,7 @@ select.form-input{cursor:pointer;appearance:none;background-image:url("data:imag
 <div id="app" class="app"></div>
 
 <script>
-const APP_VERSION = '1.4.26';
+const APP_VERSION = '1.4.27';
 // ==================== THEMES ====================
 const themes = {
   violet: {
@@ -3339,8 +3339,11 @@ function benchRenderResult(d){
     else if(_stVal>=1){ sev='sev-mid'; msg=t('bench_steal_mid'); }
     else if(!_virtReal){ sev='sev-ok'; msg=t('bench_steal_notvirt'); }
     else { msg=t('bench_steal_ok'); }
+    // ⚠️ 必须把**数值本身**显示出来 —— 只写「CPU 抢占率 — 正常」的话，
+    //    用户根本不知道是 0% 还是 0.4%，等于没给信息。
+    const _stTxt=_stVal.toFixed(2)+'%';
     stealAlert=`<div class="bench-oversell-alert ${sev}">${icon(_stVal>=1?'alert-triangle':'shield-check')}
-      <div><b>${escapeHtml(t('bench_steal_title'))}</b> — ${escapeHtml(msg)}
+      <div><b>${escapeHtml(t('bench_steal_title'))} ${_stTxt}</b> — ${escapeHtml(msg)}
       <div style="opacity:.85;margin-top:2px">${escapeHtml(t('bench_steal_explain'))}</div></div></div>`;
   }
 
