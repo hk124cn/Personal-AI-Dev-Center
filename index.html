@@ -1198,6 +1198,9 @@ const I18N = {
   pd_llm_analyzed:{zh:'LLM 已分析',en:'LLM Analyzed'},
   pd_llm_reused:{zh:'复用上次',en:'reused'},
   pd_llm_stale:{zh:'数据过期',en:'stale'},
+  form_server_local:{zh:'本地（仅本机，未部署）',en:'Local only (not deployed)'},
+  group_local:{zh:'本地项目',en:'Local projects'},
+  proj_local_badge:{zh:'本地',en:'local'},
   bench_badge_none:{zh:'还没跑过分',en:'not benchmarked yet'},
   bench_badge_title:{zh:'最近一次跑分：',en:'Latest benchmark: '},
   bench_trend_max:{zh:'最高',en:'max'},
@@ -1906,7 +1909,12 @@ function renderCards(){return`<div class="project-grid">${state.projects.map(p=>
 
 function renderGrouped(){
   const groups={};state.servers.forEach(s=>{groups[s.id]={server:s,projects:[]}});
-  state.projects.forEach(p=>{if(groups[p.server])groups[p.server].projects.push(p)});
+  // 本地项目（server 为空）单独归一组 —— 之前 `if(groups[p.server])` 会把它们静默丢掉
+  groups['']={server:{id:'',name:t('group_local'),status:'local',cpu:'',ram:'',region:''},projects:[]};
+  state.projects.forEach(p=>{
+    var key=(p.server&&groups[p.server])?p.server:'';
+    if(groups[key])groups[key].projects.push(p);
+  });
   return Object.values(groups).filter(g=>g.projects.length>0||g.server.status==='online').map(g=>{
     const s=g.server,c=state.collapsedGroups[s.id];
     return`<div class="server-group ${c?'collapsed':''}"><div class="group-header" onclick="toggleGroup('${s.id}')"><div class="group-chevron">${icon('chevron-down')}</div><div class="dot ${dotClass(s.status)}"></div><span class="server-label">${s.name}</span><span class="server-spec">${s.cpu} ${t('unit_cores')} ${s.ram}G · ${s.region}</span><span class="proj-count">${g.projects.length} ${t('projects_unit')}</span></div><div class="group-body">${g.projects.length?g.projects.map(p=>projectCardHTML(p,true)).join(''):`<div class="empty" style="grid-column:1/-1;padding:24px">${icon('inbox')}<p>${t('no_projects')}</p></div>`}</div></div>`}).join('')}
@@ -1928,7 +1936,7 @@ function projectCardHTML(p,inG){
   const srv=getServer(p.server);
   const features=sanitizeFeatures(p.features);
   const doneF=features.filter(f=>f.done).length;
-  return`<div class="project-card" onclick="openProjectDetail('${p.id}')"><div class="card-top"><div><h4>${escapeHtml(p.name)}</h4><div style="margin-top:5px;display:flex;gap:5px;flex-wrap:wrap">${priorityTag(p.priority)}<span class="tag ${p.status==='active'?'tag-green':p.status==='dev'?'tag-amber':'tag-blue'}">${statusText(p.status)}</span>${p._syncedAt?`<span class="tag tag-accent">${t('synced')}</span>`:''}</div></div><div style="display:flex;gap:4px">${p.localPath?`<button class="btn btn-sm" onclick="event.stopPropagation();syncDownload('${p.id}')" title="${t('download_sync')}">${icon('download')}</button><button class="btn btn-sm" onclick="event.stopPropagation();openUploadModal('${p.id}')" title="${t('upload_sync')}">${icon('upload')}</button><button class="btn btn-sm" onclick="event.stopPropagation();analyzeLocal('${p.id}')" title="${t('analyze_only')}">${icon('sparkles')}</button>`:''}</div></div><div class="desc">${escapeHtml(p.desc)}</div><div class="progress"><div class="bar" style="width:${p.progress}%"></div></div><div class="progress-info"><span>${t('progress_label')} ${p.progress}%</span><span>${t('features_label')} ${doneF}/${features.length}</span></div>${syncResultHTML(p)}<div class="card-actions">${srv&&srv.sshUser?`<button class="btn btn-sm" onclick="event.stopPropagation();sshLogin('${srv.ip}',${srv.sshPort},'${srv.sshUser}','${srv.sshKey}')">${icon('terminal')} SSH</button>`:''}${p.url?`<button class="btn btn-sm" onclick="event.stopPropagation();window.open('${p.url}','_blank')">${icon('globe')} ${t('visit_web')}</button>`:''}</div><div class="card-foot"><div class="server-info">${icon('server')} ${srv?escapeHtml(srv.name):'-'}</div><div style="display:flex;align-items:center;gap:6px">${progressBadgesHTML(p)}${p.localPath?`<span style="font-size:11px;color:var(--text-tertiary)">${escapeHtml(p.localPath)}</span>`:`<span class="time">${p._syncedAt?('同步 '+relativeTime(p._syncedAt)+' · '):''}${contentUpdateHTML(p)}</span>`}</div></div></div>`}
+  return`<div class="project-card" onclick="openProjectDetail('${p.id}')"><div class="card-top"><div><h4>${escapeHtml(p.name)}</h4><div style="margin-top:5px;display:flex;gap:5px;flex-wrap:wrap">${priorityTag(p.priority)}<span class="tag ${p.status==='active'?'tag-green':p.status==='dev'?'tag-amber':'tag-blue'}">${statusText(p.status)}</span>${p._syncedAt?`<span class="tag tag-accent">${t('synced')}</span>`:''}</div></div><div style="display:flex;gap:4px">${p.localPath?((p.server?`<button class="btn btn-sm" onclick="event.stopPropagation();syncDownload('${p.id}')" title="${t('download_sync')}">${icon('download')}</button><button class="btn btn-sm" onclick="event.stopPropagation();openUploadModal('${p.id}')" title="${t('upload_sync')}">${icon('upload')}</button>`:'')+`<button class="btn btn-sm" onclick="event.stopPropagation();analyzeLocal('${p.id}')" title="${t('analyze_only')}">${icon('sparkles')}</button>`):''}</div></div><div class="desc">${escapeHtml(p.desc)}</div><div class="progress"><div class="bar" style="width:${p.progress}%"></div></div><div class="progress-info"><span>${t('progress_label')} ${p.progress}%</span><span>${t('features_label')} ${doneF}/${features.length}</span></div>${syncResultHTML(p)}<div class="card-actions">${srv&&srv.sshUser?`<button class="btn btn-sm" onclick="event.stopPropagation();sshLogin('${srv.ip}',${srv.sshPort},'${srv.sshUser}','${srv.sshKey}')">${icon('terminal')} SSH</button>`:''}${p.url?`<button class="btn btn-sm" onclick="event.stopPropagation();window.open('${p.url}','_blank')">${icon('globe')} ${t('visit_web')}</button>`:''}</div><div class="card-foot"><div class="server-info">${icon('server')} ${srv?escapeHtml(srv.name):`<span class="tag tag-blue">${escapeHtml(t('proj_local_badge'))}</span>`}</div><div style="display:flex;align-items:center;gap:6px">${progressBadgesHTML(p)}${p.localPath?`<span style="font-size:11px;color:var(--text-tertiary)">${escapeHtml(p.localPath)}</span>`:`<span class="time">${p._syncedAt?('同步 '+relativeTime(p._syncedAt)+' · '):''}${contentUpdateHTML(p)}</span>`}</div></div></div>`}
 
 function toggleGroup(id){state.collapsedGroups[id]=!state.collapsedGroups[id];render()}
 
@@ -4389,7 +4397,13 @@ function renderEditModal() {
       '<div class="form-row">' + renderFormField(t('form_expiry'), 'expiry', d.expiry, 'text') + renderFormField(t('form_status'), 'status', d.status, 'select', [{value:'online',label:t('st_online')},{value:'offline',label:t('st_offline')},{value:'planned',label:t('st_planned')}]) + '</div>' +
       renderFormField(t('form_linked_projects'), 'projects', Array.isArray(d.projects) ? d.projects.join(', ') : (d.projects || ''), 'text');
   } else {
-    var serverOpts = state.servers.map(function(s) { return {value: s.id, label: s.name + ' (' + (s.ip || s.host || '-') + ')'}; });
+    // ⚠️ 「本地（仅本机）」= 项目代码只在本机、**没有部署到任何服务器**。
+    //    2026-11-17：之前项目必须绑服务器，导致本地开发中的项目**根本录不进来**，
+    //    而且分组视图的 `if(groups[p.server])` 会把它们**静默丢弃**（列表里看不到）。
+    //    现在显式支持 server 为空 —— 同步/监控/跑分都是**按服务器遍历**的，
+    //    会自动跳过它们（sync_all 里已有 `if server_id not in servers: continue`）。
+    var serverOpts = [{value: '', label: t('form_server_local')}]
+      .concat(state.servers.map(function(s) { return {value: s.id, label: s.name + ' (' + (s.ip || s.host || '-') + ')'}; }));
     formHTML =
       renderFormField(t('form_name'), 'name', d.name, 'text') +
       renderFormField(t('pd_description'), 'desc', d.desc, 'textarea') +

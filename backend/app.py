@@ -1771,7 +1771,10 @@ def add_project(project: ProjectModel):
         "priority": project.priority, "progress": project.progress,
         "tech_stack": project.techStack, "features": project.features,
         "todos": project.todos, "lastUpdate": project.lastUpdate,
-        "agent": project.agent, "remote_path": project.remote_path or project.id,
+        "agent": project.agent,
+        # ⚠️ 本地项目（server 为空）没有远端路径 —— 不能回退成 project.id，
+        #    那会造出一个根本不存在的远端目录，后面同步/上传会对着它报错。
+        "remote_path": project.remote_path or ("" if not project.server else project.id),
         "local_path": project.local_path or project.localPath, "url": project.url,
     }
     config["projects"].append(new_p)
@@ -1797,7 +1800,8 @@ def update_project(project_id: str, project: ProjectModel):
                 "tech_stack": new_tech, "features": project.features,
                 "todos": project.todos, "lastUpdate": project.lastUpdate,
                 "agent": project.agent,
-                "remote_path": project.remote_path or existing.get("remote_path", project.id),
+                # 同 add_project：本地项目（server 为空）不保留/不造远端路径
+                "remote_path": project.remote_path or ("" if not project.server else existing.get("remote_path", project.id)),
                 "local_path": new_local,
                 "url": project.url or existing.get("url", ""),
             }
