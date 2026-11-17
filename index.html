@@ -870,7 +870,7 @@ select.form-input{cursor:pointer;appearance:none;background-image:url("data:imag
 <div id="app" class="app"></div>
 
 <script>
-const APP_VERSION = '1.4.27';
+const APP_VERSION = '1.4.28';
 // ==================== THEMES ====================
 const themes = {
   violet: {
@@ -1201,6 +1201,7 @@ const I18N = {
   form_server_local:{zh:'本地（仅本机，未部署）',en:'Local only (not deployed)'},
   group_local:{zh:'本地项目',en:'Local projects'},
   proj_local_badge:{zh:'本地',en:'local'},
+  group_local_hint:{zh:'这里放「只在本机、没部署到任何服务器」的项目。点「新增项目」时把「服务器」选成「本地（仅本机，未部署）」即可。',en:'Projects that live only on this machine. When adding a project, pick "Local only (not deployed)" in the server field.'},
   bench_badge_none:{zh:'还没跑过分',en:'not benchmarked yet'},
   bench_badge_title:{zh:'最近一次跑分：',en:'Latest benchmark: '},
   bench_trend_max:{zh:'最高',en:'max'},
@@ -1915,9 +1916,12 @@ function renderGrouped(){
     var key=(p.server&&groups[p.server])?p.server:'';
     if(groups[key])groups[key].projects.push(p);
   });
-  return Object.values(groups).filter(g=>g.projects.length>0||g.server.status==='online').map(g=>{
+  // ⚠️ 「本地项目」分组**即使为空也要显示**（2026-11-17 用户反馈「没看到」）：
+  //    空分组被过滤掉 → 这个功能在列表里**完全不可发现**，用户根本不知道存在。
+  //    空的时候给一句引导，让他知道「新增项目时服务器能选『本地』」。
+  return Object.values(groups).filter(g=>g.projects.length>0||g.server.status==='online'||g.server.id==='').map(g=>{
     const s=g.server,c=state.collapsedGroups[s.id];
-    return`<div class="server-group ${c?'collapsed':''}"><div class="group-header" onclick="toggleGroup('${s.id}')"><div class="group-chevron">${icon('chevron-down')}</div><div class="dot ${dotClass(s.status)}"></div><span class="server-label">${s.name}</span><span class="server-spec">${s.cpu} ${t('unit_cores')} ${s.ram}G · ${s.region}</span><span class="proj-count">${g.projects.length} ${t('projects_unit')}</span></div><div class="group-body">${g.projects.length?g.projects.map(p=>projectCardHTML(p,true)).join(''):`<div class="empty" style="grid-column:1/-1;padding:24px">${icon('inbox')}<p>${t('no_projects')}</p></div>`}</div></div>`}).join('')}
+    return`<div class="server-group ${c?'collapsed':''}"><div class="group-header" onclick="toggleGroup('${s.id}')"><div class="group-chevron">${icon('chevron-down')}</div><div class="dot ${dotClass(s.status)}"></div><span class="server-label">${s.name}</span><span class="server-spec">${s.cpu} ${t('unit_cores')} ${s.ram}G · ${s.region}</span><span class="proj-count">${g.projects.length} ${t('projects_unit')}</span></div><div class="group-body">${g.projects.length?g.projects.map(p=>projectCardHTML(p,true)).join(''):(g.server.id===''?`<div class="empty" style="grid-column:1/-1;padding:18px;text-align:left"><div style="display:flex;gap:8px;align-items:flex-start;font-size:12px;color:var(--text-secondary);line-height:1.7">${icon('info')}<div>${escapeHtml(t('group_local_hint'))}<br><button class="btn btn-sm" style="margin-top:6px" onclick="event.stopPropagation();addProject()">${icon('plus')} ${t('qa_new_project')}</button></div></div></div>`:`<div class="empty" style="grid-column:1/-1;padding:24px">${icon('inbox')}<p>${t('no_projects')}</p></div>`)}</div></div>`}).join('')}
 
 function syncResultHTML(p) {
   if (!p._syncResult) return '';
